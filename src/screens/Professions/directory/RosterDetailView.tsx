@@ -111,8 +111,9 @@ export function RosterDetailView({ railMains, railLabel, selectedMain, onSelectM
               {detailCharacters.length} characters · {professionCount} professions · {recipeCount} recipes in {expansion}
             </div>
           </div>
+          {/* "online" would claim real-time presence Blizzard's API doesn't actually provide -- see TableView's seenLabel. */}
           <Badge tone={mainDays === 0 ? 'success' : mainDays <= 7 ? 'info' : 'neutral'} dot>
-            {mainDays === 0 ? 'online' : mainDays === 1 ? '1d' : `${mainDays}d`}
+            {mainDays === 0 ? 'today' : mainDays === 1 ? '1d' : `${mainDays}d`}
           </Badge>
         </div>
 

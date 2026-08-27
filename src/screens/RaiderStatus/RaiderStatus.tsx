@@ -5,6 +5,7 @@ import { ControlBar } from './ControlBar';
 import { RoleSection } from './RoleSection';
 import { EmptyState } from './EmptyState';
 import { KillsStrip } from './KillsStrip';
+import { DeathMechanicsReport } from './DeathMechanicsReport';
 import { useRaiderStatus } from './useRaiderStatus';
 
 export function RaiderStatus() {
@@ -38,6 +39,8 @@ export function RaiderStatus() {
           onRefresh={rs.refresh}
           refreshing={rs.refreshing}
         />
+
+        <DeathMechanicsReport entries={rs.deathMechanics} window={rs.window} />
 
         <ControlBar
           roleTabs={rs.roleTabs}

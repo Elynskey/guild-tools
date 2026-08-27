@@ -17,8 +17,12 @@ function barColor(skill: number): string {
 function skillColor(skill: number): string {
   return skill >= 100 ? 'var(--text-gold)' : skill >= 90 ? 'var(--gold-500)' : 'var(--text-muted)';
 }
+// "online" would be a claim this data can't back up -- Blizzard's API only gives a
+// last-login timestamp, not a real-time connection status, so someone who logged in
+// 11 hours ago and logged out 10 hours ago would show "online" right now. "today"
+// keeps the useful recency signal without the false claim.
 function seenLabel(days: number): string {
-  return days === 0 ? 'online' : days === 1 ? '1d' : `${days}d`;
+  return days === 0 ? 'today' : days === 1 ? '1d' : `${days}d`;
 }
 function seenColor(days: number): string {
   return days === 0 ? 'var(--accent-verdant)' : days <= 7 ? 'var(--text-body)' : 'var(--text-faint)';

@@ -192,7 +192,10 @@ async function fetchReportAggregate(code) {
 }
 
 const MIN_DPS_ROLE = 'dps';
-const DEATH_CAUSE_CAP = 5; // feedback text only ever cites the latest one or two; no need to carry a whole tier's worth
+// A generous safety bound, not a "just cite the latest one" cap anymore -- the
+// roster-wide "who's dying to what" mechanics report needs each raider's full death
+// history for the window, not just their most recent cause.
+const DEATH_CAUSE_CAP = 60;
 
 /**
  * @param {{ name: string, realm: string, region: string }} guild

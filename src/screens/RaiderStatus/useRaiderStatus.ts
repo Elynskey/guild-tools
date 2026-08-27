@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { config, freshnessCopy } from '../../config';
 import { getRoster } from '../../data/rosterSource';
 import { ROLE_SECTIONS, rosterSummary, scoreRaider, sortBestFirst, sortWorstFirst } from '../../scoring/scoring';
+import { buildDeathMechanicsReport } from '../../scoring/deathMechanics';
 import type { Band, Raider, Role, ScoredRaider, Window } from '../../scoring/types';
 import { TILE_COLOR } from './bandVisuals';
 
@@ -95,6 +96,7 @@ export function useRaiderStatus() {
   const all = useMemo<ScoredRaider[]>(() => (roster ? roster.map((r) => scoreRaider(r, win, config.gates)) : []), [roster, win]);
 
   const summary = useMemo(() => rosterSummary(all, win), [all, win]);
+  const deathMechanics = useMemo(() => buildDeathMechanicsReport(all), [all]);
 
   const tiles = useMemo<Tile[]>(
     () =>
@@ -184,6 +186,7 @@ export function useRaiderStatus() {
     guildWell: summary.goingWell,
     guildStop: summary.stoppingUs,
     guildGate: summary.unscored,
+    deathMechanics,
     freshness: meta ? freshnessCopy(meta.fetchedAt, meta.source) : '',
     progressionFraction: `${heroicKilled}/${config.tier.totalBosses}`,
     dataSource: meta?.source ?? 'sample',

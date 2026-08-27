@@ -14,6 +14,19 @@ export function RaiderDetailPanel({ raider: r, rioGateText, ilvlGateText }: Raid
   const provenance =
     r.window === 'night' ? 'Tonight’s Warcraft Logs pull only. One night, not a verdict.' : 'Warcraft Logs tier-to-date · wowaudit gear snapshot · Raider.IO';
 
+  // Full death history for this window, grouped by boss + ability with counts --
+  // the feedback prose above only ever cites the single most recent cause.
+  const deathLog = (() => {
+    const map = new Map<string, { boss: string; ability: string; count: number }>();
+    for (const cause of r.deathCausesInWindow) {
+      const key = `${cause.boss}::${cause.ability}`;
+      const entry = map.get(key);
+      if (entry) entry.count++;
+      else map.set(key, { boss: cause.boss, ability: cause.ability, count: 1 });
+    }
+    return [...map.values()].sort((a, b) => b.count - a.count);
+  })();
+
   return (
     <div style={{ padding: '16px 24px 22px 22px', background: 'var(--surface-raised)', borderTop: '1px solid var(--border-hairline)', boxShadow: 'var(--inset-well)' }}>
       <div style={{ maxWidth: 760, display: 'flex', flexDirection: 'column', gap: 9 }}>
@@ -64,6 +77,20 @@ export function RaiderDetailPanel({ raider: r, rioGateText, ilvlGateText }: Raid
           <span style={{ color: 'var(--text-gold)' }}>Next step. </span>
           {r.feedback.action}
         </p>
+        {deathLog.length > 0 && (
+          <div style={{ marginTop: 2 }}>
+            <div className="crd-eyebrow" style={{ marginBottom: 4 }}>
+              Death log ({r.deathsInWindow})
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {deathLog.map((d) => (
+                <div key={`${d.boss}::${d.ability}`} style={{ fontSize: 'var(--text-body-s)', color: 'var(--text-body)' }}>
+                  <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-faint)' }}>{d.count}x</span> {d.ability} <span style={{ color: 'var(--text-faint)' }}>— {d.boss}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         {r.band === 'ineligible' && (
           <div style={{ display: 'flex', gap: 24, marginTop: 4, fontFamily: 'var(--font-mono)', fontSize: 'var(--text-body-s)' }}>
             <span style={{ color: r.rioFail ? 'var(--status-danger)' : 'var(--text-body)' }}>
