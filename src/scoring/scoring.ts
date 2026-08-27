@@ -7,7 +7,7 @@
  */
 
 import { specIcon } from './specIcons';
-import type { Band, Feedback, GateEvaluation, Gates, Raider, RoleSection, RosterSummary, ScoreDimension, ScoreParts, ScoredRaider, Window } from './types';
+import type { Band, DeathCause, Feedback, GateEvaluation, Gates, Raider, RoleSection, RosterSummary, ScoreDimension, ScoreParts, ScoredRaider, Window } from './types';
 
 export const DEFAULT_GATES: Gates = {
   rio: 1000, // Raider.IO score gate
@@ -133,6 +133,7 @@ interface FeedbackDerived {
   deathsInWindow: number;
   pullsInWindow: number;
   deathRate: number;
+  deathCausesInWindow: DeathCause[];
   perf: number;
   gates: GateEvaluation;
   scores: ScoreParts;
@@ -158,9 +159,13 @@ interface FeedbackDerived {
 export function generateFeedback(r: Raider, window: Window, gates: Gates, derived: FeedbackDerived): Feedback {
   const { rioBest, ilvlBest, rioFail, ilvlFail, ineligible } = derived.gates;
   const { perfScore, gearScore, trendScore, score } = derived.scores;
-  const { band, deathsInWindow, pullsInWindow, deathRate, perf } = derived;
+  const { band, deathsInWindow, pullsInWindow, deathRate, deathCausesInWindow, perf } = derived;
   const deathPct = Math.round(deathRate * 100);
   const deathText = `${deathsInWindow} death${deathsInWindow === 1 ? '' : 's'} on ${pullsInWindow} pull${pullsInWindow === 1 ? '' : 's'} (${deathPct}%)`;
+  // The specific mechanic that most recently killed them, when Warcraft Logs has it --
+  // "review that mechanic" beats a generic "watch a log with an officer" suggestion.
+  const topCause = deathCausesInWindow[0];
+  const causeText = topCause ? `${topCause.ability} on ${topCause.boss}` : null;
   const night = window === 'night';
   const h = hash(r.name);
   const pick = <T,>(arr: T[]): T => arr[h % arr.length];
@@ -278,15 +283,20 @@ export function generateFeedback(r: Raider, window: Window, gates: Gates, derive
     breakdown,
     status:
       deathRate > DEATH_RATE_RED_THRESHOLD
-        ? `${bandWord}. ${deathText} set the band; the score was ${score}/100.`
+        ? `${bandWord}. ${deathText}${causeText ? ` -- most recently ${causeText}` : ''} set the band; the score was ${score}/100.`
         : deathRate > DEATH_RATE_YELLOW_THRESHOLD
-          ? `${bandWord}. ${deathText} holds it here -- the score was ${score}/100.`
+          ? `${bandWord}. ${deathText}${causeText ? ` -- most recently ${causeText}` : ''} holds it here -- the score was ${score}/100.`
           : `${bandWord}. ${score}/100, both gates clear.`,
     working: second.s >= 78 ? `${up(strong.t)}. ${up(second.t)}.` : `${up(strong.t)}.`,
-    attention: deathRate > DEATH_RATE_RED_THRESHOLD ? `${deathText}. Under that, ${gapText.charAt(0).toLowerCase() + gapText.slice(1)}` : gapText,
+    attention:
+      deathRate > DEATH_RATE_RED_THRESHOLD
+        ? `${deathText}${causeText ? ` -- most recently ${causeText}` : ''}. Under that, ${gapText.charAt(0).toLowerCase() + gapText.slice(1)}`
+        : gapText,
     action:
       deathRate > DEATH_RATE_RED_THRESHOLD
-        ? pick([`Survivability only this week. The damage is already there.`, `One mechanic, one pull, with an officer before Saturday. Nothing else.`])
+        ? causeText
+          ? pick([`${causeText} -- review that mechanic with an officer before Saturday.`, `Walk ${topCause!.boss} back and isolate ${topCause!.ability}. One rep, this week.`])
+          : pick([`Survivability only this week. The damage is already there.`, `One mechanic, one pull, with an officer before Saturday. Nothing else.`])
         : {
             perf: pick([`One boss, one log read with an officer. Not the whole night.`, `Pick the fight where it falls off and watch it back with Shortie.`]),
             gear: pick([`Gems and enchants before Saturday's Heroic. Twenty minutes.`, `Fill the empty slots this week -- cheapest point on the board.`]),
@@ -303,6 +313,7 @@ export function scoreRaider(raider: Raider, window: Window = 'rolled', gates: Ga
   const deathsInWindow = night ? raider.nightDeaths : raider.deaths;
   const pullsInWindow = night ? raider.nightPulls : raider.pulls;
   const deathRate = pullsInWindow > 0 ? deathsInWindow / pullsInWindow : 0;
+  const deathCausesInWindow = night ? raider.nightDeathCauses : raider.deathCauses;
   const scores = weightedScore(raider, window);
 
   const scoreBand: Band = scores.score >= gates.green ? 'green' : scores.score >= gates.yellow ? 'yellow' : 'red';
@@ -310,7 +321,7 @@ export function scoreRaider(raider: Raider, window: Window = 'rolled', gates: Ga
   const deathCapped = band !== scoreBand; // did the death rate actually hold the band down, not just "any deaths at all"
   if (g.ineligible) band = 'ineligible';
 
-  const derived: FeedbackDerived = { band, deathsInWindow, pullsInWindow, deathRate, perf, gates: g, scores };
+  const derived: FeedbackDerived = { band, deathsInWindow, pullsInWindow, deathRate, deathCausesInWindow, perf, gates: g, scores };
   const feedback = generateFeedback(raider, window, gates, derived);
 
   return {
@@ -331,6 +342,7 @@ export function scoreRaider(raider: Raider, window: Window = 'rolled', gates: Ga
     deathsInWindow,
     pullsInWindow,
     deathRate,
+    deathCausesInWindow,
     icon: specIcon(raider.spec, raider.class),
     subline: `${raider.spec} ${raider.class} · ${raider.role === 'dps' ? 'DPS' : up(raider.role)} · ilvl ${g.ilvlBest} · RIO ${g.rioBest}`,
     feedback,

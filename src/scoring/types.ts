@@ -2,6 +2,12 @@ export type Role = 'tank' | 'healer' | 'dps';
 export type Window = 'rolled' | 'night';
 export type Band = 'green' | 'yellow' | 'red' | 'ineligible';
 
+/** One death event's primary cause — the top-damage ability in Warcraft Logs' per-death breakdown, joined to the boss it happened on. */
+export interface DeathCause {
+  boss: string;
+  ability: string;
+}
+
 export interface Raider {
   name: string;
   role: Role;
@@ -21,12 +27,16 @@ export interface Raider {
   deaths: number;
   /** Tier-to-date kill-pull count this raider was present for — the denominator for deaths. */
   pulls: number;
+  /** Most recent death causes this tier, newest first, capped — not one per death. */
+  deathCauses: DeathCause[];
   /** Percentile for the single-night window only. */
   nightParse: number;
   /** Raw death count for the most recent raid night only. */
   nightDeaths: number;
   /** Kill-pull count for the most recent raid night only. */
   nightPulls: number;
+  /** Death causes from the most recent raid night only. */
+  nightDeathCauses: DeathCause[];
 }
 
 export interface Gates {
@@ -90,6 +100,8 @@ export interface ScoredRaider extends Raider {
   /** Deaths/pulls for whichever window is active — night uses nightDeaths/nightPulls, rolled uses deaths/pulls. */
   deathsInWindow: number;
   pullsInWindow: number;
+  /** Death causes for whichever window is active — night uses nightDeathCauses, rolled uses deathCauses. */
+  deathCausesInWindow: DeathCause[];
   /** deathsInWindow / pullsInWindow, 0-1 (0 if pullsInWindow is 0). What the death cap actually judges. */
   deathRate: number;
   icon: string;

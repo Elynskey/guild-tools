@@ -47,8 +47,8 @@ interface State {
 
 const TILE_DEFS: { key: Band; label: string; note: string }[] = [
   { key: 'green', label: 'Green', note: 'Gates clear, thresholds hit' },
-  { key: 'yellow', label: 'Yellow', note: 'Short somewhere, or one death' },
-  { key: 'red', label: 'Red', note: 'Below threshold, or 2+ deaths' },
+  { key: 'yellow', label: 'Yellow', note: 'Short somewhere, or a death rate over 15%' },
+  { key: 'red', label: 'Red', note: 'Below threshold, or a death rate over 30%' },
   { key: 'ineligible', label: 'Ineligible', note: 'Failed a gate — not scored' },
 ];
 

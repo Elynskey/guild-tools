@@ -34,9 +34,11 @@ function mergeSources({ wowauditRoster, rio, gearCompletion, wcl }) {
         parseTrend: wclData.parseTrend,
         deaths: wclData.deaths,
         pulls: wclData.pulls,
+        deathCauses: wclData.deathCauses,
         nightParse: wclData.nightParse,
         nightDeaths: wclData.nightDeaths,
         nightPulls: wclData.nightPulls,
+        nightDeathCauses: wclData.nightDeathCauses,
       };
     });
 }

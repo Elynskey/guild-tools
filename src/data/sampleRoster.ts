@@ -1,4 +1,4 @@
-import type { Raider } from '../scoring/types';
+import type { DeathCause, Raider } from '../scoring/types';
 
 /**
  * Sample roster — fabricated data for the prototype. Real officer names from the
@@ -25,6 +25,7 @@ const raider = (
   parseTrend: number,
   deaths: number,
   nightParse: number,
+  deathCauses: DeathCause[] = [],
 ): Raider => ({
   name,
   role,
@@ -39,9 +40,11 @@ const raider = (
   parseTrend,
   deaths,
   pulls: TIER_PULLS,
+  deathCauses,
   nightParse,
   nightDeaths: Math.min(deaths, 1),
   nightPulls: NIGHT_PULLS,
+  nightDeathCauses: deathCauses.slice(0, 1),
 });
 
 export const SAMPLE_ROSTER: Raider[] = [
@@ -54,8 +57,13 @@ export const SAMPLE_ROSTER: Raider[] = [
   // the cap actually changes).
   raider('Ogrimund', 'tank', 'Death Knight', 'Blood', 1620, 1690, 698, 701, 64, 92, 1, 4, 54),
   // 8 deaths on 24 pulls (33.3%, over the red threshold) -- score alone already
-  // lands Red here too, same non-capping case as Ogrimund above.
-  raider('Thornwick', 'tank', 'Paladin', 'Protection', 1180, 1210, 691, 693, 42, 78, -2, 8, 38),
+  // lands Red here too, same non-capping case as Ogrimund above. Boss names are
+  // real (from a live pull of this guild's actual logs); ability names are
+  // illustrative, same as the rest of this fabricated sample data.
+  raider('Thornwick', 'tank', 'Paladin', 'Protection', 1180, 1210, 691, 693, 42, 78, -2, 8, 38, [
+    { boss: 'Sszorak', ability: 'Venomous Detonation' },
+    { boss: 'The Twin Fangs', ability: 'Fang Sweep' },
+  ]),
   raider('Skarnak', 'tank', 'Druid', 'Guardian', 940, 985, 688, 689, 55, 85, 0, 0, 44),
   raider('Perseffonee', 'healer', 'Priest', 'Holy', 2610, 2610, 711, 711, 91, 100, 5, 0, 89),
   raider('Quixxie', 'healer', 'Shaman', 'Restoration', 2050, 2110, 704, 706, 84, 96, 2, 0, 80),

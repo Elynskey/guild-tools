@@ -20,9 +20,11 @@ const baseDps: Raider = {
   parseTrend: 0,
   deaths: 0,
   pulls: 20,
+  deathCauses: [],
   nightParse: 60,
   nightDeaths: 0,
   nightPulls: 8,
+  nightDeathCauses: [],
 };
 
 // healer/tank: perf is a 0-100 percentile within role (no rescale).
@@ -151,6 +153,52 @@ describe('scoreRaider', () => {
     const r = scoreRaider({ ...baseDps, perf: 80, gearCompletion: 20, parseTrend: -10, deaths: 4, pulls: 20 }, 'rolled', DEFAULT_GATES);
     expect(r.band).toBe('red');
     expect(r.deathCapped).toBe(false);
+  });
+
+  it('death-cap feedback names the actual mechanic when Warcraft Logs has a cause on record', () => {
+    const r = scoreRaider(
+      { ...baseDps, perf: 80, gearCompletion: 20, parseTrend: -10, deaths: 7, pulls: 20, deathCauses: [{ boss: 'Sszorak', ability: 'Venomous Detonation' }] },
+      'rolled',
+      DEFAULT_GATES,
+    );
+    expect(r.feedback.status).toContain('Venomous Detonation on Sszorak');
+    expect(r.feedback.attention).toContain('Venomous Detonation on Sszorak');
+    expect(r.feedback.action).toContain('Sszorak');
+    // The generic "watch a log with an officer" phrasing should not appear once a real cause is known.
+    expect(r.feedback.action).not.toContain('Survivability only this week');
+    expect(r.feedback.action).not.toContain('One mechanic, one pull');
+  });
+
+  it('death-cap feedback falls back to generic phrasing when no cause is on record', () => {
+    const r = scoreRaider({ ...baseDps, perf: 80, gearCompletion: 20, parseTrend: -10, deaths: 7, pulls: 20, deathCauses: [] }, 'rolled', DEFAULT_GATES);
+    expect(r.feedback.status).not.toContain('most recently');
+    expect(['Survivability only this week. The damage is already there.', 'One mechanic, one pull, with an officer before Saturday. Nothing else.']).toContain(r.feedback.action);
+  });
+
+  it('death-cause feedback is window-scoped, same as the death rate itself', () => {
+    // perf/gear are strong enough to score Green in both windows on their own (perf and
+    // gearCompletion apply to both) -- isolates the death cap/cause as the only variable.
+    const raider = {
+      ...baseDps,
+      perf: 115,
+      gearCompletion: 100,
+      parseTrend: 5,
+      deaths: 7,
+      pulls: 20,
+      deathCauses: [{ boss: 'Sszorak', ability: 'Venomous Detonation' }],
+      nightParse: 90,
+      nightDeaths: 0,
+      nightPulls: 8,
+      nightDeathCauses: [],
+    };
+    // Tier-to-date: 7/20 (35%) forces Red via the cap despite a green-worthy score.
+    const rolledResult = scoreRaider(raider, 'rolled', DEFAULT_GATES);
+    expect(rolledResult.band).toBe('red');
+    expect(rolledResult.feedback.action).toContain('Sszorak');
+    // Clean that night (0/8, no cap at all) -- the tier-wide cause must not leak into a green-band raider's feedback.
+    const nightResult = scoreRaider(raider, 'night', DEFAULT_GATES);
+    expect(nightResult.band).toBe('green');
+    expect(nightResult.feedback.action).not.toContain('Sszorak');
   });
 
   it('bands correctly at the configured cutoffs', () => {
