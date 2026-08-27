@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildDeathMechanicsReport } from './deathMechanics';
+import { buildDeathMechanicsReport, findRepeatOffenders } from './deathMechanics';
 import type { ScoredRaider } from './types';
 
 function scoredRaider(name: string, deathCausesInWindow: { boss: string; ability: string }[]): ScoredRaider {
@@ -108,5 +108,65 @@ describe('buildDeathMechanicsReport', () => {
     const report = buildDeathMechanicsReport([ineligible]);
     expect(report[0].totalDeaths).toBe(1);
     expect(report[0].byRaider[0].name).toBe('Bench');
+  });
+});
+
+describe('findRepeatOffenders', () => {
+  it('flags a raider who died to the same mechanic 2+ times, not a single death', () => {
+    const rows = [
+      scoredRaider('OneOff', [{ boss: 'Boss', ability: 'Ability' }]),
+      scoredRaider('Repeat', [
+        { boss: 'Boss', ability: 'Ability' },
+        { boss: 'Boss', ability: 'Ability' },
+      ]),
+    ];
+    const report = buildDeathMechanicsReport(rows);
+    const offenders = findRepeatOffenders(report);
+    expect(offenders.map((o) => o.name)).toEqual(['Repeat']);
+  });
+
+  it('a raider repeating on multiple different mechanics gets one entry listing all of them', () => {
+    const rows = [
+      scoredRaider('Multi', [
+        { boss: 'BossA', ability: 'AbilityA' },
+        { boss: 'BossA', ability: 'AbilityA' },
+        { boss: 'BossB', ability: 'AbilityB' },
+        { boss: 'BossB', ability: 'AbilityB' },
+        { boss: 'BossB', ability: 'AbilityB' },
+      ]),
+    ];
+    const report = buildDeathMechanicsReport(rows);
+    const offenders = findRepeatOffenders(report);
+    expect(offenders).toHaveLength(1);
+    expect(offenders[0].mechanics).toEqual([
+      { boss: 'BossB', ability: 'AbilityB', count: 3 },
+      { boss: 'BossA', ability: 'AbilityA', count: 2 },
+    ]);
+  });
+
+  it('sorts raiders with more repeat mechanics first, then by their worst single repeat', () => {
+    const rows = [
+      scoredRaider('TwoRepeats', [
+        { boss: 'BossA', ability: 'X' },
+        { boss: 'BossA', ability: 'X' },
+        { boss: 'BossB', ability: 'Y' },
+        { boss: 'BossB', ability: 'Y' },
+      ]),
+      scoredRaider('OneBigRepeat', [
+        { boss: 'BossC', ability: 'Z' },
+        { boss: 'BossC', ability: 'Z' },
+        { boss: 'BossC', ability: 'Z' },
+        { boss: 'BossC', ability: 'Z' },
+      ]),
+    ];
+    const report = buildDeathMechanicsReport(rows);
+    const offenders = findRepeatOffenders(report);
+    expect(offenders.map((o) => o.name)).toEqual(['TwoRepeats', 'OneBigRepeat']); // 2 distinct mechanics beats 1, even a bigger one
+  });
+
+  it('an empty report or one with no repeats returns an empty list', () => {
+    expect(findRepeatOffenders([])).toEqual([]);
+    const rows = [scoredRaider('OnceEach', [{ boss: 'A', ability: 'X' }])];
+    expect(findRepeatOffenders(buildDeathMechanicsReport(rows))).toEqual([]);
   });
 });

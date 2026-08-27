@@ -61,6 +61,8 @@ export const SAMPLE_ROSTER: Raider[] = [
   // real (from a live pull of this guild's actual logs); ability names are
   // illustrative, same as the rest of this fabricated sample data.
   raider('Thornwick', 'tank', 'Paladin', 'Protection', 1180, 1210, 691, 693, 42, 78, -2, 8, 38, [
+    // Two deaths to the same mechanic demonstrates the "missing a mechanic" flag.
+    { boss: 'Sszorak', ability: 'Venomous Detonation' },
     { boss: 'Sszorak', ability: 'Venomous Detonation' },
     { boss: 'The Twin Fangs', ability: 'Fang Sweep' },
   ]),

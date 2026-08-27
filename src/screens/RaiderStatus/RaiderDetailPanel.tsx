@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { Icon } from '../../design-system/Icon';
+import { REPEAT_MECHANIC_THRESHOLD } from '../../scoring/deathMechanics';
 import type { DisplayRaider } from './useRaiderStatus';
 import { OverallPerformanceDialog } from './OverallPerformanceDialog';
 
@@ -83,11 +85,16 @@ export function RaiderDetailPanel({ raider: r, rioGateText, ilvlGateText }: Raid
               Death log ({r.deathsInWindow})
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              {deathLog.map((d) => (
-                <div key={`${d.boss}::${d.ability}`} style={{ fontSize: 'var(--text-body-s)', color: 'var(--text-body)' }}>
-                  <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-faint)' }}>{d.count}x</span> {d.ability} <span style={{ color: 'var(--text-faint)' }}>— {d.boss}</span>
-                </div>
-              ))}
+              {deathLog.map((d) => {
+                const flagged = d.count >= REPEAT_MECHANIC_THRESHOLD;
+                return (
+                  <div key={`${d.boss}::${d.ability}`} style={{ fontSize: 'var(--text-body-s)', color: flagged ? 'var(--accent-ember)' : 'var(--text-body)', fontWeight: flagged ? 700 : 400 }}>
+                    {flagged && <Icon name="alert-triangle" size={11} style={{ verticalAlign: -1, marginRight: 3 }} color="var(--accent-ember)" />}
+                    <span style={{ fontFamily: 'var(--font-mono)', color: flagged ? 'var(--accent-ember)' : 'var(--text-faint)' }}>{d.count}x</span> {d.ability}{' '}
+                    <span style={{ color: flagged ? undefined : 'var(--text-faint)' }}>— {d.boss}</span>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}

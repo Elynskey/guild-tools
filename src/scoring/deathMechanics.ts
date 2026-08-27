@@ -41,3 +41,34 @@ export function buildDeathMechanicsReport(rows: ScoredRaider[]): DeathMechanicEn
   list.sort((a, b) => b.totalDeaths - a.totalDeaths || a.boss.localeCompare(b.boss));
   return list;
 }
+
+/** Died to the same mechanic this many times or more -- a pattern, not a one-off mistake. */
+export const REPEAT_MECHANIC_THRESHOLD = 2;
+
+export interface RepeatOffender {
+  name: string;
+  mechanics: { boss: string; ability: string; count: number }[]; // sorted desc by count
+}
+
+/**
+ * "Who's missing critical mechanics" -- raiders who died to the SAME mechanic
+ * REPEAT_MECHANIC_THRESHOLD+ times this window. A single death to something is a
+ * mistake; dying to it twice or more is the raid not learning it. Sorted by whoever
+ * has the most repeat mechanics, then by their worst single repeat count.
+ */
+export function findRepeatOffenders(entries: DeathMechanicEntry[]): RepeatOffender[] {
+  const byName = new Map<string, RepeatOffender>();
+  for (const entry of entries) {
+    for (const b of entry.byRaider) {
+      if (b.count < REPEAT_MECHANIC_THRESHOLD) continue;
+      const existing = byName.get(b.name);
+      const mechanic = { boss: entry.boss, ability: entry.ability, count: b.count };
+      if (existing) existing.mechanics.push(mechanic);
+      else byName.set(b.name, { name: b.name, mechanics: [mechanic] });
+    }
+  }
+  const list = [...byName.values()];
+  for (const r of list) r.mechanics.sort((a, b) => b.count - a.count);
+  list.sort((a, b) => b.mechanics.length - a.mechanics.length || b.mechanics[0].count - a.mechanics[0].count || a.name.localeCompare(b.name));
+  return list;
+}

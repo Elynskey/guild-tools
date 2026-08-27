@@ -44,4 +44,6 @@ declare global {
   interface Window {
     electronAPI?: ElectronAPI;
   }
+  /** Injected at build time from package.json's version — see vite.config.ts's `define`. */
+  const __APP_VERSION__: string;
 }
