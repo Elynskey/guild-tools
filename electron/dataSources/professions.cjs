@@ -15,7 +15,7 @@
 
 const { getClientCredentialsToken } = require('./oauth.cjs');
 const { slugifyRealm } = require('./raiderio.cjs');
-const { resolveMainName } = require('./altGroups.cjs');
+const { resolveMainName, isExplicitlyMapped } = require('./altGroups.cjs');
 
 const TOKEN_URL = 'https://oauth.battle.net/token';
 const ACTIVE_WITHIN_DAYS = 30;
@@ -143,15 +143,24 @@ async function fetchActiveMembersWithProfessions(guild, onProgress) {
 
   const characters = withProfessions.filter((c) => !c.error);
 
-  // Group by officer-maintained alt mapping.
+  // Group by officer-maintained alt mapping. The fallback for a character with no
+  // explicit entry -- "treat it as its own main" -- is only safe when the raw name is
+  // actually unique. It isn't always: confirmed live, this guild's ~1000-character
+  // roster has two different real people sharing a character name across different
+  // realms ("jesmarie" and "goku", each on both argent-dawn and the-scryers). Keying
+  // purely on name would silently merge two strangers' professions onto one card.
+  // Explicit alt-groups.json entries are officer-confirmed and stay name-keyed (a
+  // person's main and alt can legitimately live on different realms); only the
+  // *fallback* case gets realm-qualified to avoid the accidental-collision risk.
   const byMain = new Map();
   for (const c of characters) {
     const mainName = resolveMainName(c.characterName);
-    if (!byMain.has(mainName)) byMain.set(mainName, []);
-    byMain.get(mainName).push(c);
+    const groupKey = isExplicitlyMapped(c.characterName) ? mainName : `${c.characterName}::${c.realm}`;
+    if (!byMain.has(groupKey)) byMain.set(groupKey, { mainName, chars: [] });
+    byMain.get(groupKey).chars.push(c);
   }
 
-  return [...byMain.entries()].map(([mainName, chars]) => ({ mainName, characters: chars }));
+  return [...byMain.values()].map(({ mainName, chars }) => ({ mainName, characters: chars }));
 }
 
 module.exports = { fetchActiveMembersWithProfessions, fetchGuildRoster };

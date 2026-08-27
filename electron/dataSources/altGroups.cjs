@@ -40,4 +40,17 @@ function resolveMainName(characterName) {
   return loadGroups().get(characterName) ?? characterName;
 }
 
-module.exports = { resolveMainName };
+/**
+ * Whether this exact character name has an officer-confirmed entry in alt-groups.json.
+ * Matters because resolveMainName()'s fallback (an unmapped character is its own "main")
+ * is only safe when the raw name is actually unique — a full-guild roster (hundreds of
+ * characters) can have two unrelated people sharing a character name on different realms
+ * (confirmed live: two real, distinct guild members both named the same thing across two
+ * realms). The caller needs to know "was this grouping officer-confirmed, or just a
+ * same-name guess" to decide whether it's safe to key on the bare name.
+ */
+function isExplicitlyMapped(characterName) {
+  return loadGroups().has(characterName);
+}
+
+module.exports = { resolveMainName, isExplicitlyMapped };
