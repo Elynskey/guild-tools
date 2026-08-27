@@ -11,4 +11,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('professions:progress', listener);
     return () => ipcRenderer.removeListener('professions:progress', listener);
   },
+  checkForUpdate: () => ipcRenderer.invoke('update:check'),
+  openReleasePage: (url) => ipcRenderer.invoke('update:openReleasePage', url),
 });

@@ -18,11 +18,18 @@ export interface ProfessionsProgress {
   total: number;
 }
 
+export interface UpdateInfo {
+  version: string;
+  releaseUrl: string;
+}
+
 export interface ElectronAPI {
   getRoster: () => Promise<LiveRosterResult | null>;
   getProfessions: () => Promise<LiveProfessionsResult | null>;
   getCachedProfessions: () => Promise<LiveProfessionsResult | null>;
   onProfessionsProgress: (callback: (progress: ProfessionsProgress) => void) => () => void;
+  checkForUpdate: () => Promise<UpdateInfo | null>;
+  openReleasePage: (url: string) => Promise<void>;
 }
 
 declare global {

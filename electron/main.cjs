@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, shell } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 
@@ -17,10 +17,15 @@ require('dotenv').config({ path: fs.existsSync(userDataEnvPath) ? userDataEnvPat
 
 const { fetchRoster } = require('./dataSources/fetchRoster.cjs');
 const { fetchProfessions, getCachedProfessions } = require('./dataSources/fetchProfessions.cjs');
+const { checkForUpdate } = require('./dataSources/updateCheck.cjs');
 
 ipcMain.handle('roster:fetch', async () => fetchRoster());
 ipcMain.handle('professions:getCached', async () => getCachedProfessions());
 ipcMain.handle('professions:fetch', async (event) => fetchProfessions((progress) => event.sender.send('professions:progress', progress)));
+ipcMain.handle('update:check', async () => checkForUpdate(app.getVersion()));
+ipcMain.handle('update:openReleasePage', async (_event, url) => {
+  if (typeof url === 'string' && url.startsWith('https://github.com/')) shell.openExternal(url);
+});
 
 function createWindow() {
   const win = new BrowserWindow({
