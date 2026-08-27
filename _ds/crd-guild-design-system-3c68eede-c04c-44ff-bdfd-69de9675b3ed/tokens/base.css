@@ -1,0 +1,15 @@
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0;background:var(--surface-page);color:var(--text-body);font-family:var(--font-body);font-size:var(--text-body-m);line-height:var(--leading-normal);-webkit-font-smoothing:antialiased}
+h1,h2,h3,h4{font-family:var(--font-display);font-weight:var(--weight-display);color:var(--text-strong);letter-spacing:var(--tracking-display);margin:0}
+h1{font-size:var(--text-display-l);line-height:var(--leading-tight)}
+h2{font-size:var(--text-display-m);line-height:var(--leading-snug)}
+h3{font-size:var(--text-display-s);line-height:var(--leading-snug)}
+h4{font-size:var(--text-title-m);line-height:var(--leading-snug)}
+p{margin:0 0 var(--space-4)}
+a{color:var(--text-link);text-decoration:none;border-bottom:1px solid var(--border-soft);transition:var(--transition-control)}
+a:hover{color:var(--text-link-hover);border-bottom-color:var(--border-strong)}
+a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,[tabindex]:focus-visible{outline:none;box-shadow:var(--glow-focus)}
+code,kbd{font-family:var(--font-mono);font-size:.92em}
+::selection{background:rgba(192,144,47,.32);color:var(--parchment-100)}
+.crd-eyebrow{font-family:var(--font-ui);font-size:var(--text-micro);letter-spacing:var(--tracking-eyebrow);text-transform:uppercase;color:var(--text-gold)}
+.crd-rule{height:1px;border:0;background:var(--rule-gold)}

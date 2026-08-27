@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="_ds/crd-guild-design-system-3c68eede-c04c-44ff-bdfd-69de9675b3ed/tokens/fonts.css">
+<link rel="stylesheet" href="_ds/crd-guild-design-system-3c68eede-c04c-44ff-bdfd-69de9675b3ed/tokens/colors.css">
+<link rel="stylesheet" href="_ds/crd-guild-design-system-3c68eede-c04c-44ff-bdfd-69de9675b3ed/tokens/typography.css">
+<link rel="stylesheet" href="_ds/crd-guild-design-system-3c68eede-c04c-44ff-bdfd-69de9675b3ed/tokens/spacing.css">
+<link rel="stylesheet" href="_ds/crd-guild-design-system-3c68eede-c04c-44ff-bdfd-69de9675b3ed/tokens/elevation.css">
+<link rel="stylesheet" href="_ds/crd-guild-design-system-3c68eede-c04c-44ff-bdfd-69de9675b3ed/tokens/motion.css">
+<link rel="stylesheet" href="_ds/crd-guild-design-system-3c68eede-c04c-44ff-bdfd-69de9675b3ed/tokens/base.css">
+<link rel="stylesheet" href="_ds/crd-guild-design-system-3c68eede-c04c-44ff-bdfd-69de9675b3ed/components/components.css">
+<link rel="stylesheet" href="_ds/crd-guild-design-system-3c68eede-c04c-44ff-bdfd-69de9675b3ed/styles.css">
+<script src="_ds/crd-guild-design-system-3c68eede-c04c-44ff-bdfd-69de9675b3ed/_ds_bundle.js"></script>
+<style>
+body{margin:0;background:var(--surface-page)}
+a{color:var(--text-link);text-decoration:none}
+a:hover{color:var(--text-link-hover)}
+</style>
+</helmet>
+<div style="min-height:100vh;background:var(--surface-page);font-family:var(--font-ui);color:var(--text-body);padding-bottom:80px">
+
+  <header style="position:sticky;top:0;z-index:6;background-color:rgba(18,16,12,.92);background-image:linear-gradient(90deg,rgba(18,16,12,.97) 0%,rgba(18,16,12,.72) 45%,rgba(18,16,12,.86) 100%),url('assets/site/hero-banner.jpg');background-size:cover;background-position:center 30%;backdrop-filter:var(--blur-panel);border-bottom:1px solid var(--border-soft)">
+    <div style="max-width:1160px;margin:0 auto;padding:14px 32px;display:flex;align-items:center;gap:24px;flex-wrap:wrap">
+      <div style="display:flex;align-items:center;gap:14px">
+        <x-import component-from-global-scope="CRDGuildDesignSystem_3c68ee.Crest" size="{{ crestSize }}" hint-size="42px,42px"></x-import>
+        <div style="display:flex;flex-direction:column;gap:2px">
+          <div class="crd-eyebrow">Casual Raid Days · The Scryers · est. 2010</div>
+          <div style="font-family:var(--font-display);font-size:var(--text-title-l);font-weight:600;letter-spacing:.06em;color:var(--text-strong);line-height:1.1">Raider Status</div>
+        </div>
+      </div>
+      <div style="flex:1"></div>
+      <div style="display:flex;align-items:center;gap:20px">
+        <img src="assets/site/midnight-logo.avif" alt="Midnight" style="height:38px;width:auto;object-fit:contain;opacity:.9;filter:drop-shadow(0 2px 6px rgba(0,0,0,.6))">
+        <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end">
+          <div class="crd-eyebrow">Current tier</div>
+          <div style="font-size:var(--text-body-s);color:var(--text-body)">The Venomous Abyss · <span style="font-family:var(--font-mono);color:var(--text-gold)">3/8</span> Heroic</div>
+        </div>
+        <x-import component-from-global-scope="CRDGuildDesignSystem_3c68ee.Tabs" tabs="{{ windowTabs }}" value="{{ windowValue }}" onChange="{{ setWindow }}" hint-size="280px,36px"></x-import>
+      </div>
+    </div>
+  </header>
+
+  <div style="max-width:1160px;margin:0 auto;padding:32px">
+
+    <div style="display:flex;align-items:baseline;gap:16px;flex-wrap:wrap;padding-bottom:10px;border-bottom:1px solid var(--border-hairline)">
+      <span class="crd-eyebrow" style="color:var(--text-gold)">{{ avgLine }}</span>
+      <div style="flex:1"></div>
+      <span style="font-size:var(--text-micro);color:var(--text-faint)">{{ freshness }}</span>
+    </div>
+
+    <div style="display:flex;height:6px;gap:2px;margin:14px 0 12px">
+      <sc-for list="{{ tiles }}" as="tile" hint-placeholder-count="4">
+        <div title="{{ tile.title }}" style="width:{{ tile.pct }};background:{{ tile.color }};box-shadow:var(--inset-bevel)"></div>
+      </sc-for>
+    </div>
+
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:22px">
+      <sc-for list="{{ tiles }}" as="tile" hint-placeholder-count="4">
+        <button type="button" onClick="{{ tile.onClick }}" title="{{ tile.title }}" style="display:flex;align-items:baseline;gap:8px;padding:5px 12px;border:1px solid {{ tile.edge }};border-radius:var(--radius-sm);background:transparent;cursor:pointer;font-family:var(--font-ui)" style-hover="border-color:var(--border-soft)">
+          <span style="width:6px;height:6px;border-radius:999px;background:{{ tile.color }}"></span>
+          <span style="font-family:var(--font-mono);font-size:var(--text-body-s);color:{{ tile.countColor }}">{{ tile.count }}</span>
+          <span style="font-size:var(--text-micro);letter-spacing:.09em;text-transform:uppercase;color:{{ tile.labelColor }}">{{ tile.label }}</span>
+        </button>
+      </sc-for>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:7px;max-width:840px;margin-bottom:34px">
+      <p style="margin:0;font-size:var(--text-body-m);line-height:1.5;color:var(--text-body);text-wrap:pretty"><span style="font-family:var(--font-display);font-size:var(--text-title-s);letter-spacing:.06em;color:var(--status-success)">Going well. </span>{{ guildWell }}</p>
+      <p style="margin:0;font-size:var(--text-body-m);line-height:1.5;color:var(--text-body);text-wrap:pretty"><span style="font-family:var(--font-display);font-size:var(--text-title-s);letter-spacing:.06em;color:var(--status-warning)">Stopping us. </span>{{ guildStop }}</p>
+      <p style="margin:0;font-size:var(--text-body-s);line-height:1.5;color:var(--text-muted);text-wrap:pretty">{{ guildGate }}</p>
+    </div>
+
+    <div style="display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap;margin-bottom:24px">
+      <x-import component-from-global-scope="CRDGuildDesignSystem_3c68ee.Tabs" tabs="{{ roleTabs }}" value="{{ roleValue }}" onChange="{{ setRole }}" hint-size="360px,36px"></x-import>
+      <div style="flex:1"></div>
+      <div style="width:240px">
+        <x-import component-from-global-scope="CRDGuildDesignSystem_3c68ee.Input" placeholder="Find a raider" value="{{ query }}" onChange="{{ setQuery }}" hint-size="240px,40px"></x-import>
+      </div>
+      <x-import component-from-global-scope="CRDGuildDesignSystem_3c68ee.Switch" label="Needs support first" checked="{{ sortWorst }}" onChange="{{ setSortWorst }}" hint-size="200px,32px"></x-import>
+    </div>
+
+    <sc-for list="{{ groups }}" as="g" hint-placeholder-count="3">
+      <section style="margin-bottom:40px">
+        <div style="display:flex;align-items:center;gap:14px;margin-bottom:16px">
+          <x-import component-from-global-scope="CRDGuildDesignSystem_3c68ee.Icon" name="{{ g.icon }}" size="{{ iconLg }}" hint-size="20px,20px" style="color:var(--text-gold)"></x-import>
+          <h2 style="margin:0;font-family:var(--font-display);font-size:var(--text-display-s);font-weight:600;letter-spacing:.06em;color:var(--text-strong)">{{ g.label }}</h2>
+          <span style="font-family:var(--font-mono);font-size:var(--text-body-s);color:var(--text-muted)">{{ g.count }}</span>
+          <div style="flex:1;height:1px;background:var(--rule-gold)"></div>
+        </div>
+        <div class="crd-card" style="padding:0;overflow:hidden">
+          <div style="display:grid;grid-template-columns:3px minmax(160px,1fr) 92px 122px 78px 58px 62px 104px;gap:12px;align-items:center;padding:8px 18px 8px 0;background:var(--grad-header);border-bottom:1px solid var(--border-hairline)">
+            <div></div>
+            <div class="crd-eyebrow">Raider</div>
+            <div class="crd-eyebrow">{{ g.perfHeader }}</div>
+            <div class="crd-eyebrow">Gems &amp; enchants</div>
+            <div class="crd-eyebrow">{{ trendHeader }}</div>
+            <div class="crd-eyebrow" style="text-align:right">Deaths</div>
+            <div class="crd-eyebrow" style="text-align:right">Score</div>
+            <div class="crd-eyebrow">Band</div>
+          </div>
+          <sc-for list="{{ g.rows }}" as="r" hint-placeholder-count="6">
+            <div style="border-top:1px solid var(--border-hairline)">
+              <div onClick="{{ r.toggle }}" style="display:grid;grid-template-columns:3px minmax(160px,1fr) 92px 122px 78px 58px 62px 104px;gap:12px;align-items:center;padding:0 18px 0 0;cursor:pointer;opacity:{{ r.dim }};transition:background-color var(--dur-fast) var(--ease-standard)" style-hover="background:var(--surface-card-hover)">
+                <div style="align-self:stretch;background:{{ r.color }}"></div>
+                <div style="padding:9px 0;min-width:0;display:flex;align-items:center;gap:10px">
+                  <img src="{{ r.icon }}" alt="{{ r.iconAlt }}" title="{{ r.iconAlt }}" style="flex:none;width:26px;height:26px;border:1px solid var(--border-hairline);border-radius:2px;box-shadow:var(--shadow-1)">
+                  <div style="min-width:0">
+                    <div style="font-family:var(--font-display);font-size:var(--text-title-s);font-weight:600;letter-spacing:.04em;color:var(--text-strong)">{{ r.name }}</div>
+                    <div style="margin-top:1px;font-size:var(--text-micro);color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.subline }}</div>
+                  </div>
+                </div>
+                <div>
+                  <div style="font-family:var(--font-mono);font-size:var(--text-body-s);color:var(--text-body)">{{ r.perfValue }}</div>
+                  <div style="margin-top:4px;height:3px;background:var(--surface-sunken);overflow:hidden"><div style="height:100%;background:{{ r.color }};width:{{ r.perfW }}"></div></div>
+                </div>
+                <div>
+                  <div style="font-family:var(--font-mono);font-size:var(--text-body-s);color:var(--text-body)">{{ r.gearValue }}</div>
+                  <div style="margin-top:4px;height:3px;background:var(--surface-sunken);overflow:hidden"><div style="height:100%;background:{{ r.gearColor }};width:{{ r.gearW }}"></div></div>
+                </div>
+                <div style="font-family:var(--font-mono);font-size:var(--text-body-s);color:{{ r.trendColor }}">{{ r.trendValue }}</div>
+                <div title="{{ r.capTitle }}" style="display:flex;align-items:center;justify-content:flex-end;gap:4px;font-family:var(--font-mono);font-size:var(--text-body-s);color:{{ r.deathColor }}">
+                  <sc-if value="{{ r.capped }}" hint-placeholder-val="{{ false }}">
+                    <x-import component-from-global-scope="CRDGuildDesignSystem_3c68ee.Icon" name="skull" size="{{ iconSm }}" hint-size="14px,14px"></x-import>
+                  </sc-if>
+                  <span>{{ r.deathText }}</span>
+                </div>
+                <div style="text-align:right;font-family:var(--font-mono);font-size:var(--text-title-l);color:{{ r.color }}">{{ r.scoreText }}</div>
+                <div>
+                  <x-import component-from-global-scope="CRDGuildDesignSystem_3c68ee.Badge" tone="{{ r.tone }}" dot="{{ true }}" hint-size="86px,20px">{{ r.bandLabel }}</x-import>
+                </div>
+              </div>
+
+              <sc-if value="{{ r.expanded }}" hint-placeholder-val="{{ false }}">
+                <div style="padding:16px 24px 22px 22px;background:var(--surface-raised);border-top:1px solid var(--border-hairline);box-shadow:var(--inset-well)">
+                  <div style="max-width:760px;display:flex;flex-direction:column;gap:9px">
+                    <div class="crd-eyebrow">{{ r.feedbackTitle }}</div>
+                    <p style="margin:0;font-size:var(--text-body-m);line-height:1.5;color:var(--text-strong);text-wrap:pretty">{{ r.status }}</p>
+                    <p style="margin:0;font-size:var(--text-body-s);line-height:1.5;color:var(--text-body);text-wrap:pretty"><span style="color:var(--text-gold)">Working. </span>{{ r.working }}</p>
+                    <p style="margin:0;font-size:var(--text-body-s);line-height:1.5;color:var(--text-body);text-wrap:pretty"><span style="color:var(--text-gold)">Attention. </span>{{ r.attention }}</p>
+                    <p style="margin:4px 0 0;padding:10px 14px;border:1px solid var(--border-soft);border-radius:var(--radius-sm);background:var(--action-secondary);font-size:var(--text-body-s);line-height:1.5;color:var(--text-strong);text-wrap:pretty"><span style="color:var(--text-gold)">Next step. </span>{{ r.action }}</p>
+                    <sc-if value="{{ r.ineligible }}" hint-placeholder-val="{{ false }}">
+                      <div style="display:flex;gap:24px;margin-top:4px;font-family:var(--font-mono);font-size:var(--text-body-s)">
+                        <span style="color:{{ r.rioColor }}">Raider.IO {{ r.rioText }} <span style="color:var(--text-faint)">/ gate {{ rioGateText }}</span></span>
+                        <span style="color:{{ r.ilvlColor }}">Item level {{ r.ilvlText }} <span style="color:var(--text-faint)">/ gate {{ ilvlGateText }}</span></span>
+                      </div>
+                    </sc-if>
+                    <div style="margin-top:2px;font-size:var(--text-micro);color:var(--text-faint)">{{ r.provenance }}</div>
+                  </div>
+                </div>
+              </sc-if>
+            </div>
+          </sc-for>
+        </div>
+      </section>
+    </sc-for>
+
+    <sc-if value="{{ empty }}" hint-placeholder-val="{{ false }}">
+      <div style="padding:48px;text-align:center;border:1px dashed var(--border-hairline);border-radius:var(--radius-md);color:var(--text-muted)">No raiders match that filter.</div>
+    </sc-if>
+
+    <div style="margin-top:48px;padding-top:24px;border-top:1px solid var(--border-hairline)">
+      <div style="display:flex;align-items:center;gap:14px;margin-bottom:14px">
+        <span class="crd-eyebrow" style="color:var(--text-gold)">This Tier's Kills</span>
+        <div style="flex:1;height:1px;background:var(--rule-gold)"></div>
+        <span style="font-family:var(--font-mono);font-size:var(--text-micro);color:var(--text-muted)">3/8 Heroic</span>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
+        <figure style="margin:0">
+          <img src="assets/site/kill-sentinels.png" alt="Sentinels defeated" style="display:block;width:100%;height:104px;object-fit:cover;border:1px solid var(--border-hairline);border-radius:var(--radius-sm);box-shadow:var(--shadow-2)">
+          <figcaption style="margin-top:6px;font-size:var(--text-micro);color:var(--text-muted)">Sentinels · first Heroic kill</figcaption>
+        </figure>
+        <figure style="margin:0">
+          <img src="assets/site/kill-vashnik.png" alt="Vashnik defeated" style="display:block;width:100%;height:104px;object-fit:cover;border:1px solid var(--border-hairline);border-radius:var(--radius-sm);box-shadow:var(--shadow-2)">
+          <figcaption style="margin-top:6px;font-size:var(--text-micro);color:var(--text-muted)">Vashnik · Saturday Heroic</figcaption>
+        </figure>
+        <figure style="margin:0">
+          <img src="assets/site/kill-rotmire.png" alt="Rotmire defeated" style="display:block;width:100%;height:104px;object-fit:cover;border:1px solid var(--border-hairline);border-radius:var(--radius-sm);box-shadow:var(--shadow-2)">
+          <figcaption style="margin-top:6px;font-size:var(--text-micro);color:var(--text-muted)">Rotmire · two pulls, no deaths</figcaption>
+        </figure>
+      </div>
+    </div>
+
+    <img src="assets/site/footer-banner.png" alt="" style="display:block;width:100%;max-width:560px;margin:28px auto 0;opacity:.4;mask-image:linear-gradient(90deg,transparent,#000 18%,#000 82%,transparent)">
+
+    <p style="margin:20px 0 0;max-width:720px;font-size:var(--text-micro);line-height:1.5;color:var(--text-faint)">Gates first, then the weighted score, then the death cap. Attendance and anything about the person behind the toon stays off this board -- that is a conversation, not a number.</p>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;rioGate&quot;:{&quot;editor&quot;:&quot;int&quot;,&quot;default&quot;:1000,&quot;tsType&quot;:&quot;number&quot;,&quot;min&quot;:0,&quot;max&quot;:3000,&quot;step&quot;:50,&quot;section&quot;:&quot;Gates&quot;},&quot;ilvlThreshold&quot;:{&quot;editor&quot;:&quot;int&quot;,&quot;default&quot;:690,&quot;tsType&quot;:&quot;number&quot;,&quot;min&quot;:600,&quot;max&quot;:740,&quot;step&quot;:1,&quot;section&quot;:&quot;Gates&quot;},&quot;greenAt&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:75,&quot;tsType&quot;:&quot;number&quot;,&quot;min&quot;:50,&quot;max&quot;:95,&quot;step&quot;:1,&quot;section&quot;:&quot;Score bands&quot;},&quot;yellowAt&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:55,&quot;tsType&quot;:&quot;number&quot;,&quot;min&quot;:20,&quot;max&quot;:74,&quot;step&quot;:1,&quot;section&quot;:&quot;Score bands&quot;},&quot;defaultWindow&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;Rolled-up&quot;,&quot;options&quot;:[&quot;Rolled-up&quot;,&quot;Last raid night&quot;],&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;View&quot;}}">
+class Component extends DCLogic {
+  state = { window: null, role: 'all', band: 'all', query: '', sortWorst: true, open: null };
+
+  // name, role, class, spec, rio, rioHigh, ilvl, ilvlHigh, perf, gear, trend, deaths
+  static ROWS = [
+    ['Vadailla','tank','Warrior','Protection',2480,2480,709,709,108,100,3,0],
+    ['Ogrimund','tank','Death Knight','Blood',1620,1690,698,701,99,92,1,1],
+    ['Thornwick','tank','Paladin','Protection',1180,1210,691,693,94,78,-2,2],
+    ['Skarnak','tank','Druid','Guardian',940,985,688,689,96,85,0,0],
+    ['Perseffonee','healer','Priest','Holy',2610,2610,711,711,91,100,5,0],
+    ['Quixxie','healer','Shaman','Restoration',2050,2110,704,706,84,96,2,0],
+    ['Ellowyn','healer','Druid','Restoration',1490,1530,697,699,61,74,-3,1],
+    ['Mirthwin','healer','Monk','Mistweaver',1320,1360,694,696,55,88,1,0],
+    ['Halvora','healer','Paladin','Holy',1010,1080,692,694,42,62,-6,2],
+    ['Duskwren','healer','Priest','Discipline',1780,1810,701,703,77,90,4,0],
+    ['Harima','dps','Mage','Frost',2740,2740,712,712,114,100,6,0],
+    ['Hotchick','dps','Hunter','Beast Mastery',2180,2200,707,708,106,100,3,0],
+    ['Shortie','dps','Rogue','Subtlety',1960,1990,703,705,101,94,2,0],
+    ['Zalanto','dps','Warlock','Destruction',2260,2260,708,710,109,98,4,0],
+    ['Addy','dps','Druid','Balance',1540,1600,699,701,97,86,5,0],
+    ['Brumblade','dps','Warrior','Fury',1150,1180,693,695,92,70,-1,1],
+    ['Grimsyl','dps','Death Knight','Unholy',1420,1470,696,698,88,82,-4,0],
+    ['Mossbeard','dps','Shaman','Elemental',1030,1090,690,692,84,66,-5,2],
+    ['Kaldresh','dps','Paladin','Retribution',1680,1700,700,702,103,92,1,0],
+    ['Sunnivah','dps','Priest','Shadow',880,930,686,687,90,80,2,0],
+    ['Bristlebane','dps','Monk','Windwalker',1260,1300,695,697,95,88,0,1],
+    ['Verrock','dps','Hunter','Marksmanship',2040,2060,705,707,104,96,3,0],
+    ['Nyxaria','dps','Evoker','Devastation',1590,1640,698,700,99,90,7,0],
+    ['Dromm','dps','Warrior','Arms',1120,1160,687,689,86,74,-2,0],
+    ['Fizzlewick','dps','Mage','Fire',1870,1900,702,704,100,84,-1,0],
+    ['Ashkara','dps','Rogue','Assassination',1350,1390,694,696,93,90,2,1],
+    ['Torvyn','dps','Demon Hunter','Havoc',2120,2140,706,708,111,100,5,0],
+    ['Selvara','dps','Warlock','Affliction',1080,1120,691,693,81,58,-7,2],
+    ['Pyreleaf','dps','Druid','Feral',1470,1500,697,699,96,78,1,0],
+    ['Brakkus','dps','Shaman','Enhancement',1240,1280,693,695,89,86,3,0]
+  ];
+
+  static SPEC_ICON = {
+    'Protection Warrior': 'ability_warrior_defensivestance', 'Fury Warrior': 'ability_warrior_innerrage', 'Arms Warrior': 'ability_warrior_savageblow',
+    'Blood Death Knight': 'spell_deathknight_bloodpresence', 'Unholy Death Knight': 'spell_deathknight_unholypresence',
+    'Protection Paladin': 'ability_paladin_shieldofthetemplar', 'Holy Paladin': 'spell_holy_holybolt', 'Retribution Paladin': 'spell_holy_auraoflight',
+    'Guardian Druid': 'ability_racial_bearform', 'Restoration Druid': 'spell_nature_healingtouch', 'Balance Druid': 'spell_nature_starfall', 'Feral Druid': 'ability_druid_catform',
+    'Holy Priest': 'spell_holy_guardianspirit', 'Discipline Priest': 'spell_holy_powerwordshield', 'Shadow Priest': 'spell_shadow_shadowwordpain',
+    'Restoration Shaman': 'spell_nature_magicimmunity', 'Elemental Shaman': 'spell_nature_lightning', 'Enhancement Shaman': 'spell_shaman_improvedstormstrike',
+    'Mistweaver Monk': 'spell_monk_mistweaver_spec', 'Windwalker Monk': 'spell_monk_windwalker_spec',
+    'Frost Mage': 'spell_frost_frostbolt02', 'Fire Mage': 'spell_fire_firebolt02',
+    'Beast Mastery Hunter': 'ability_hunter_bestialdiscipline', 'Marksmanship Hunter': 'ability_hunter_focusedaim',
+    'Subtlety Rogue': 'ability_stealth', 'Assassination Rogue': 'ability_rogue_eviscerate',
+    'Destruction Warlock': 'spell_shadow_rainoffire', 'Affliction Warlock': 'spell_shadow_deathcoil',
+    'Devastation Evoker': 'classicon_evoker', 'Havoc Demon Hunter': 'ability_demonhunter_specdps'
+  };
+
+  hash(s) { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 9973; return h; }
+  clamp(v) { return Math.max(0, Math.min(100, v)); }
+
+  build(row, win, gates) {
+    const [name, role, cls, spec, rio, rioHigh, ilvl, ilvlHigh, perfT, gear, trend, deathsT] = row;
+    const h = this.hash(name);
+    const night = win === 'night';
+    const perf = night ? Math.max(55, perfT + ((h % 17) - 8)) : perfT;
+    const deaths = night ? (h % 5 === 0 ? Math.min(3, deathsT + 1) : deathsT) : deathsT;
+    const nightParse = this.clamp(Math.round((role === 'healer' ? perf : (perf - 80) * 2.6) + ((h % 23) - 11)));
+
+    const healer = role === 'healer';
+    const perfScore = healer ? this.clamp(perf) : this.clamp(Math.round((perf - 80) / 35 * 100));
+    const trendScore = night ? nightParse : this.clamp(50 + trend * 6);
+    const score = Math.round(perfScore * 0.5 + gear * 0.3 + trendScore * 0.2);
+
+    const rioBest = Math.max(rio, rioHigh);
+    const ilvlBest = Math.max(ilvl, ilvlHigh);
+    const rioFail = rioBest < gates.rio;
+    const ilvlFail = ilvlBest < gates.ilvl;
+    const ineligible = rioFail || ilvlFail;
+
+    let band = score >= gates.green ? 'green' : score >= gates.yellow ? 'yellow' : 'red';
+    if (deaths === 1 && band === 'green') band = 'yellow';
+    if (deaths >= 2) band = 'red';
+    if (ineligible) band = 'ineligible';
+
+    const missing = gear >= 100 ? 0 : Math.max(1, Math.round((100 - gear) / 8));
+    const perfText = healer
+      ? `HPS percentile at ${perf}th`
+      : `damage while alive at ${perf}% of the boss threshold`;
+    const gearText = missing === 0
+      ? 'every gem and enchant in place against this month\u2019s reference table'
+      : `${missing} slot${missing > 1 ? 's' : ''} still missing a gem or enchant`;
+    const trendText = night
+      ? `night parse at ${nightParse}th percentile`
+      : trend >= 2 ? `parse trend climbing ${trend} points across the tier`
+      : trend <= -2 ? `parse trend down ${Math.abs(trend)} points across the tier`
+      : 'parse trend flat across the tier';
+
+    const parts = [
+      { k: 'perf', s: perfScore, t: perfText },
+      { k: 'gear', s: gear, t: gearText },
+      { k: 'trend', s: trendScore, t: trendText }
+    ].sort((a, b) => b.s - a.s);
+    const strong = parts[0], second = parts[1], weak = parts[2];
+    const up = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+
+    const pick = (arr) => arr[h % arr.length];
+    let status, working, attention, action;
+    if (ineligible) {
+      status = rioFail && ilvlFail
+        ? `Not scored. Raider.IO ${rioBest} and item level ${ilvlBest} -- both gates short.`
+        : rioFail
+        ? `Not scored. Raider.IO ${rioBest}, gate is ${gates.rio}.`
+        : `Not scored. Item level ${ilvlBest}, gate is ${gates.ilvl}.`;
+      working = rioFail && ilvlFail
+        ? `${up(perfText)} on the nights ${name} raids, and ${gearText}.`
+        : rioFail
+        ? `Item level clears at ${ilvlBest}. ${up(perfText)}.`
+        : `Raider.IO clears at ${rioBest}. ${up(perfText)}.`;
+      attention = ilvlFail && !rioFail
+        ? `Read as max(equipped, highest this season), so a spec swap isn't counted against you. Still ${gates.ilvl - ilvlBest} short.`
+        : rioFail && !ilvlFail
+        ? `${gates.rio - rioBest} points of Raider.IO, nothing else.`
+        : `Keys move both numbers, so this is one errand rather than two.`;
+      action = rioFail
+        ? pick([
+            `Sunday Funday Keys with Officer Harima. Nobody runs them alone.`,
+            `Three or four keys this week and the gate is gone. Ask Zalanto for a group.`
+          ])
+        : pick([
+            `Droptimizer first, then the crafted slots. Mats are in the bank.`,
+            `Ask in Discord -- someone will craft the missing slots. Pay it forward.`
+          ]);
+    } else {
+      const bandWord = band === 'green' ? 'Green' : band === 'yellow' ? 'Yellow' : 'Red';
+      status = deaths >= 2
+        ? `${bandWord}. ${deaths} deaths set the band; the score was ${score}/100.`
+        : deaths === 1
+        ? `${bandWord}. One death holds it here -- the score was ${score}/100.`
+        : `${bandWord}. ${score}/100, both gates clear.`;
+      working = second.s >= 78 ? `${up(strong.t)}. ${up(second.t)}.` : `${up(strong.t)}.`;
+      const gapText = {
+        perf: healer
+          ? pick([
+              `${up(perfText)}. Percentile, not raw HPS, so a clean night isn't hiding anything.`,
+              `Healing sits at the ${perf}th percentile across the window.`
+            ])
+          : pick([
+              `${up(perfText)} -- divided by time alive, so this is uptime rather than gear.`,
+              `Damage falls off late in fights: ${perf}% of the threshold while alive.`
+            ]),
+        gear: pick([
+            `${up(gearText)}.`,
+            `Gear sheet reads ${gear}% -- ${missing} slot${missing > 1 ? 's' : ''} short.`
+          ]),
+        trend: pick([
+            `${up(trendText)}. The number today is fine; the line isn't.`,
+            `${up(trendText)}.`
+          ])
+      }[weak.k];
+      attention = deaths >= 2 ? `${deaths} deaths. Under that, ${gapText.charAt(0).toLowerCase() + gapText.slice(1)}` : gapText;
+      action = deaths >= 2
+        ? pick([
+            `Survivability only this week. The damage is already there.`,
+            `One mechanic, one pull, with an officer before Saturday. Nothing else.`
+          ])
+        : {
+          perf: pick([
+              `One boss, one log read with an officer. Not the whole night.`,
+              `Pick the fight where it falls off and watch it back with Shortie.`
+            ]),
+          gear: pick([
+              `Gems and enchants before Saturday's Heroic. Twenty minutes.`,
+              `Fill the empty slots this week -- cheapest point on the board.`
+            ]),
+          trend: pick([
+              `Same boss two weeks running, same officer watching.`,
+              `Worth a quick word with Officer Vadailla on Friday.`
+            ])
+        }[weak.k];
+    }
+
+    const color = { green: 'var(--status-success)', yellow: 'var(--status-warning)', red: 'var(--status-danger)', ineligible: 'var(--border-iron)' }[band];
+    const tone = { green: 'success', yellow: 'warning', red: 'danger', ineligible: 'neutral' }[band];
+    const sev = { red: 0, yellow: 1, ineligible: 2, green: 3 }[band];
+
+    return {
+      name, role, band, score, sev, deaths, color, tone,
+      icon: `assets/icons/${Component.SPEC_ICON[`${spec} ${cls}`] || 'inv_misc_questionmark'}.jpg`,
+      iconAlt: `${spec} ${cls}`,
+      bandLabel: band === 'ineligible' ? 'Ineligible' : band.charAt(0).toUpperCase() + band.slice(1),
+      subline: `${spec} ${cls} \u00b7 ${role === 'dps' ? 'DPS' : up(role)} \u00b7 ilvl ${ilvlBest} \u00b7 RIO ${rioBest}`,
+      scored: !ineligible,
+      ineligible,
+      dim: ineligible ? 0.72 : 1,
+      capped: deaths > 0,
+      capTitle: deaths >= 2 ? 'Death cap: band held at Red' : 'Death cap: band held at Yellow',
+      perfLabel: healer ? 'HPS percentile' : 'DPS while alive',
+      perfValue: healer ? `${perf}${perf % 10 === 1 && perf !== 11 ? 'st' : perf % 10 === 2 && perf !== 12 ? 'nd' : perf % 10 === 3 && perf !== 13 ? 'rd' : 'th'}` : `${perf}%`,
+      perfW: `${perfScore}%`,
+      gearValue: `${gear}%`,
+      gearW: `${gear}%`,
+      gearColor: gear >= 95 ? 'var(--status-success)' : gear >= 80 ? 'var(--status-warning)' : 'var(--status-danger)',
+      trendLabel: night ? 'Night parse' : 'Parse trend',
+      trendValue: night ? `${nightParse}th` : (trend > 0 ? `+${trend}` : `${trend}`),
+      trendColor: (night ? nightParse >= 50 : trend >= 0) ? 'var(--status-success)' : 'var(--status-warning)',
+      scoreText: ineligible ? '\u2014' : `${score}`,
+      deathText: `${deaths}`,
+      deathColor: deaths >= 2 ? 'var(--status-danger)' : deaths === 1 ? 'var(--status-warning)' : 'var(--text-faint)',
+      gateSub: ineligible ? (rioFail && ilvlFail ? 'Both gates short' : rioFail ? `Raider.IO ${gates.rio - rioBest} short` : `Item level ${gates.ilvl - ilvlBest} short`) : '',
+      rioText: `${rioBest}`,
+      ilvlText: `${ilvlBest}`,
+      rioColor: rioFail ? 'var(--status-danger)' : 'var(--text-body)',
+      ilvlColor: ilvlFail ? 'var(--status-danger)' : 'var(--text-body)',
+      rioEdge: rioFail ? 'rgba(168,50,50,.55)' : 'var(--border-hairline)',
+      ilvlEdge: ilvlFail ? 'rgba(168,50,50,.55)' : 'var(--border-hairline)',
+      status, working, attention, action,
+      feedbackTitle: night ? 'Friday Night Only' : 'Rolled-Up \u00b7 Tier-to-Date',
+      provenance: night
+        ? 'Tonight\u2019s Warcraft Logs pull only. One night, not a verdict.'
+        : 'Warcraft Logs tier-to-date \u00b7 wowaudit gear snapshot \u00b7 Raider.IO'
+    };
+  }
+
+  renderVals() {
+    const p = this.props;
+    const gates = {
+      rio: p.rioGate ?? 1000,
+      ilvl: p.ilvlThreshold ?? 690,
+      green: p.greenAt ?? 75,
+      yellow: p.yellowAt ?? 55
+    };
+    const win = this.state.window ?? (p.defaultWindow === 'Last raid night' ? 'night' : 'rolled');
+    const all = Component.ROWS.map((r) => this.build(r, win, gates));
+
+    const counts = { green: 0, yellow: 0, red: 0, ineligible: 0 };
+    all.forEach((r) => counts[r.band]++);
+
+    const q = this.state.query.trim().toLowerCase();
+    let rows = all.filter((r) =>
+      (this.state.role === 'all' || r.role === this.state.role) &&
+      (this.state.band === 'all' || r.band === this.state.band) &&
+      (!q || r.name.toLowerCase().includes(q) || r.subline.toLowerCase().includes(q)));
+
+    rows.sort((a, b) => this.state.sortWorst ? (a.sev - b.sev || a.score - b.score) : (b.score - a.score || a.name.localeCompare(b.name)));
+
+    const open = this.state.open;
+    rows = rows.map((r) => ({
+      ...r,
+      expanded: open === r.name,
+      span: open === r.name ? 'grid-column:1/-1' : '',
+      toggle: () => this.setState((s) => ({ open: s.open === r.name ? null : r.name }))
+    }));
+
+    const defs = [
+      { key: 'tank', label: 'Tanks', icon: 'shield' },
+      { key: 'healer', label: 'Healers', icon: 'heart-handshake' },
+      { key: 'dps', label: 'Damage', icon: 'swords' }
+    ];
+    const groups = defs
+      .map((d) => ({ ...d, rows: rows.filter((r) => r.role === d.key) }))
+      .filter((g) => g.rows.length)
+      .map((g) => ({ ...g, count: g.rows.length, perfHeader: g.key === 'healer' ? 'HPS percentile' : 'DPS while alive' }));
+
+    const tileDef = [
+      { key: 'green', label: 'Green', color: 'var(--status-success)', note: 'Gates clear, thresholds hit' },
+      { key: 'yellow', label: 'Yellow', color: 'var(--status-warning)', note: 'Short somewhere, or one death' },
+      { key: 'red', label: 'Red', color: 'var(--status-danger)', note: 'Below threshold, or 2+ deaths' },
+      { key: 'ineligible', label: 'Ineligible', color: 'var(--iron-200)', note: 'Failed a gate \u2014 not scored' }
+    ];
+    const tiles = tileDef.map((t) => ({
+      ...t,
+      count: counts[t.key],
+      pct: `${(counts[t.key] / all.length) * 100}%`,
+      edge: this.state.band === t.key ? 'var(--border-strong)' : 'var(--border-hairline)',
+      labelColor: this.state.band === t.key ? 'var(--text-strong)' : 'var(--text-muted)',
+      countColor: this.state.band === t.key ? t.color : 'var(--text-body)',
+      title: this.state.band === t.key ? `${t.label}: filtering \u2014 click to clear` : `${t.label}: ${t.note}`,
+      onClick: () => this.setState((s) => ({ band: s.band === t.key ? 'all' : t.key, open: null }))
+    }));
+
+    const scored = all.filter((r) => r.scored);
+    const avg = Math.round(scored.reduce((a, r) => a + r.score, 0) / Math.max(1, scored.length));
+    const deathTotal = all.reduce((a, r) => a + r.deaths, 0);
+    const cappedCount = all.filter((r) => r.scored && r.deaths > 0).length;
+    const gearShort = all.filter((r) => Component.ROWS.find((x) => x[0] === r.name)[9] < 90);
+    const gearAvg = Math.round(Component.ROWS.reduce((a, x) => a + x[9], 0) / Component.ROWS.length);
+    const rising = Component.ROWS.filter((x) => x[10] >= 3).length;
+    const slipping = Component.ROWS.filter((x) => x[10] <= -2);
+    const top = scored.slice().sort((a, b) => b.score - a.score).slice(0, 3).map((r) => r.name);
+    const inel = all.filter((r) => r.ineligible);
+    const gateBoth = inel.filter((r) => r.rioColor.includes('danger') && r.ilvlColor.includes('danger')).map((r) => r.name);
+    const gateRio = inel.filter((r) => r.rioColor.includes('danger') && !r.ilvlColor.includes('danger')).map((r) => r.name);
+    const gateIlvl = inel.filter((r) => !r.rioColor.includes('danger') && r.ilvlColor.includes('danger')).map((r) => r.name);
+    const list = (a) => a.length > 1 ? `${a.slice(0, -1).join(', ')} and ${a[a.length - 1]}` : (a[0] || '');
+    const winWord = win === 'night' ? 'Friday night' : 'this tier so far';
+
+    const guildWell = `${list(top)} are clearing thresholds with full gear sheets, ${rising} raiders are trending up this tier, and nobody is Red on damage alone.`;
+    const guildStop = `${deathTotal} deaths are holding ${cappedCount} raiders a band below what they scored, ${gearShort.length} are under 90% on gems and enchants (roster average ${gearAvg}%), and ${slipping.length} are trending down -- ${list(slipping.slice(0, 3).map((x) => x[0]))} steepest.`;
+    const gateBits = [
+      gateBoth.length ? `${list(gateBoth)} short on both gates` : '',
+      gateRio.length ? `${list(gateRio)} on Raider.IO` : '',
+      gateIlvl.length ? `${list(gateIlvl)} on item level` : ''
+    ].filter(Boolean);
+    const guildGate = `${counts.ineligible} not scored: ${gateBits.join(', ')}. Keys and crafted slots, not coaching.`;
+    const avgLine = `${winWord === 'Friday night' ? 'Friday night' : 'Tier-to-date'} \u00b7 ${all.length} raiders \u00b7 average ${avg}/100`;
+
+    return {
+      crestSize: 42, iconSm: 14, iconLg: 20,
+      guildWell, guildStop, guildGate, avgLine,
+      trendHeader: win === 'night' ? 'Night parse' : 'Parse trend',
+      windowTabs: [
+        { value: 'rolled', label: 'Rolled-up' },
+        { value: 'night', label: 'Last raid night' }
+      ],
+      windowValue: win,
+      setWindow: (v) => this.setState({ window: v, open: null }),
+      roleTabs: [
+        { value: 'all', label: 'Full roster', count: all.length },
+        { value: 'tank', label: 'Tanks', count: all.filter((r) => r.role === 'tank').length },
+        { value: 'healer', label: 'Healers', count: all.filter((r) => r.role === 'healer').length },
+        { value: 'dps', label: 'Damage', count: all.filter((r) => r.role === 'dps').length }
+      ],
+      roleValue: this.state.role,
+      setRole: (v) => this.setState({ role: v, open: null }),
+      query: this.state.query,
+      setQuery: (e) => this.setState({ query: e.target.value }),
+      sortWorst: this.state.sortWorst,
+      setSortWorst: (v) => this.setState({ sortWorst: typeof v === 'boolean' ? v : !this.state.sortWorst }),
+      groups, tiles,
+      empty: groups.length === 0,
+      rioGateText: `${gates.rio}`,
+      ilvlGateText: `${gates.ilvl}`,
+      freshness: win === 'night'
+        ? 'Warcraft Logs pulled 14 min ago (Fri 11:12pm) \u00b7 wowaudit gear snapshot 6 hrs \u00b7 Raider.IO Sat 7:00pm \u00b7 enchant reference table refreshed 08/01'
+        : 'Warcraft Logs tier-to-date, last pull 14 min ago \u00b7 wowaudit daily, 6 hrs \u00b7 Raider.IO Sat 7:00pm \u00b7 enchant reference table refreshed 08/01'
+    };
+  }
+}
+</script>
+</body>
+</html>

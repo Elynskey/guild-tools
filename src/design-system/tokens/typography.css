@@ -1,0 +1,17 @@
+:root{
+--font-display:"Cinzel",'Trajan Pro',Georgia,serif;
+--font-ui:"Alegreya Sans",'Segoe UI',system-ui,sans-serif;
+--font-body:"Alegreya Sans",'Segoe UI',system-ui,sans-serif;
+--font-mono:"IBM Plex Mono",ui-monospace,monospace;
+
+--text-display-xl:56px;--text-display-l:40px;--text-display-m:30px;--text-display-s:22px;
+--text-title-l:20px;--text-title-m:17px;--text-title-s:15px;
+--text-body-l:18px;--text-body-m:16px;--text-body-s:14px;
+--text-label:13px;--text-micro:11px;
+
+--leading-tight:1.08;--leading-snug:1.25;--leading-normal:1.5;--leading-loose:1.65;
+
+--tracking-display:.06em;--tracking-eyebrow:.22em;--tracking-label:.09em;--tracking-body:0;
+
+--weight-body:400;--weight-medium:500;--weight-bold:700;--weight-display:600;--weight-display-heavy:900;
+}

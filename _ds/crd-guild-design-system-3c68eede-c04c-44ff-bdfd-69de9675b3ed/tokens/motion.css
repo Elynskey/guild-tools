@@ -1,0 +1,8 @@
+:root{
+--dur-instant:90ms; /* @kind other */--dur-fast:140ms; /* @kind other */--dur-base:220ms; /* @kind other */--dur-slow:380ms; /* @kind other */--dur-banner:700ms; /* @kind other */
+--ease-standard:cubic-bezier(.2,.6,.2,1); /* @kind other */
+--ease-out:cubic-bezier(.16,1,.3,1); /* @kind other */
+--ease-in:cubic-bezier(.5,0,1,1); /* @kind other */
+/* No bounce, no spring — motion is weighted and settles. */
+--transition-control:background-color var(--dur-fast) var(--ease-standard),border-color var(--dur-fast) var(--ease-standard),color var(--dur-fast) var(--ease-standard),box-shadow var(--dur-fast) var(--ease-standard); /* @kind other */
+}

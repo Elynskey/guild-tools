@@ -1,0 +1,74 @@
+:root{
+/* --- Base palette: sampled from the guild emblem (assets/guild-emblem.png) --- */
+--gold-100:#f4e3b0;--gold-200:#e6cd85;--gold-300:#d4b358;--gold-400:#c0902f;--gold-500:#a8801f;--gold-600:#8a6616;--gold-700:#6b4d10;
+--bronze-300:#a8763c;--bronze-400:#7d5526;--bronze-500:#5d3e1a;--bronze-600:#412a10;
+--iron-100:#c9c6bf;--iron-200:#9b978e;--iron-300:#6f6b64;--iron-400:#4a4a4a;--iron-500:#343330;--iron-600:#26251f;
+--stone-700:#211d18;--stone-800:#181510;--stone-900:#12100c;--stone-950:#0a0907;
+--parchment-100:#f6efdd;--parchment-200:#e8ddc4;--parchment-300:#d3c4a2;
+
+/* --- Accents (guild role / rank / progression cues) --- */
+--accent-verdant:#5f9e4a;   /* ready, cleared, online */
+--accent-azure:#3f7fb5;     /* info, scheduled */
+--accent-arcane:#8a5fb0;    /* mythic, prestige */
+--accent-ember:#c25b28;     /* warning, tentative */
+--accent-crimson:#a83232;   /* danger, absent, wipe */
+
+/* --- Semantic surfaces --- */
+--surface-page:var(--stone-900);
+--surface-raised:var(--stone-800);
+--surface-card:#1c1813;
+--surface-card-hover:#241f18;
+--surface-sunken:var(--stone-950);
+--surface-inverse:var(--parchment-200);
+--surface-overlay:rgba(10,9,7,.78);
+--surface-parchment:var(--parchment-200);
+
+/* --- Semantic text --- */
+--text-body:#cfc9bb;
+--text-strong:var(--parchment-100);
+--text-muted:#948d7d;
+--text-faint:#6a6459;
+--text-gold:var(--gold-300);
+--text-on-gold:#1a1409;
+--text-on-parchment:#2c2418;
+--text-link:var(--gold-300);
+--text-link-hover:var(--gold-200);
+
+/* --- Borders & rules --- */
+--border-hairline:rgba(212,179,88,.16);
+--border-soft:rgba(212,179,88,.28);
+--border-strong:rgba(212,179,88,.5);
+--border-gold:var(--gold-400);
+--border-iron:#3a362e;
+
+/* --- Interactive --- */
+--action-primary:var(--gold-400);
+--action-primary-hover:var(--gold-300);
+--action-primary-active:var(--gold-500);
+--action-secondary:rgba(212,179,88,.1);
+--action-secondary-hover:rgba(212,179,88,.18);
+--focus-ring:var(--gold-200);
+
+/* --- Status --- */
+--status-success:var(--accent-verdant);
+--status-info:var(--accent-azure);
+--status-warning:var(--accent-ember);
+--status-danger:var(--accent-crimson);
+--status-prestige:var(--accent-arcane);
+}
+
+/* Parchment scope: inverted panels (event notes, lore posts, print) */
+.crd-parchment{
+--surface-page:var(--parchment-200);
+--surface-card:var(--parchment-100);
+--surface-card-hover:#fffaef;
+--text-body:#3a3024;
+--text-strong:#221b12;
+--text-muted:#6f6250;
+--text-gold:var(--gold-700);
+--border-hairline:rgba(93,62,26,.18);
+--border-soft:rgba(93,62,26,.32);
+--border-strong:rgba(93,62,26,.55);
+--text-link:var(--bronze-500);
+--text-link-hover:var(--gold-700);
+}

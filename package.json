@@ -1,0 +1,69 @@
+{
+  "name": "raider-status",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "typecheck": "tsc -b --noEmit",
+    "electron:dev": "node electron/dev.mjs",
+    "electron:start": "npm run build && electron .",
+    "icons:build": "node scripts/build-icons.mjs",
+    "dist:win": "npm run icons:build && npm run build && electron-builder --win"
+  },
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "lucide-react": "^0.539.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^7.18.2"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "electron": "^44.0.0",
+    "electron-builder": "^26.15.3",
+    "playwright": "^1.62.1",
+    "png-to-ico": "^3.0.2",
+    "sharp": "^0.35.4",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11",
+    "vitest": "^2.1.5"
+  },
+  "allowScripts": {
+    "electron-winstaller@5.4.0": true
+  },
+  "build": {
+    "appId": "com.casualraiddays.guild-tools",
+    "productName": "Guild Tools",
+    "directories": {
+      "output": "release",
+      "buildResources": "build-resources"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "alt-groups.json",
+      "!.env",
+      "!.env.*"
+    ],
+    "extraMetadata": {
+      "main": "electron/main.cjs"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "build-resources/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "Guild-Tools-Setup-${version}.${ext}"
+    }
+  }
+}

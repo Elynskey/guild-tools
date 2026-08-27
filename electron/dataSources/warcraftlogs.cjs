@@ -1,0 +1,225 @@
+// Warcraft Logs API v2 (GraphQL), OAuth client-credentials.
+//
+// Verified live against real reports for "Casual Raid Days" / The Scryers:
+//   - table(dataType: DamageDone) entries: { name, total, activeTime, ... } — total
+//     is damage, activeTime is ms of uptime (NOT full fight duration), confirmed real.
+//   - table(dataType: Deaths) entries: one row per death event, { name, fight, ... }.
+//   - rankings(fightIDs) -> data[]: one entry per fight, each with
+//     roles.{tanks,healers,dps}.characters[]: { name, rankPercent, ... }, confirmed real.
+//   - table(dataType: Healing) is assumed to mirror DamageDone's shape (same table
+//     system, same total/activeTime fields) — this specific dataType was not
+//     independently tested live; flagged here rather than silently assumed elsewhere.
+//
+// Guild policy ("we don't judge parses"): rankPercent is used ONLY for healers/tanks,
+// where it's a within-role comparison (healing load and damage taken both vary by
+// pull, so ranking against your own role on the same fight is the fair reference
+// point). DPS perf is %-of-the-guild's-own-minimum-DPS (MIN_DPS_REQUIREMENT env var),
+// never a global WCL parse ranking.
+
+const { getClientCredentialsToken } = require('./oauth.cjs');
+
+const TOKEN_URL = 'https://www.warcraftlogs.com/oauth/token';
+const GRAPHQL_URL = 'https://www.warcraftlogs.com/api/v2/client';
+
+async function getToken() {
+  return getClientCredentialsToken(TOKEN_URL, process.env.WCL_CLIENT_ID, process.env.WCL_CLIENT_SECRET);
+}
+
+async function graphql(query, variables) {
+  const token = await getToken();
+  const res = await fetch(GRAPHQL_URL, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query, variables }),
+  });
+  if (!res.ok) throw new Error(`Warcraft Logs GraphQL request failed: ${res.status} ${res.statusText}`);
+  const body = await res.json();
+  if (body.errors) throw new Error(`Warcraft Logs GraphQL errors: ${JSON.stringify(body.errors)}`);
+  return body.data;
+}
+
+const REPORTS_QUERY = `
+  query GuildReports($guildName: String!, $guildServerSlug: String!, $guildServerRegion: String!, $limit: Int!) {
+    reportData {
+      reports(guildName: $guildName, guildServerSlug: $guildServerSlug, guildServerRegion: $guildServerRegion, limit: $limit) {
+        data { code startTime endTime zone { name } }
+      }
+    }
+  }
+`;
+
+/** Most recent reports for the guild, newest first. */
+async function fetchGuildReports(guild, limit = 20) {
+  const data = await graphql(REPORTS_QUERY, {
+    guildName: guild.name,
+    guildServerSlug: guild.realm.toLowerCase().replace(/\s+/g, '-'),
+    guildServerRegion: guild.region.toUpperCase(),
+    limit,
+  });
+  return data.reportData.reports.data;
+}
+
+const FIGHTS_QUERY = `
+  query ReportFights($code: String!) {
+    reportData {
+      report(code: $code) {
+        fights(killType: Encounters) { id kill encounterID difficulty }
+      }
+    }
+  }
+`;
+
+// WCL raid difficulty IDs: 3 = Normal, 4 = Heroic, 5 = Mythic (stable across retail raid tiers).
+const HEROIC_DIFFICULTY = 4;
+
+async function fetchFights(code) {
+  const data = await graphql(FIGHTS_QUERY, { code });
+  return data.reportData.report.fights;
+}
+
+async function fetchTable(code, fightIds, dataType) {
+  if (fightIds.length === 0) return [];
+  const data = await graphql(
+    `query($code: String!, $fightIDs: [Int]!) { reportData { report(code: $code) { table(fightIDs: $fightIDs, dataType: ${dataType}) } } }`,
+    { code, fightIDs: fightIds },
+  );
+  return data.reportData.report.table?.data?.entries ?? [];
+}
+
+async function fetchRankingsForFight(code, fightId) {
+  const data = await graphql(`query($code: String!, $fightIDs: [Int]!) { reportData { report(code: $code) { rankings(fightIDs: $fightIDs) } } }`, {
+    code,
+    fightIDs: [fightId],
+  });
+  return data.reportData.report.rankings?.data?.[0] ?? null;
+}
+
+/** Sums DamageDone/Healing entries per player across however many fights they're scoped to. */
+function sumThroughputByName(entries) {
+  const byName = new Map();
+  for (const e of entries) {
+    const prev = byName.get(e.name) ?? { total: 0, activeTime: 0 };
+    byName.set(e.name, { total: prev.total + (e.total ?? 0), activeTime: prev.activeTime + (e.activeTime ?? 0) });
+  }
+  const dps = new Map();
+  for (const [name, { total, activeTime }] of byName) dps.set(name, activeTime > 0 ? total / (activeTime / 1000) : 0);
+  return dps;
+}
+
+function countDeathsByName(entries) {
+  const counts = new Map();
+  for (const e of entries) counts.set(e.name, (counts.get(e.name) ?? 0) + 1);
+  return counts;
+}
+
+/** rankPercent per player, per role, from a single fight's rankings. */
+function extractRankPercents(ranking) {
+  const result = new Map();
+  if (!ranking?.roles) return result;
+  for (const roleData of Object.values(ranking.roles)) {
+    for (const c of roleData.characters ?? []) result.set(c.name, c.rankPercent);
+  }
+  return result;
+}
+
+/**
+ * One report's aggregate: DPS (damage/s per player), HPS (healing/s per player),
+ * deaths (count per player), one representative rankPercent sample (from the
+ * report's last kill, since a full per-pull average isn't worth the extra API
+ * calls), and the set of encounterIDs killed at Heroic difficulty in this report
+ * (for real tier-progression tracking, replacing the old hardcoded "3/8" text).
+ */
+async function fetchReportAggregate(code) {
+  const fights = await fetchFights(code);
+  const killFightIds = fights.filter((f) => f.kill).map((f) => f.id);
+  const heroicKillEncounterIds = fights.filter((f) => f.kill && f.difficulty === HEROIC_DIFFICULTY).map((f) => f.encounterID);
+
+  if (killFightIds.length === 0) {
+    return { dps: new Map(), hps: new Map(), deaths: new Map(), rankPercent: new Map(), heroicKillEncounterIds };
+  }
+
+  const [damageEntries, healingEntries, deathEntries, ranking] = await Promise.all([
+    fetchTable(code, killFightIds, 'DamageDone'),
+    fetchTable(code, killFightIds, 'Healing'),
+    fetchTable(code, killFightIds, 'Deaths'),
+    fetchRankingsForFight(code, killFightIds[killFightIds.length - 1]),
+  ]);
+
+  return {
+    dps: sumThroughputByName(damageEntries),
+    hps: sumThroughputByName(healingEntries),
+    deaths: countDeathsByName(deathEntries),
+    rankPercent: extractRankPercents(ranking),
+    heroicKillEncounterIds,
+  };
+}
+
+const MIN_DPS_ROLE = 'dps';
+
+/**
+ * @param {{ name: string, realm: string, region: string }} guild
+ * @param {string} tierZoneName — only reports in this raid tier count (config.tier.name)
+ * @param {Record<string,'tank'|'healer'|'dps'>} roleByName — from wowaudit, since WCL doesn't know raid role assignment
+ * @returns {Promise<{ performance: Record<string, { perf: number, parseTrend: number, deaths: number, nightParse: number }>, heroicBossesKilled: number }>}
+ */
+async function fetchWarcraftLogs(guild, tierZoneName, roleByName) {
+  const minDps = Number(process.env.MIN_DPS_REQUIREMENT ?? 0);
+  if (!minDps) throw new Error('MIN_DPS_REQUIREMENT is not set in .env');
+
+  const allReports = await fetchGuildReports(guild, 30);
+  const tierReports = allReports.filter((r) => r.zone?.name === tierZoneName).sort((a, b) => a.startTime - b.startTime); // oldest -> newest
+
+  if (tierReports.length === 0) throw new Error(`No Warcraft Logs reports found for zone "${tierZoneName}"`);
+
+  const aggregates = await Promise.all(tierReports.map((r) => fetchReportAggregate(r.code)));
+
+  const perfSnapshot = (name, agg) => {
+    const role = roleByName[name];
+    if (role === MIN_DPS_ROLE) {
+      const dps = agg.dps.get(name);
+      return dps == null ? null : Math.round((dps / minDps) * 100);
+    }
+    const rp = agg.rankPercent.get(name);
+    return rp == null ? null : Math.round(rp);
+  };
+
+  const names = Object.keys(roleByName);
+  const result = {};
+
+  for (const name of names) {
+    // Perf: latest report that has this player, tier-to-date.
+    const seriesAll = aggregates.map((agg) => perfSnapshot(name, agg)).filter((v) => v != null);
+    const seriesLast = seriesAll[seriesAll.length - 1] ?? null;
+    if (seriesLast == null) {
+      // No logged raid history this tier yet (new recruit, long absence, etc) — skip
+      // them rather than failing the whole roster fetch over one missing raider.
+      console.warn(`[wcl] No performance data found for ${name} in "${tierZoneName}" — omitting from this fetch.`);
+      continue;
+    }
+
+    // Trend: second-half average minus first-half average across the tier's reports.
+    const mid = Math.ceil(seriesAll.length / 2);
+    const firstHalf = seriesAll.slice(0, mid);
+    const secondHalf = seriesAll.slice(mid);
+    const avg = (arr) => arr.reduce((a, v) => a + v, 0) / Math.max(1, arr.length);
+    const parseTrend = seriesAll.length >= 2 ? Math.round(avg(secondHalf) - avg(firstHalf)) : 0;
+
+    // Deaths: total across all kill fights in the whole tier.
+    const deaths = aggregates.reduce((sum, agg) => sum + (agg.deaths.get(name) ?? 0), 0);
+
+    result[name] = { perf: seriesLast, parseTrend, deaths, nightParse: seriesLast };
+  }
+
+  // nightParse should reflect only the MOST RECENT report, not the tier-to-date perf value.
+  const lastAgg = aggregates[aggregates.length - 1];
+  for (const name of names) {
+    const nightVal = perfSnapshot(name, lastAgg);
+    if (nightVal != null) result[name].nightParse = nightVal;
+  }
+
+  const heroicBossesKilled = new Set(aggregates.flatMap((agg) => agg.heroicKillEncounterIds)).size;
+
+  return { performance: result, heroicBossesKilled };
+}
+
+module.exports = { fetchWarcraftLogs, fetchGuildReports, fetchFights, fetchReportAggregate };

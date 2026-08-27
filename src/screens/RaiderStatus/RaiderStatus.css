@@ -1,0 +1,25 @@
+/* Hover states the prototype expressed via its proprietary style-hover attribute;
+   plain inline styles in React can't express :hover, so these live here instead. */
+
+.raider-row:hover {
+  background: var(--surface-card-hover);
+}
+
+.band-chip:hover {
+  border-color: var(--border-soft);
+}
+
+.refresh-spinning .crd-icon,
+.refresh-spinning svg,
+.refresh-spinning img {
+  animation: crd-spin 900ms linear infinite;
+}
+
+@keyframes crd-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
