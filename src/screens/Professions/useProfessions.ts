@@ -1,7 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { getProfessions, getCachedProfessions, subscribeProfessionsProgress } from '../../professions/professionsSource';
-import { ALL_EXPANSIONS, computeExpansionOptions } from '../../professions/expansions';
-import type { MemberProfessions } from '../../professions/types';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { getProfessions, getCachedProfessions, subscribeProfessionsProgress, getCachedRecipeCatalogue, getRecipeCatalogue } from '../../professions/professionsSource';
+import type { MemberProfessions, RecipeCatalogue } from '../../professions/types';
 import type { ProfessionsProgress } from '../../electron';
 
 interface Meta {
@@ -25,23 +24,24 @@ const PROGRESS_PHASE_LABEL: Record<ProfessionsProgress['phase'], string> = {
   professions: 'Loading professions',
 };
 
+/**
+ * Data layer only — members + the recipe catalogue + freshness/refresh/progress. Filtering,
+ * sorting, view state, tab state etc. live in the tab components (directory/coverage/requests),
+ * since those are largely independent of each other and of when the data itself refreshes.
+ */
 export function useProfessions() {
   const [members, setMembers] = useState<MemberProfessions[] | null>(null);
   const [meta, setMeta] = useState<Meta | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [progress, setProgress] = useState<ProfessionsProgress | null>(null);
-  const [query, setQuery] = useState('');
-  const [expansionFilter, setExpansionFilter] = useState<string | null>(null);
+  const [catalogue, setCatalogue] = useState<RecipeCatalogue | null>(null);
   const [, forceTick] = useState(0);
 
   const applyResult = useCallback((result: { members: MemberProfessions[]; fetchedAt: string; source: 'live' | 'sample' }) => {
     setMembers(result.members);
     setMeta({ fetchedAt: result.fetchedAt, source: result.source });
     setLoadError(null);
-    // Default to whichever expansion looks "current" for THIS data, computed fresh
-    // every load rather than carried over stale from a previous fetch.
-    setExpansionFilter(computeExpansionOptions(result.members).defaultExpansion);
   }, []);
 
   const loadLive = useCallback(
@@ -78,6 +78,11 @@ export function useProfessions() {
         void loadLive(false);
       }
     });
+    // The recipe catalogue is cheap to instant-paint from cache and self-limits its own
+    // live refetch to a 7-day TTL server-side (electron/dataSources/recipeCatalogueCache.cjs),
+    // so it's safe to always follow the cache read with a "live" call here.
+    void getCachedRecipeCatalogue().then((cached) => setCatalogue(cached.catalogue));
+    void getRecipeCatalogue().then((live) => setCatalogue(live.catalogue));
   }, [applyResult, loadLive]);
 
   useEffect(() => subscribeProfessionsProgress(setProgress), []);
@@ -86,28 +91,6 @@ export function useProfessions() {
     const id = setInterval(() => forceTick((n) => n + 1), FRESHNESS_TICK_MS);
     return () => clearInterval(id);
   }, []);
-
-  const filteredMembers = useMemo(() => {
-    if (!members) return [];
-    const q = query.trim().toLowerCase();
-    if (!q) return members;
-    return members.filter((m) => {
-      if (m.mainName.toLowerCase().includes(q)) return true;
-      return m.characters.some(
-        (c) =>
-          c.characterName.toLowerCase().includes(q) ||
-          c.professions.some((p) => p.profession.toLowerCase().includes(q) || p.tiers.some((t) => t.knownRecipes.some((r) => r.toLowerCase().includes(q)))),
-      );
-    });
-  }, [members, query]);
-
-  const allProfessionNames = useMemo(() => {
-    const names = new Set<string>();
-    for (const m of members ?? []) for (const c of m.characters) for (const p of c.professions) names.add(p.profession);
-    return [...names].sort();
-  }, [members]);
-
-  const expansionOptions = useMemo(() => computeExpansionOptions(members ?? []).options, [members]);
 
   const progressLabel = progress
     ? `${PROGRESS_PHASE_LABEL[progress.phase]}… ${progress.done} / ${progress.total} (${Math.round((progress.done / progress.total) * 100)}%)`
@@ -121,19 +104,14 @@ export function useProfessions() {
     progressLabel,
     progressPercent: progress ? Math.round((progress.done / progress.total) * 100) : null,
     refresh: () => loadLive(true),
-    members: filteredMembers,
-    totalMembers: members?.length ?? 0,
-    allProfessionNames,
-    query,
-    setQuery,
-    expansionOptions,
-    expansionFilter: expansionFilter ?? ALL_EXPANSIONS,
-    setExpansionFilter,
+    members: members ?? [],
+    catalogue: catalogue ?? {},
     freshness:
       meta?.source === 'sample'
         ? 'Sample data — no live pipeline configured'
         : meta
-          ? `Blizzard API, pulled ${relativeTime(meta.fetchedAt)} — active in the last 30 days`
+          ? `Synced ${relativeTime(meta.fetchedAt)} · Blizzard API`
           : '',
+    freshnessJustSynced: meta?.source === 'live' && Date.now() - new Date(meta.fetchedAt).getTime() < 60_000,
   };
 }

@@ -1,0 +1,14 @@
+/* Hover states the design calls for that plain inline styles in React can't express —
+   same reasoning as src/screens/RaiderStatus/RaiderStatus.css. */
+
+.crd-suggest-row:hover,
+.crd-table-row:hover,
+.crd-profgroup-row:hover,
+.crd-rail-row:hover,
+.crd-showall-row:hover {
+  background: var(--surface-card-hover);
+}
+
+.crd-scrollbar-thin {
+  scrollbar-width: thin;
+}

@@ -13,4 +13,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   checkForUpdate: () => ipcRenderer.invoke('update:check'),
   openReleasePage: (url) => ipcRenderer.invoke('update:openReleasePage', url),
+  getCachedRecipeCatalogue: () => ipcRenderer.invoke('recipeCatalogue:getCached'),
+  getRecipeCatalogue: () => ipcRenderer.invoke('recipeCatalogue:fetch'),
+  copyToClipboard: (text) => ipcRenderer.invoke('clipboard:write', text),
 });

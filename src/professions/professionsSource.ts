@@ -1,5 +1,6 @@
 import { SAMPLE_MEMBERS } from './sampleProfessions';
-import type { ProfessionsResult } from './types';
+import { SAMPLE_RECIPE_CATALOGUE } from './sampleRecipeCatalogue';
+import type { ProfessionsResult, RecipeCatalogueResult } from './types';
 import type { ProfessionsProgress } from '../electron';
 
 /**
@@ -29,4 +30,32 @@ export async function getCachedProfessions(): Promise<ProfessionsResult | null> 
 export function subscribeProfessionsProgress(callback: (progress: ProfessionsProgress) => void): () => void {
   if (window.electronAPI) return window.electronAPI.onProfessionsProgress(callback);
   return () => {};
+}
+
+const SAMPLE_CATALOGUE_RESULT: RecipeCatalogueResult = { catalogue: SAMPLE_RECIPE_CATALOGUE, fetchedAt: new Date().toISOString() };
+
+/** Instant-paint seam for the recipe catalogue (electron/dataSources/recipeCatalogueCache.cjs). */
+export async function getCachedRecipeCatalogue(): Promise<RecipeCatalogueResult> {
+  if (window.electronAPI) {
+    const cached = await window.electronAPI.getCachedRecipeCatalogue();
+    if (cached) return cached;
+  }
+  return SAMPLE_CATALOGUE_RESULT;
+}
+
+/** Triggers a live refresh (electron/dataSources/fetchRecipeCatalogue.cjs); serves the disk cache if it's still fresh. */
+export async function getRecipeCatalogue(): Promise<RecipeCatalogueResult> {
+  if (window.electronAPI) {
+    const live = await window.electronAPI.getRecipeCatalogue();
+    if (live) return live;
+  }
+  return SAMPLE_CATALOGUE_RESULT;
+}
+
+export async function copyToClipboard(text: string): Promise<void> {
+  if (window.electronAPI) {
+    await window.electronAPI.copyToClipboard(text);
+    return;
+  }
+  await navigator.clipboard.writeText(text);
 }

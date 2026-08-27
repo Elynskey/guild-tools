@@ -1,5 +1,5 @@
 import type { Raider } from './scoring/types';
-import type { MemberProfessions } from './professions/types';
+import type { MemberProfessions, RecipeCatalogue } from './professions/types';
 
 export interface LiveRosterResult {
   raiders: Raider[];
@@ -23,6 +23,11 @@ export interface UpdateInfo {
   releaseUrl: string;
 }
 
+export interface LiveRecipeCatalogueResult {
+  catalogue: RecipeCatalogue;
+  fetchedAt: string;
+}
+
 export interface ElectronAPI {
   getRoster: () => Promise<LiveRosterResult | null>;
   getProfessions: () => Promise<LiveProfessionsResult | null>;
@@ -30,6 +35,9 @@ export interface ElectronAPI {
   onProfessionsProgress: (callback: (progress: ProfessionsProgress) => void) => () => void;
   checkForUpdate: () => Promise<UpdateInfo | null>;
   openReleasePage: (url: string) => Promise<void>;
+  getCachedRecipeCatalogue: () => Promise<LiveRecipeCatalogueResult | null>;
+  getRecipeCatalogue: () => Promise<LiveRecipeCatalogueResult | null>;
+  copyToClipboard: (text: string) => Promise<void>;
 }
 
 declare global {

@@ -255,7 +255,7 @@ export function generateFeedback(r: Raider, window: Window, gates: Gates, derive
             ? `${gates.rio - rioBest} points of Raider.IO, nothing else.`
             : `Keys move both numbers, so this is one errand rather than two.`,
       action: rioFail
-        ? pick([`Sunday Funday Keys with Officer Harima. Nobody runs them alone.`, `Three or four keys this week and the gate is gone. Ask Zalanto for a group.`])
+        ? pick([`Sunday Funday Keys with Officer Perseffonee. Nobody runs them alone.`, `Three or four keys this week and the gate is gone. Ask Zalanto for a group.`])
         : pick([`Droptimizer first, then the crafted slots. Mats are in the bank.`, `Ask in Discord -- someone will craft the missing slots. Pay it forward.`]),
     };
   }
