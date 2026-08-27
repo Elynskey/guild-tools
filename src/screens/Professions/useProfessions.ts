@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { getProfessions } from '../../professions/professionsSource';
+import { getProfessions, getCachedProfessions, subscribeProfessionsProgress } from '../../professions/professionsSource';
 import { ALL_EXPANSIONS, computeExpansionOptions } from '../../professions/expansions';
 import type { MemberProfessions } from '../../professions/types';
+import type { ProfessionsProgress } from '../../electron';
 
 interface Meta {
   fetchedAt: string;
@@ -19,29 +20,44 @@ function relativeTime(iso: string): string {
   return hours === 1 ? '1 hr ago' : `${hours} hrs ago`;
 }
 
+const PROGRESS_PHASE_LABEL: Record<ProfessionsProgress['phase'], string> = {
+  activity: 'Checking who’s been active',
+  professions: 'Loading professions',
+};
+
 export function useProfessions() {
   const [members, setMembers] = useState<MemberProfessions[] | null>(null);
   const [meta, setMeta] = useState<Meta | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [progress, setProgress] = useState<ProfessionsProgress | null>(null);
   const [query, setQuery] = useState('');
   const [expansionFilter, setExpansionFilter] = useState<string | null>(null);
   const [, forceTick] = useState(0);
 
-  const load = useCallback((isRefresh: boolean) => {
-    if (isRefresh) setRefreshing(true);
-    return getProfessions()
-      .then((result) => {
-        setMembers(result.members);
-        setMeta({ fetchedAt: result.fetchedAt, source: result.source });
-        setLoadError(null);
-        // Default to whichever expansion looks "current" for THIS data, computed fresh
-        // every load rather than carried over stale from a previous fetch.
-        setExpansionFilter(computeExpansionOptions(result.members).defaultExpansion);
-      })
-      .catch(() => setLoadError('Could not load professions.'))
-      .finally(() => setRefreshing(false));
+  const applyResult = useCallback((result: { members: MemberProfessions[]; fetchedAt: string; source: 'live' | 'sample' }) => {
+    setMembers(result.members);
+    setMeta({ fetchedAt: result.fetchedAt, source: result.source });
+    setLoadError(null);
+    // Default to whichever expansion looks "current" for THIS data, computed fresh
+    // every load rather than carried over stale from a previous fetch.
+    setExpansionFilter(computeExpansionOptions(result.members).defaultExpansion);
   }, []);
+
+  const loadLive = useCallback(
+    (isRefresh: boolean) => {
+      if (isRefresh) setRefreshing(true);
+      setProgress(null);
+      return getProfessions()
+        .then(applyResult)
+        .catch(() => setLoadError('Could not load professions.'))
+        .finally(() => {
+          setRefreshing(false);
+          setProgress(null);
+        });
+    },
+    [applyResult],
+  );
 
   // React 18 StrictMode double-invokes effects in dev, which would otherwise fire this
   // ~1000-character Blizzard API scan twice concurrently (confirmed live — it roughly
@@ -51,8 +67,20 @@ export function useProfessions() {
   useEffect(() => {
     if (hasLoadedRef.current) return;
     hasLoadedRef.current = true;
-    void load(false);
-  }, [load]);
+    // A full scan is a multi-minute, ~2000-request pull — instant-paint from the last
+    // successful scan (electron/dataSources/professionsCache.cjs) instead of blocking
+    // every launch on a rescan. Officers pull fresh data with the header's refresh
+    // button; only a genuinely empty cache (first run) triggers a live scan on mount.
+    void getCachedProfessions().then((cached) => {
+      if (cached) {
+        applyResult(cached);
+      } else {
+        void loadLive(false);
+      }
+    });
+  }, [applyResult, loadLive]);
+
+  useEffect(() => subscribeProfessionsProgress(setProgress), []);
 
   useEffect(() => {
     const id = setInterval(() => forceTick((n) => n + 1), FRESHNESS_TICK_MS);
@@ -81,11 +109,18 @@ export function useProfessions() {
 
   const expansionOptions = useMemo(() => computeExpansionOptions(members ?? []).options, [members]);
 
+  const progressLabel = progress
+    ? `${PROGRESS_PHASE_LABEL[progress.phase]}… ${progress.done} / ${progress.total} (${Math.round((progress.done / progress.total) * 100)}%)`
+    : 'Loading professions…';
+
   return {
     loading: members === null && !loadError,
     loadError,
     refreshing,
-    refresh: () => load(true),
+    progress,
+    progressLabel,
+    progressPercent: progress ? Math.round((progress.done / progress.total) * 100) : null,
+    refresh: () => loadLive(true),
     members: filteredMembers,
     totalMembers: members?.length ?? 0,
     allProfessionNames,

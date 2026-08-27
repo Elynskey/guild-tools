@@ -30,10 +30,14 @@ export function MemberCard({ member, expansionFilter }: MemberCardProps) {
             }))
             .filter((p) => p.tiers.length > 0);
 
+          const isRedundantMainName = member.characters.length === 1 && c.characterName === member.mainName;
+
           return (
             <div key={c.characterName}>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 8 }}>
-                <span style={{ fontFamily: 'var(--font-display)', fontSize: 'var(--text-title-s)', fontWeight: 600, color: 'var(--text-body)' }}>{c.characterName}</span>
+                {!isRedundantMainName && (
+                  <span style={{ fontFamily: 'var(--font-display)', fontSize: 'var(--text-title-s)', fontWeight: 600, color: 'var(--text-body)' }}>{c.characterName}</span>
+                )}
                 <span style={{ fontSize: 'var(--text-micro)', color: 'var(--text-faint)' }}>
                   {c.class} · {c.realm} · {c.lastLoginDaysAgo === 0 ? 'today' : `${c.lastLoginDaysAgo}d ago`}
                 </span>

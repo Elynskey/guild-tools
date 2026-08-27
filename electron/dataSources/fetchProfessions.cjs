@@ -1,4 +1,5 @@
 const { fetchActiveMembersWithProfessions } = require('./professions.cjs');
+const cache = require('./professionsCache.cjs');
 
 const REQUIRED_ENV = ['GUILD_NAME', 'GUILD_REALM', 'GUILD_REGION', 'BNET_CLIENT_ID', 'BNET_CLIENT_SECRET'];
 
@@ -7,9 +8,17 @@ function isConfigured() {
 }
 
 /**
+ * @returns {{ members: object[], fetchedAt: string } | null}
+ */
+function getCachedProfessions() {
+  return cache.load();
+}
+
+/**
+ * @param {(progress: { phase: 'activity'|'professions', done: number, total: number }) => void} [onProgress]
  * @returns {Promise<{ members: object[], fetchedAt: string } | null>}
  */
-async function fetchProfessions() {
+async function fetchProfessions(onProgress) {
   if (!isConfigured()) {
     const missing = REQUIRED_ENV.filter((key) => !process.env[key]);
     console.log(`[professions] Not fully configured, using sample data. Missing: ${missing.join(', ')}`);
@@ -19,12 +28,15 @@ async function fetchProfessions() {
   const guild = { name: process.env.GUILD_NAME, realm: process.env.GUILD_REALM, region: process.env.GUILD_REGION };
 
   try {
-    const members = await fetchActiveMembersWithProfessions(guild);
-    return { members, fetchedAt: new Date().toISOString() };
+    const members = await fetchActiveMembersWithProfessions(guild, onProgress);
+    const result = { members, fetchedAt: new Date().toISOString() };
+    cache.save(result);
+    return result;
   } catch (err) {
-    console.error('[professions] Live fetch failed, falling back to sample data:', err);
-    return null;
+    console.error('[professions] Live fetch failed:', err);
+    // Prefer a stale-but-real cached scan over sample data if we have one.
+    return cache.load();
   }
 }
 
-module.exports = { fetchProfessions, isConfigured };
+module.exports = { fetchProfessions, getCachedProfessions, isConfigured };

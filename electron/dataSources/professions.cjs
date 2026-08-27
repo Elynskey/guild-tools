@@ -19,7 +19,9 @@ const { resolveMainName } = require('./altGroups.cjs');
 
 const TOKEN_URL = 'https://oauth.battle.net/token';
 const ACTIVE_WITHIN_DAYS = 30;
-const CONCURRENCY = 8;
+// Blizzard's documented per-client limit is 100 req/sec; 8 was leaving most of that
+// headroom unused and made a ~2000-request full-guild scan take several minutes.
+const CONCURRENCY = 20;
 const MAX_RETRIES = 3;
 
 async function getToken() {
@@ -71,9 +73,10 @@ function parseProfessionBlock(list) {
 }
 
 /** Runs async `fn` over `items` with bounded concurrency, tolerating individual failures. */
-async function mapConcurrent(items, limit, fn) {
+async function mapConcurrent(items, limit, fn, onProgress) {
   const results = [];
   let i = 0;
+  let done = 0;
   async function worker() {
     while (i < items.length) {
       const idx = i++;
@@ -82,6 +85,8 @@ async function mapConcurrent(items, limit, fn) {
       } catch (err) {
         results[idx] = { error: err };
       }
+      done++;
+      onProgress?.(done, items.length);
     }
   }
   await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
@@ -90,16 +95,22 @@ async function mapConcurrent(items, limit, fn) {
 
 /**
  * @param {{ name: string, realm: string, region: string }} guild
+ * @param {(progress: { phase: 'activity'|'professions', done: number, total: number }) => void} [onProgress]
  * @returns {Promise<Array<{ mainName: string, characters: Array<{characterName, realm, class, lastLoginDaysAgo, professions}> }>>}
  */
-async function fetchActiveMembersWithProfessions(guild) {
+async function fetchActiveMembersWithProfessions(guild, onProgress) {
   const roster = await fetchGuildRoster(guild);
   console.log(`[professions] Guild roster: ${roster.length} total members. Checking last-login for each (this takes a while)...`);
 
-  const summaries = await mapConcurrent(roster, CONCURRENCY, async (m) => {
-    const summary = await fetchCharacterSummary(guild.region, m.realm, m.name);
-    return { ...m, summary };
-  });
+  const summaries = await mapConcurrent(
+    roster,
+    CONCURRENCY,
+    async (m) => {
+      const summary = await fetchCharacterSummary(guild.region, m.realm, m.name);
+      return { ...m, summary };
+    },
+    (done, total) => onProgress?.({ phase: 'activity', done, total }),
+  );
 
   const now = Date.now();
   const failed = summaries.filter((s) => s.error);
@@ -113,17 +124,22 @@ async function fetchActiveMembersWithProfessions(guild) {
   });
   console.log(`[professions] ${active.length} of ${roster.length} members active in the last ${ACTIVE_WITHIN_DAYS} days.`);
 
-  const withProfessions = await mapConcurrent(active, CONCURRENCY, async (m) => {
-    const profData = await fetchCharacterProfessions(guild.region, m.realm, m.name);
-    const professions = [...parseProfessionBlock(profData.primaries), ...parseProfessionBlock(profData.secondaries)];
-    return {
-      characterName: m.name,
-      realm: m.summary.realm?.name ?? m.realm,
-      class: m.summary.character_class?.name ?? 'Unknown',
-      lastLoginDaysAgo: Math.round((now - m.summary.last_login_timestamp) / 86_400_000),
-      professions,
-    };
-  });
+  const withProfessions = await mapConcurrent(
+    active,
+    CONCURRENCY,
+    async (m) => {
+      const profData = await fetchCharacterProfessions(guild.region, m.realm, m.name);
+      const professions = [...parseProfessionBlock(profData.primaries), ...parseProfessionBlock(profData.secondaries)];
+      return {
+        characterName: m.name,
+        realm: m.summary.realm?.name ?? m.realm,
+        class: m.summary.character_class?.name ?? 'Unknown',
+        lastLoginDaysAgo: Math.round((now - m.summary.last_login_timestamp) / 86_400_000),
+        professions,
+      };
+    },
+    (done, total) => onProgress?.({ phase: 'professions', done, total }),
+  );
 
   const characters = withProfessions.filter((c) => !c.error);
 

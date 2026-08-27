@@ -12,9 +12,17 @@ export interface LiveProfessionsResult {
   fetchedAt: string;
 }
 
+export interface ProfessionsProgress {
+  phase: 'activity' | 'professions';
+  done: number;
+  total: number;
+}
+
 export interface ElectronAPI {
   getRoster: () => Promise<LiveRosterResult | null>;
   getProfessions: () => Promise<LiveProfessionsResult | null>;
+  getCachedProfessions: () => Promise<LiveProfessionsResult | null>;
+  onProfessionsProgress: (callback: (progress: ProfessionsProgress) => void) => () => void;
 }
 
 declare global {

@@ -14,7 +14,16 @@ export function Professions() {
   }
 
   if (p.loading) {
-    return <div style={{ padding: 48, textAlign: 'center', color: 'var(--text-muted)' }}>Loading professions…</div>;
+    return (
+      <div style={{ padding: 48, textAlign: 'center', color: 'var(--text-muted)' }}>
+        <div style={{ marginBottom: 12 }}>{p.progressLabel}</div>
+        {p.progressPercent !== null && (
+          <div style={{ maxWidth: 360, margin: '0 auto', height: 4, background: 'var(--surface-sunken)', borderRadius: 'var(--radius-pill)', overflow: 'hidden' }}>
+            <div style={{ height: '100%', width: `${p.progressPercent}%`, background: 'var(--status-success)', transition: 'width .2s ease' }} />
+          </div>
+        )}
+      </div>
+    );
   }
 
   return (
@@ -22,13 +31,18 @@ export function Professions() {
       <ProfessionsHeader onRefresh={p.refresh} refreshing={p.refreshing} />
 
       <div style={{ maxWidth: 1160, margin: '0 auto', padding: 32 }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 16, flexWrap: 'wrap', paddingBottom: 10, marginBottom: 24, borderBottom: '1px solid var(--border-hairline)' }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 16, flexWrap: 'wrap', paddingBottom: 10, marginBottom: p.refreshing && p.progressPercent !== null ? 8 : 24, borderBottom: '1px solid var(--border-hairline)' }}>
           <span className="crd-eyebrow" style={{ color: 'var(--text-gold)' }}>
             {p.totalMembers} active members
           </span>
           <div style={{ flex: 1 }} />
-          <span style={{ fontSize: 'var(--text-micro)', color: 'var(--text-faint)' }}>{p.freshness}</span>
+          <span style={{ fontSize: 'var(--text-micro)', color: 'var(--text-faint)' }}>{p.refreshing ? p.progressLabel : p.freshness}</span>
         </div>
+        {p.refreshing && p.progressPercent !== null && (
+          <div style={{ height: 3, background: 'var(--surface-sunken)', borderRadius: 'var(--radius-pill)', overflow: 'hidden', marginBottom: 24 }}>
+            <div style={{ height: '100%', width: `${p.progressPercent}%`, background: 'var(--status-success)', transition: 'width .2s ease' }} />
+          </div>
+        )}
 
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 24 }}>
           <div style={{ width: 280 }}>
@@ -49,9 +63,15 @@ export function Professions() {
             No members match that search.
           </div>
         ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 16, marginBottom: 40 }}>
+          // Column-based (masonry-style) layout, not CSS grid -- with cards this
+          // uneven in height (1-5 characters x 1-3 professions x recipe tags each,
+          // across a whole-guild roster), a strict grid stretches/gaps ugly. Columns
+          // pack each card under the shortest column instead.
+          <div style={{ columnWidth: 340, columnGap: 16, marginBottom: 40 }}>
             {p.members.map((m) => (
-              <MemberCard key={m.mainName} member={m} expansionFilter={p.expansionFilter} />
+              <div key={m.mainName} style={{ breakInside: 'avoid', marginBottom: 16 }}>
+                <MemberCard member={m} expansionFilter={p.expansionFilter} />
+              </div>
             ))}
           </div>
         )}

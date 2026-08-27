@@ -2,6 +2,11 @@ const { app, BrowserWindow, ipcMain } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 
+// Without this, Electron derives the app name (and therefore the userData path)
+// from package.json's "name" field ("raider-status"), not the "Guild Tools"
+// branding an officer would actually look for on disk.
+app.setName('Guild Tools');
+
 // .env location: prefer the writable userData dir (the app's own install directory
 // becomes a read-only asar archive once packaged, so that's the only place a
 // packaged install can persist an officer-edited .env). Falls back to the
@@ -11,10 +16,11 @@ const devEnvPath = path.join(__dirname, '..', '.env');
 require('dotenv').config({ path: fs.existsSync(userDataEnvPath) ? userDataEnvPath : devEnvPath });
 
 const { fetchRoster } = require('./dataSources/fetchRoster.cjs');
-const { fetchProfessions } = require('./dataSources/fetchProfessions.cjs');
+const { fetchProfessions, getCachedProfessions } = require('./dataSources/fetchProfessions.cjs');
 
 ipcMain.handle('roster:fetch', async () => fetchRoster());
-ipcMain.handle('professions:fetch', async () => fetchProfessions());
+ipcMain.handle('professions:getCached', async () => getCachedProfessions());
+ipcMain.handle('professions:fetch', async (event) => fetchProfessions((progress) => event.sender.send('professions:progress', progress)));
 
 function createWindow() {
   const win = new BrowserWindow({

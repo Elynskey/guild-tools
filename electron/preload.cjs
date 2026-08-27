@@ -5,4 +5,10 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('electronAPI', {
   getRoster: () => ipcRenderer.invoke('roster:fetch'),
   getProfessions: () => ipcRenderer.invoke('professions:fetch'),
+  getCachedProfessions: () => ipcRenderer.invoke('professions:getCached'),
+  onProfessionsProgress: (callback) => {
+    const listener = (_event, progress) => callback(progress);
+    ipcRenderer.on('professions:progress', listener);
+    return () => ipcRenderer.removeListener('professions:progress', listener);
+  },
 });
