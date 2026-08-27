@@ -113,16 +113,26 @@ export function weightedScore(r: Raider, window: Window = 'rolled'): ScoreParts 
  * raider cannot post a strong score while dying repeatedly and still
  * show Green. Deaths stay a visible signal instead of being averaged
  * away inside the weighted score.
+ *
+ * Judged as a RATE (deaths / pulls), not a raw count — a raw count
+ * conflates "died 3 times in 60 pulls" with "died 3 times in 10 pulls",
+ * which aren't the same raider. Officer-adjustable thresholds, same as
+ * MIN_DPS_REQUIREMENT.
  * ------------------------------------------------------------------ */
-export function applyDeathCap(band: Band, deaths: number): Band {
-  if (deaths >= 2) return 'red';
-  if (deaths === 1 && band === 'green') return 'yellow';
+export const DEATH_RATE_RED_THRESHOLD = 0.3; // died on >30% of pulls -> Red, regardless of score
+export const DEATH_RATE_YELLOW_THRESHOLD = 0.15; // died on >15% of pulls -> caps Green to Yellow only
+
+export function applyDeathCap(band: Band, deathRate: number): Band {
+  if (deathRate > DEATH_RATE_RED_THRESHOLD) return 'red';
+  if (deathRate > DEATH_RATE_YELLOW_THRESHOLD && band === 'green') return 'yellow';
   return band;
 }
 
 interface FeedbackDerived {
   band: Band;
-  deaths: number;
+  deathsInWindow: number;
+  pullsInWindow: number;
+  deathRate: number;
   perf: number;
   gates: GateEvaluation;
   scores: ScoreParts;
@@ -148,7 +158,9 @@ interface FeedbackDerived {
 export function generateFeedback(r: Raider, window: Window, gates: Gates, derived: FeedbackDerived): Feedback {
   const { rioBest, ilvlBest, rioFail, ilvlFail, ineligible } = derived.gates;
   const { perfScore, gearScore, trendScore, score } = derived.scores;
-  const { band, deaths, perf } = derived;
+  const { band, deathsInWindow, pullsInWindow, deathRate, perf } = derived;
+  const deathPct = Math.round(deathRate * 100);
+  const deathText = `${deathsInWindow} death${deathsInWindow === 1 ? '' : 's'} on ${pullsInWindow} pull${pullsInWindow === 1 ? '' : 's'} (${deathPct}%)`;
   const night = window === 'night';
   const h = hash(r.name);
   const pick = <T,>(arr: T[]): T => arr[h % arr.length];
@@ -265,15 +277,15 @@ export function generateFeedback(r: Raider, window: Window, gates: Gates, derive
     weakest: weak.k,
     breakdown,
     status:
-      deaths >= 2
-        ? `${bandWord}. ${deaths} deaths set the band; the score was ${score}/100.`
-        : deaths === 1
-          ? `${bandWord}. One death holds it here -- the score was ${score}/100.`
+      deathRate > DEATH_RATE_RED_THRESHOLD
+        ? `${bandWord}. ${deathText} set the band; the score was ${score}/100.`
+        : deathRate > DEATH_RATE_YELLOW_THRESHOLD
+          ? `${bandWord}. ${deathText} holds it here -- the score was ${score}/100.`
           : `${bandWord}. ${score}/100, both gates clear.`,
     working: second.s >= 78 ? `${up(strong.t)}. ${up(second.t)}.` : `${up(strong.t)}.`,
-    attention: deaths >= 2 ? `${deaths} deaths. Under that, ${gapText.charAt(0).toLowerCase() + gapText.slice(1)}` : gapText,
+    attention: deathRate > DEATH_RATE_RED_THRESHOLD ? `${deathText}. Under that, ${gapText.charAt(0).toLowerCase() + gapText.slice(1)}` : gapText,
     action:
-      deaths >= 2
+      deathRate > DEATH_RATE_RED_THRESHOLD
         ? pick([`Survivability only this week. The damage is already there.`, `One mechanic, one pull, with an officer before Saturday. Nothing else.`])
         : {
             perf: pick([`One boss, one log read with an officer. Not the whole night.`, `Pick the fight where it falls off and watch it back with Shortie.`]),
@@ -287,14 +299,18 @@ export function generateFeedback(r: Raider, window: Window, gates: Gates, derive
 export function scoreRaider(raider: Raider, window: Window = 'rolled', gates: Gates = DEFAULT_GATES): ScoredRaider {
   const g = evaluateGates(raider, gates);
   const perf = raider.perf;
-  const deaths = raider.deaths;
+  const night = window === 'night';
+  const deathsInWindow = night ? raider.nightDeaths : raider.deaths;
+  const pullsInWindow = night ? raider.nightPulls : raider.pulls;
+  const deathRate = pullsInWindow > 0 ? deathsInWindow / pullsInWindow : 0;
   const scores = weightedScore(raider, window);
 
-  let band: Band = scores.score >= gates.green ? 'green' : scores.score >= gates.yellow ? 'yellow' : 'red';
-  band = applyDeathCap(band, deaths);
+  const scoreBand: Band = scores.score >= gates.green ? 'green' : scores.score >= gates.yellow ? 'yellow' : 'red';
+  let band = applyDeathCap(scoreBand, deathRate);
+  const deathCapped = band !== scoreBand; // did the death rate actually hold the band down, not just "any deaths at all"
   if (g.ineligible) band = 'ineligible';
 
-  const derived: FeedbackDerived = { band, deaths, perf, gates: g, scores };
+  const derived: FeedbackDerived = { band, deathsInWindow, pullsInWindow, deathRate, perf, gates: g, scores };
   const feedback = generateFeedback(raider, window, gates, derived);
 
   return {
@@ -310,8 +326,11 @@ export function scoreRaider(raider: Raider, window: Window = 'rolled', gates: Ga
     ilvlBest: g.ilvlBest,
     rioFail: g.rioFail,
     ilvlFail: g.ilvlFail,
-    deathCapped: deaths > 0,
-    deathCapNote: deaths >= 2 ? 'Band held at Red' : deaths === 1 ? 'Band held at Yellow' : '',
+    deathCapped,
+    deathCapNote: deathCapped ? (band === 'red' ? 'Band held at Red' : 'Band held at Yellow') : '',
+    deathsInWindow,
+    pullsInWindow,
+    deathRate,
     icon: specIcon(raider.spec, raider.class),
     subline: `${raider.spec} ${raider.class} · ${raider.role === 'dps' ? 'DPS' : up(raider.role)} · ilvl ${g.ilvlBest} · RIO ${g.rioBest}`,
     feedback,
@@ -331,8 +350,8 @@ export function rosterSummary(rows: ScoredRaider[], window: Window = 'rolled'): 
 
   const scored = rows.filter((r) => r.scored);
   const avg = Math.round(scored.reduce((a, r) => a + (r.score ?? 0), 0) / Math.max(1, scored.length));
-  const deathTotal = rows.reduce((a, r) => a + r.deaths, 0);
-  const cappedCount = rows.filter((r) => r.scored && r.deaths > 0).length;
+  const deathTotal = rows.reduce((a, r) => a + r.deathsInWindow, 0);
+  const cappedCount = rows.filter((r) => r.scored && r.deathCapped).length;
   const gearShort = rows.filter((r) => r.gearCompletion < GEAR_SHORT_THRESHOLD);
   const gearAvg = Math.round(rows.reduce((a, r) => a + r.gearCompletion, 0) / rows.length);
   const rising = rows.filter((r) => r.parseTrend >= TREND_RISING_THRESHOLD).length;
@@ -341,7 +360,7 @@ export function rosterSummary(rows: ScoredRaider[], window: Window = 'rolled'): 
 
   // "Red on damage alone" = Red not caused by the death cap (i.e. the weighted score itself was below threshold).
   // Fixed from the prototype, which hardcoded this claim as always-true text regardless of roster data.
-  const redOnDamageAlone = rows.filter((r) => r.band === 'red' && r.deaths === 0).map((r) => r.name);
+  const redOnDamageAlone = rows.filter((r) => r.band === 'red' && r.deathsInWindow === 0).map((r) => r.name);
   const damageClause =
     redOnDamageAlone.length === 0
       ? 'nobody is Red on damage alone'

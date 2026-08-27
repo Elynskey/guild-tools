@@ -1,6 +1,6 @@
 import { Icon } from '../../design-system/Icon';
 import { Badge } from '../../design-system/Badge';
-import { ordinal } from '../../scoring/scoring';
+import { ordinal, DEATH_RATE_RED_THRESHOLD, DEATH_RATE_YELLOW_THRESHOLD } from '../../scoring/scoring';
 import { specIconFallback } from '../../scoring/specIcons';
 import type { DisplayRaider } from './useRaiderStatus';
 import { BADGE_TONE, ROW_COLOR } from './bandVisuals';
@@ -36,8 +36,14 @@ export function RaiderRow({ raider: r, onToggle, rioGateText, ilvlGateText }: Ra
         ? `+${r.parseTrend}`
         : `${r.parseTrend}`;
   const trendColor = (dps ? (night ? r.nightParse >= 100 : r.parseTrend >= 0) : night ? r.nightParse >= 50 : r.parseTrend >= 0) ? 'var(--status-success)' : 'var(--status-warning)';
-  const deathColor = r.deaths >= 2 ? 'var(--status-danger)' : r.deaths === 1 ? 'var(--status-warning)' : 'var(--text-faint)';
-  const capTitle = r.deaths >= 2 ? 'Death cap: band held at Red' : r.deaths === 1 ? 'Death cap: band held at Yellow' : '';
+  const deathColor =
+    r.deathRate > DEATH_RATE_RED_THRESHOLD ? 'var(--status-danger)' : r.deathRate > DEATH_RATE_YELLOW_THRESHOLD ? 'var(--status-warning)' : 'var(--text-faint)';
+  const deathPct = Math.round(r.deathRate * 100);
+  const capTitle = r.deathCapped
+    ? `Death cap: band held at ${r.deathCapNote.replace('Band held at ', '')} -- ${r.deathsInWindow} on ${r.pullsInWindow} pulls (${deathPct}%)`
+    : r.pullsInWindow > 0
+      ? `${r.deathsInWindow} deaths on ${r.pullsInWindow} pulls (${deathPct}%)`
+      : '';
   const scoreText = r.scored ? `${r.score}` : '—';
   const dim = r.band === 'ineligible' ? 0.72 : 1;
 
@@ -92,8 +98,8 @@ export function RaiderRow({ raider: r, onToggle, rioGateText, ilvlGateText }: Ra
         </div>
         <div style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-body-s)', color: trendColor }}>{trendValue}</div>
         <div title={capTitle} style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4, fontFamily: 'var(--font-mono)', fontSize: 'var(--text-body-s)', color: deathColor }}>
-          {r.deaths > 0 && <Icon name="skull" size={14} />}
-          <span>{r.deaths}</span>
+          {r.deathsInWindow > 0 && <Icon name="skull" size={14} />}
+          <span>{r.deathsInWindow}</span>
         </div>
         <div style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 'var(--text-title-l)', color }}>{scoreText}</div>
         <div>

@@ -17,9 +17,16 @@ export interface Raider {
   gearCompletion: number;
   /** Slope of parse percentile across the tier, in points. Can be negative. */
   parseTrend: number;
+  /** Tier-to-date raw death count (kill pulls only — same scope as perf/gear). */
   deaths: number;
+  /** Tier-to-date kill-pull count this raider was present for — the denominator for deaths. */
+  pulls: number;
   /** Percentile for the single-night window only. */
   nightParse: number;
+  /** Raw death count for the most recent raid night only. */
+  nightDeaths: number;
+  /** Kill-pull count for the most recent raid night only. */
+  nightPulls: number;
 }
 
 export interface Gates {
@@ -80,6 +87,11 @@ export interface ScoredRaider extends Raider {
   ilvlFail: boolean;
   deathCapped: boolean;
   deathCapNote: string;
+  /** Deaths/pulls for whichever window is active — night uses nightDeaths/nightPulls, rolled uses deaths/pulls. */
+  deathsInWindow: number;
+  pullsInWindow: number;
+  /** deathsInWindow / pullsInWindow, 0-1 (0 if pullsInWindow is 0). What the death cap actually judges. */
+  deathRate: number;
   icon: string;
   subline: string;
   feedback: Feedback;

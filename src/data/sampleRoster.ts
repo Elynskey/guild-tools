@@ -5,6 +5,12 @@ import type { Raider } from '../scoring/types';
  * guild, invented numbers. Replace with the real pipeline once it exists; nothing
  * outside rosterSource.ts should import this file directly.
  */
+// Fixed tier-to-date/night pull counts for every sample raider -- fabricated data
+// doesn't need per-row variance here, just a believable denominator for the death
+// rate (deaths column below stays the small per-window counts it already was).
+const TIER_PULLS = 24;
+const NIGHT_PULLS = 8;
+
 const raider = (
   name: string,
   role: Raider['role'],
@@ -19,14 +25,37 @@ const raider = (
   parseTrend: number,
   deaths: number,
   nightParse: number,
-): Raider => ({ name, role, class: cls, spec, rioCurrent, rioHighestThisSeason, ilvlEquipped, ilvlHighestThisSeason, perf, gearCompletion, parseTrend, deaths, nightParse });
+): Raider => ({
+  name,
+  role,
+  class: cls,
+  spec,
+  rioCurrent,
+  rioHighestThisSeason,
+  ilvlEquipped,
+  ilvlHighestThisSeason,
+  perf,
+  gearCompletion,
+  parseTrend,
+  deaths,
+  pulls: TIER_PULLS,
+  nightParse,
+  nightDeaths: Math.min(deaths, 1),
+  nightPulls: NIGHT_PULLS,
+});
 
 export const SAMPLE_ROSTER: Raider[] = [
   // Tank perf/nightParse are survivability percentile (0-100), not DPS-style values —
   // tanks aren't judged on damage output at all.
   raider('Vadailla', 'tank', 'Warrior', 'Protection', 2480, 2480, 709, 709, 88, 100, 3, 0, 81),
-  raider('Ogrimund', 'tank', 'Death Knight', 'Blood', 1620, 1690, 698, 701, 64, 92, 1, 1, 54),
-  raider('Thornwick', 'tank', 'Paladin', 'Protection', 1180, 1210, 691, 693, 42, 78, -2, 2, 38),
+  // 4 deaths on 24 pulls (16.7%, in the yellow zone) -- but Ogrimund's score alone
+  // already lands Yellow, so the rate is elevated without actually being the thing
+  // holding the band down (deathCapped stays false; see Hotchick below for a raider
+  // the cap actually changes).
+  raider('Ogrimund', 'tank', 'Death Knight', 'Blood', 1620, 1690, 698, 701, 64, 92, 1, 4, 54),
+  // 8 deaths on 24 pulls (33.3%, over the red threshold) -- score alone already
+  // lands Red here too, same non-capping case as Ogrimund above.
+  raider('Thornwick', 'tank', 'Paladin', 'Protection', 1180, 1210, 691, 693, 42, 78, -2, 8, 38),
   raider('Skarnak', 'tank', 'Druid', 'Guardian', 940, 985, 688, 689, 55, 85, 0, 0, 44),
   raider('Perseffonee', 'healer', 'Priest', 'Holy', 2610, 2610, 711, 711, 91, 100, 5, 0, 89),
   raider('Quixxie', 'healer', 'Shaman', 'Restoration', 2050, 2110, 704, 706, 84, 96, 2, 0, 80),
@@ -35,7 +64,11 @@ export const SAMPLE_ROSTER: Raider[] = [
   raider('Halvora', 'healer', 'Paladin', 'Holy', 1010, 1080, 692, 694, 42, 62, -6, 2, 35),
   raider('Duskwren', 'healer', 'Priest', 'Discipline', 1780, 1810, 701, 703, 77, 90, 4, 0, 74),
   raider('Harima', 'dps', 'Mage', 'Frost', 2740, 2740, 712, 712, 114, 100, 6, 0, 93),
-  raider('Hotchick', 'dps', 'Hunter', 'Beast Mastery', 2180, 2200, 707, 708, 106, 100, 3, 0, 77),
+  // 5 deaths on 24 pulls (20.8%) is in the yellow zone -- and Hotchick's score alone
+  // would land Green, so this is the sample data's one actual cap event (Green held
+  // to Yellow), as opposed to Thornwick/Ogrimund above who land in Red/Yellow from
+  // score alone regardless of their death rate.
+  raider('Hotchick', 'dps', 'Hunter', 'Beast Mastery', 2180, 2200, 707, 708, 106, 100, 3, 5, 77),
   raider('Shortie', 'dps', 'Rogue', 'Subtlety', 1960, 1990, 703, 705, 101, 94, 2, 0, 62),
   raider('Zalanto', 'dps', 'Warlock', 'Destruction', 2260, 2260, 708, 710, 109, 98, 4, 0, 84),
   raider('Addy', 'dps', 'Druid', 'Balance', 1540, 1600, 699, 701, 97, 86, 5, 0, 55),

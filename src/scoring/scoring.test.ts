@@ -3,6 +3,9 @@ import { DEFAULT_GATES, evaluateGates, applyDeathCap, weightedScore, scoreRaider
 import type { Raider } from './types';
 
 // dps: perf is %-of-the-guild's-minimum-DPS (rescale formula applies).
+// pulls/nightPulls give deaths a denominator -- 20 tier pulls, 8 night pulls, so
+// tests can express "2 deaths" as an intentional rate (2/20 = 10%, under the
+// 15% yellow threshold) rather than an ambiguous raw count.
 const baseDps: Raider = {
   name: 'Testrock',
   role: 'dps',
@@ -16,7 +19,10 @@ const baseDps: Raider = {
   gearCompletion: 90,
   parseTrend: 0,
   deaths: 0,
+  pulls: 20,
   nightParse: 60,
+  nightDeaths: 0,
+  nightPulls: 8,
 };
 
 // healer/tank: perf is a 0-100 percentile within role (no rescale).
@@ -88,22 +94,31 @@ describe('weightedScore', () => {
 });
 
 describe('applyDeathCap', () => {
-  it('leaves band unchanged at 0 deaths', () => {
+  it('leaves band unchanged at a 0% death rate', () => {
     expect(applyDeathCap('green', 0)).toBe('green');
     expect(applyDeathCap('yellow', 0)).toBe('yellow');
     expect(applyDeathCap('red', 0)).toBe('red');
   });
 
-  it('caps exactly 1 death: only downgrades green to yellow, leaves yellow/red untouched', () => {
-    expect(applyDeathCap('green', 1)).toBe('yellow');
-    expect(applyDeathCap('yellow', 1)).toBe('yellow');
-    expect(applyDeathCap('red', 1)).toBe('red');
+  it('leaves band unchanged at a low death rate (a raw count alone is not enough)', () => {
+    // 2 deaths in 60 pulls (3.3%) would have forced Red under the old raw->=2 rule.
+    expect(applyDeathCap('green', 2 / 60)).toBe('green');
   });
 
-  it('forces red at 2+ deaths regardless of prior band', () => {
-    expect(applyDeathCap('green', 2)).toBe('red');
-    expect(applyDeathCap('yellow', 3)).toBe('red');
-    expect(applyDeathCap('red', 2)).toBe('red');
+  it('caps a rate just over the yellow threshold: only downgrades green to yellow, leaves yellow/red untouched', () => {
+    expect(applyDeathCap('green', 0.16)).toBe('yellow');
+    expect(applyDeathCap('yellow', 0.16)).toBe('yellow');
+    expect(applyDeathCap('red', 0.16)).toBe('red');
+  });
+
+  it('leaves band unchanged exactly at the yellow threshold (boundary is exclusive)', () => {
+    expect(applyDeathCap('green', 0.15)).toBe('green');
+  });
+
+  it('forces red above the red threshold regardless of prior band', () => {
+    expect(applyDeathCap('green', 0.31)).toBe('red');
+    expect(applyDeathCap('yellow', 0.5)).toBe('red');
+    expect(applyDeathCap('red', 0.31)).toBe('red');
   });
 });
 
@@ -116,11 +131,26 @@ describe('scoreRaider', () => {
   });
 
   it('precedence is weighted score -> death cap -> gate ineligibility', () => {
-    // High score, 2 deaths, but gates clear: death cap forces red, not ineligible.
-    const r = scoreRaider({ ...baseDps, perf: 120, gearCompletion: 100, parseTrend: 10, deaths: 2 }, 'rolled', DEFAULT_GATES);
+    // High score, 7 deaths on 20 pulls (35%, over the red threshold), but gates
+    // clear: death cap forces red, not ineligible.
+    const r = scoreRaider({ ...baseDps, perf: 120, gearCompletion: 100, parseTrend: 10, deaths: 7, pulls: 20 }, 'rolled', DEFAULT_GATES);
     expect(r.band).toBe('red');
     expect(r.scored).toBe(true);
     expect(typeof r.score).toBe('number');
+    expect(r.deathCapped).toBe(true);
+  });
+
+  it('death cap is window-scoped: night uses nightDeaths/nightPulls, rolled uses deaths/pulls', () => {
+    const raider = { ...baseDps, perf: 120, gearCompletion: 100, deaths: 7, pulls: 20, nightDeaths: 0, nightPulls: 8 };
+    expect(scoreRaider(raider, 'rolled', DEFAULT_GATES).band).toBe('red'); // 7/20 = 35%
+    expect(scoreRaider(raider, 'night', DEFAULT_GATES).band).toBe('green'); // 0/8 = 0%, clean that night
+  });
+
+  it('deathCapped reflects whether the cap actually changed the band, not just "any deaths"', () => {
+    // Already Red on score alone; a death rate in the yellow zone doesn't "cap" anything further.
+    const r = scoreRaider({ ...baseDps, perf: 80, gearCompletion: 20, parseTrend: -10, deaths: 4, pulls: 20 }, 'rolled', DEFAULT_GATES);
+    expect(r.band).toBe('red');
+    expect(r.deathCapped).toBe(false);
   });
 
   it('bands correctly at the configured cutoffs', () => {

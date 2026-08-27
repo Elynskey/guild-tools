@@ -33,7 +33,10 @@ function mergeSources({ wowauditRoster, rio, gearCompletion, wcl }) {
         perf: wclData.perf,
         parseTrend: wclData.parseTrend,
         deaths: wclData.deaths,
+        pulls: wclData.pulls,
         nightParse: wclData.nightParse,
+        nightDeaths: wclData.nightDeaths,
+        nightPulls: wclData.nightPulls,
       };
     });
 }

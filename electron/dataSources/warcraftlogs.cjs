@@ -124,10 +124,12 @@ function extractRankPercents(ranking) {
 
 /**
  * One report's aggregate: DPS (damage/s per player), HPS (healing/s per player),
- * deaths (count per player), one representative rankPercent sample (from the
- * report's last kill, since a full per-pull average isn't worth the extra API
- * calls), and the set of encounterIDs killed at Heroic difficulty in this report
- * (for real tier-progression tracking, replacing the old hardcoded "3/8" text).
+ * deaths (count per player), pullCount (kill pulls in this report -- the
+ * denominator for a per-pull death rate, not a raw tier-wide total), one
+ * representative rankPercent sample (from the report's last kill, since a full
+ * per-pull average isn't worth the extra API calls), and the set of encounterIDs
+ * killed at Heroic difficulty in this report (for real tier-progression tracking,
+ * replacing the old hardcoded "3/8" text).
  */
 async function fetchReportAggregate(code) {
   const fights = await fetchFights(code);
@@ -135,7 +137,7 @@ async function fetchReportAggregate(code) {
   const heroicKillEncounterIds = fights.filter((f) => f.kill && f.difficulty === HEROIC_DIFFICULTY).map((f) => f.encounterID);
 
   if (killFightIds.length === 0) {
-    return { dps: new Map(), hps: new Map(), deaths: new Map(), rankPercent: new Map(), heroicKillEncounterIds };
+    return { dps: new Map(), hps: new Map(), deaths: new Map(), pullCount: 0, rankPercent: new Map(), heroicKillEncounterIds };
   }
 
   const [damageEntries, healingEntries, deathEntries, ranking] = await Promise.all([
@@ -149,6 +151,7 @@ async function fetchReportAggregate(code) {
     dps: sumThroughputByName(damageEntries),
     hps: sumThroughputByName(healingEntries),
     deaths: countDeathsByName(deathEntries),
+    pullCount: killFightIds.length,
     rankPercent: extractRankPercents(ranking),
     heroicKillEncounterIds,
   };
@@ -160,7 +163,7 @@ const MIN_DPS_ROLE = 'dps';
  * @param {{ name: string, realm: string, region: string }} guild
  * @param {string} tierZoneName — only reports in this raid tier count (config.tier.name)
  * @param {Record<string,'tank'|'healer'|'dps'>} roleByName — from wowaudit, since WCL doesn't know raid role assignment
- * @returns {Promise<{ performance: Record<string, { perf: number, parseTrend: number, deaths: number, nightParse: number }>, heroicBossesKilled: number }>}
+ * @returns {Promise<{ performance: Record<string, { perf: number, parseTrend: number, deaths: number, pulls: number, nightParse: number, nightDeaths: number, nightPulls: number }>, heroicBossesKilled: number }>}
  */
 async function fetchWarcraftLogs(guild, tierZoneName, roleByName) {
   const minDps = Number(process.env.MIN_DPS_REQUIREMENT ?? 0);
@@ -204,17 +207,30 @@ async function fetchWarcraftLogs(guild, tierZoneName, roleByName) {
     const avg = (arr) => arr.reduce((a, v) => a + v, 0) / Math.max(1, arr.length);
     const parseTrend = seriesAll.length >= 2 ? Math.round(avg(secondHalf) - avg(firstHalf)) : 0;
 
-    // Deaths: total across all kill fights in the whole tier.
-    const deaths = aggregates.reduce((sum, agg) => sum + (agg.deaths.get(name) ?? 0), 0);
+    // Deaths per pull, not a raw tier-wide total: only count deaths and pulls from
+    // reports this player actually raided (same presence check perf uses), so
+    // absences don't inflate their pull count and understate their death rate.
+    let deaths = 0;
+    let pulls = 0;
+    for (const agg of aggregates) {
+      if (perfSnapshot(name, agg) == null) continue; // wasn't in this report
+      deaths += agg.deaths.get(name) ?? 0;
+      pulls += agg.pullCount;
+    }
 
-    result[name] = { perf: seriesLast, parseTrend, deaths, nightParse: seriesLast };
+    result[name] = { perf: seriesLast, parseTrend, deaths, pulls, nightParse: seriesLast, nightDeaths: 0, nightPulls: 0 };
   }
 
-  // nightParse should reflect only the MOST RECENT report, not the tier-to-date perf value.
+  // nightParse/nightDeaths/nightPulls should reflect only the MOST RECENT report,
+  // not tier-to-date figures.
   const lastAgg = aggregates[aggregates.length - 1];
   for (const name of names) {
     const nightVal = perfSnapshot(name, lastAgg);
-    if (nightVal != null) result[name].nightParse = nightVal;
+    if (nightVal != null) {
+      result[name].nightParse = nightVal;
+      result[name].nightDeaths = lastAgg.deaths.get(name) ?? 0;
+      result[name].nightPulls = lastAgg.pullCount;
+    }
   }
 
   const heroicBossesKilled = new Set(aggregates.flatMap((agg) => agg.heroicKillEncounterIds)).size;
