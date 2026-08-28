@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Icon } from '../../design-system/Icon';
 import { Badge } from '../../design-system/Badge';
+import { BossIcon } from '../../raid/BossIcon';
 import { formatPullDuration, type BossGroup } from '../../raid/pullLogic';
 import type { Pull, PullRaider } from '../../electron';
 
@@ -98,7 +99,8 @@ export function PullLog({ groups }: PullLogProps) {
         const kills = group.pulls.filter((p) => p.kill).length;
         return (
           <div key={group.boss} style={{ marginBottom: 32 }}>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 14, marginBottom: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 12 }}>
+              <BossIcon boss={group.boss} size={26} />
               <span style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 'var(--text-title-m)', letterSpacing: '.05em', color: 'var(--text-strong)' }}>
                 {group.boss}
               </span>

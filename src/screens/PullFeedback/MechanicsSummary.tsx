@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Icon } from '../../design-system/Icon';
+import { BossIcon } from '../../raid/BossIcon';
 import type { BossMechanics } from '../../raid/pullLogic';
 import { groupOccurrencesByRaider } from '../../raid/pullLogic';
 
@@ -74,17 +75,16 @@ export function MechanicsSummary({ groups }: MechanicsSummaryProps) {
           <div key={g.boss}>
             <div
               style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
                 padding: '9px 24px',
                 background: 'var(--surface-sunken)',
                 borderBottom: '1px solid var(--border-hairline)',
-                fontFamily: 'var(--font-display)',
-                fontWeight: 600,
-                letterSpacing: '.04em',
-                fontSize: 'var(--text-body-s)',
-                color: 'var(--text-muted)',
               }}
             >
-              {g.boss}
+              <BossIcon boss={g.boss} size={20} />
+              <span style={{ fontFamily: 'var(--font-display)', fontWeight: 600, letterSpacing: '.04em', fontSize: 'var(--text-body-s)', color: 'var(--text-muted)' }}>{g.boss}</span>
             </div>
             {g.mechanics.map((m) => {
               const key = `${g.boss}::${m.ability}`;
