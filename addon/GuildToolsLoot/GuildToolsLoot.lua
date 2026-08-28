@@ -6,6 +6,12 @@
 -- can't be tested against a live game client from where it was written. The Electron
 -- side does the (testable) work of reading these tables back out.
 --
+-- On by default (most raid nights are current-tier progression) -- /gtloot off turns
+-- logging off for old-content farms, alt runs, or anything else that shouldn't feed
+-- the loot history; /gtloot on turns it back on; /gtloot alone reports current state.
+-- Announces its current state once at login too, so it's never silently off without
+-- you knowing.
+--
 -- NOT TRACKED, deliberately: Greed and Transmog-intent-Greed rolls (the guild's 2-win
 -- cap is Need-only, so Greed doesn't matter here), and trades between two OTHER
 -- players -- Blizzard never broadcasts a trade to anyone but its two participants, so
@@ -24,6 +30,14 @@ local ADDON_NAME = ...
 GuildToolsLootDB = GuildToolsLootDB or {}
 GuildToolsLootDB.records = GuildToolsLootDB.records or {}
 GuildToolsLootDB.trades = GuildToolsLootDB.trades or {}
+-- Defaults ON, since most raid nights are current-tier progression -- toggle off with
+-- /gtloot for old-content farm runs, alt runs, or anything else that shouldn't count
+-- toward the loot history.
+if GuildToolsLootDB.enabled == nil then GuildToolsLootDB.enabled = true end
+
+local function announce(msg)
+  DEFAULT_CHAT_FRAME:AddMessage('|cffd4b358Guild Tools Loot:|r ' .. msg)
+end
 
 local currentBoss = nil
 
@@ -68,7 +82,7 @@ local function itemIdFromLink(link)
 end
 
 local function recordNeedWin(winnerName, itemLink)
-  if not winnerName or not itemLink then return end
+  if not GuildToolsLootDB.enabled or not winnerName or not itemLink then return end
   table.insert(GuildToolsLootDB.records, {
     itemId = itemIdFromLink(itemLink),
     itemLink = itemLink,
@@ -78,8 +92,32 @@ local function recordNeedWin(winnerName, itemLink)
   })
 end
 
+-- Asks once per raid lockout, not on every loading screen within it (a raid with
+-- multiple wings fires PLAYER_ENTERING_WORLD more than once) -- tracked by instanceID,
+-- which is stable for one lockout.
+local lastPromptedInstanceID = nil
+
+StaticPopupDialogs["GUILDTOOLSLOOT_CONFIRM"] = {
+  text = "Log Need-roll loot for this raid in Guild Tools?",
+  button1 = "Yes",
+  button2 = "No",
+  OnAccept = function()
+    GuildToolsLootDB.enabled = true
+    announce("logging Need wins for this raid. /gtloot off any time to stop.")
+  end,
+  OnCancel = function()
+    GuildToolsLootDB.enabled = false
+    announce("not logging this raid. /gtloot on any time to turn it back on.")
+  end,
+  timeout = 0,
+  whileDead = true,
+  hideOnEscape = true,
+  preferredIndex = 3,
+}
+
 local frame = CreateFrame("Frame")
 frame:RegisterEvent("PLAYER_LOGIN")
+frame:RegisterEvent("PLAYER_ENTERING_WORLD")
 frame:RegisterEvent("ENCOUNTER_START")
 frame:RegisterEvent("ENCOUNTER_END")
 frame:RegisterEvent("START_LOOT_ROLL")
@@ -95,8 +133,21 @@ local tradeCompleted = false
 
 frame:SetScript("OnEvent", function(_, event, ...)
   if event == "PLAYER_LOGIN" then
-    -- Nothing to do -- SavedVariables are already loaded by this point; this just
-    -- confirms the addon initialized. Left as a hook point for a future status line.
+    if GuildToolsLootDB.enabled then
+      announce('logging Need wins (type /gtloot off to stop for this run).')
+    else
+      announce('NOT logging (type /gtloot on to resume).')
+    end
+
+  elseif event == "PLAYER_ENTERING_WORLD" then
+    local inInstance, instanceType = IsInInstance()
+    if inInstance and instanceType == "raid" then
+      local _, _, _, _, _, _, _, instanceID = GetInstanceInfo()
+      if instanceID and instanceID ~= lastPromptedInstanceID then
+        lastPromptedInstanceID = instanceID
+        StaticPopup_Show("GUILDTOOLSLOOT_CONFIRM")
+      end
+    end
 
   elseif event == "ENCOUNTER_START" then
     local _, encounterName = ...
@@ -144,7 +195,7 @@ frame:SetScript("OnEvent", function(_, event, ...)
     tradeCompleted = true
 
   elseif event == "TRADE_CLOSED" then
-    if tradeCompleted and tradeTargetName then
+    if GuildToolsLootDB.enabled and tradeCompleted and tradeTargetName then
       local myName = playerRealmName()
       for _, link in pairs(tradePlayerItems) do
         table.insert(GuildToolsLootDB.trades, {
@@ -161,3 +212,17 @@ frame:SetScript("OnEvent", function(_, event, ...)
     tradeCompleted = false
   end
 end)
+
+SLASH_GUILDTOOLSLOOT1 = "/gtloot"
+SlashCmdList["GUILDTOOLSLOOT"] = function(msg)
+  local arg = (msg or ""):lower():match("^%s*(%S*)")
+  if arg == "on" then
+    GuildToolsLootDB.enabled = true
+    announce("logging Need wins.")
+  elseif arg == "off" then
+    GuildToolsLootDB.enabled = false
+    announce("NOT logging -- use this for old-content or off-progression runs. /gtloot on to resume.")
+  else
+    announce((GuildToolsLootDB.enabled and "currently logging Need wins." or "currently NOT logging.") .. " /gtloot on|off to change.")
+  end
+end
