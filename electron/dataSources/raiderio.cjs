@@ -20,6 +20,18 @@ function slugifyRealm(realm) {
     .replace(/\s+/g, '-');
 }
 
+// A name alone isn't a safe key across this pipeline -- confirmed live this session
+// that two different real guild members can share a character name on different
+// realms (the "Dunbarke" incident: wowaudit had the wrong realm for one of them,
+// and every name-only join downstream would have silently pulled the OTHER
+// person's RIO/gear data under the right name). This composite key is what
+// fetchRoster.cjs/merge.cjs use everywhere a character needs to be looked up
+// unambiguously; WCL's own tables are the one exception -- see the long comment in
+// fetchRoster.cjs about why those still key by bare name.
+function charKey(name, realm) {
+  return `${name}::${slugifyRealm(realm)}`;
+}
+
 // Raider.IO's active_spec_role is uppercase ('TANK'|'HEALING'|'DPS'); our Raider type wants lowercase.
 const ROLE_MAP = { TANK: 'tank', HEALING: 'healer', DPS: 'dps' };
 
@@ -35,7 +47,9 @@ async function fetchCharacterProfile(region, realm, name) {
   if (!res.ok) throw new Error(`Raider.IO character fetch failed for ${name}-${realm}: ${res.status} ${res.statusText}`);
   const data = await res.json();
   return {
+    key: charKey(name, realm),
     name: data.name,
+    realm,
     class: data.class,
     spec: data.active_spec_name,
     role: ROLE_MAP[data.active_spec_role] ?? 'dps',
@@ -47,7 +61,7 @@ async function fetchCharacterProfile(region, realm, name) {
 /**
  * @param {{ name: string, realm: string, region: string }} guild — guild.region is used for every character; guild.realm is only the default/fallback
  * @param {Array<{ name: string, realm?: string }>} characters — the raid team's roster (from wowaudit), NOT the full guild
- * @returns {Promise<Array<{ name, class, spec, role, rioCurrent, rioHighestThisSeason, ilvlEquipped, ilvlHighestThisSeason }>>}
+ * @returns {Promise<Array<{ key, name, realm, class, spec, role, rioCurrent, rioHighestThisSeason, ilvlEquipped, ilvlHighestThisSeason }>>} keyed by charKey(name, realm) via the `key` field -- see the comment on charKey for why bare name isn't safe to join on
  */
 async function fetchRaiderIO(guild, characters) {
   const withScores = await Promise.all(characters.map((c) => fetchCharacterProfile(guild.region, c.realm || guild.realm, c.name)));
@@ -56,9 +70,9 @@ async function fetchRaiderIO(guild, characters) {
 
   return withScores.map((m) => ({
     ...m,
-    rioHighestThisSeason: highs[m.name]?.rioHighestThisSeason ?? m.rioCurrent,
-    ilvlHighestThisSeason: highs[m.name]?.ilvlHighestThisSeason ?? m.ilvlEquipped,
+    rioHighestThisSeason: highs[m.key]?.rioHighestThisSeason ?? m.rioCurrent,
+    ilvlHighestThisSeason: highs[m.key]?.ilvlHighestThisSeason ?? m.ilvlEquipped,
   }));
 }
 
-module.exports = { fetchRaiderIO, fetchCharacterProfile, slugifyRealm };
+module.exports = { fetchRaiderIO, fetchCharacterProfile, slugifyRealm, charKey };

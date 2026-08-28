@@ -2,22 +2,33 @@
 // completion) + Warcraft Logs (perf/deaths/trend) into the app's Raider[] shape
 // (see src/scoring/types.ts).
 
+const { charKey } = require('./raiderio.cjs');
+
 function mergeSources({ wowauditRoster, rio, gearCompletion, wcl }) {
+  // rio is a list, keyed for lookup by charKey(name, realm) -- NOT bare name, since
+  // two different real people can share a character name on different realms (the
+  // "Dunbarke" incident). gearCompletion already comes in as a Record keyed the
+  // same way (see bnet.cjs).
+  const rioByKey = new Map(rio.map((r) => [r.key, r]));
+
   return wowauditRoster
     .filter((member) => {
-      const rioData = rio.find((r) => r.name === member.name);
-      if (!rioData) {
-        console.warn(`[merge] No Raider.IO data found for ${member.name} — omitting from this fetch.`);
+      const key = charKey(member.name, member.realm);
+      if (!rioByKey.has(key)) {
+        console.warn(`[merge] No Raider.IO data found for ${member.name} (${member.realm}) — omitting from this fetch.`);
         return false;
       }
       if (!wcl[member.name]) {
-        // Already warned in warcraftlogs.cjs — this is the same "no logged history yet" case.
+        // Already warned in warcraftlogs.cjs (no logged history yet) or
+        // fetchRoster.cjs (a name-collision exclusion) — either way, this member
+        // just doesn't get WCL-derived stats this fetch.
         return false;
       }
       return true;
     })
     .map((member) => {
-      const rioData = rio.find((r) => r.name === member.name);
+      const key = charKey(member.name, member.realm);
+      const rioData = rioByKey.get(key);
       const wclData = wcl[member.name];
 
       return {
@@ -44,7 +55,7 @@ function mergeSources({ wowauditRoster, rio, gearCompletion, wcl }) {
         rioHighestThisSeason: rioData.rioHighestThisSeason,
         ilvlEquipped: rioData.ilvlEquipped,
         ilvlHighestThisSeason: rioData.ilvlHighestThisSeason,
-        gearCompletion: gearCompletion[member.name] ?? 0,
+        gearCompletion: gearCompletion[key] ?? 0,
         perf: wclData.perf,
         parseTrend: wclData.parseTrend,
         deaths: wclData.deaths,

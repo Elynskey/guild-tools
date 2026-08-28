@@ -46,7 +46,30 @@ async function fetchRoster() {
   try {
     const wowauditRoster = await fetchWowauditRoster();
     const characters = wowauditRoster.map((m) => ({ name: m.name, realm: m.realm }));
-    const roleByName = Object.fromEntries(wowauditRoster.map((m) => [m.name, m.role]));
+
+    // Two different real people can share a character name across realms
+    // (confirmed live this session -- the "Dunbarke" incident: wowaudit had the
+    // wrong realm for one of them). RIO and Blizzard gear data are safe either way
+    // -- merge.cjs looks those up by charKey(name, realm), realm and all. WCL is
+    // the one source that can't be safely disambiguated here: its tables identify
+    // players by bare character name with no realm on every row, so if two roster
+    // members share a name, there's no reliable way to say which of WCL's rows
+    // belongs to which real person. Rather than guess, exclude colliding names from
+    // roleByName entirely -- fetchWarcraftLogs only computes performance for names
+    // it's given a role for, so both members simply come back with no WCL data and
+    // get omitted from the live roster by the existing "no performance data" path
+    // in merge.cjs, same as a genuinely unlogged recruit. Safe-but-missing beats
+    // silently-wrong.
+    const nameCounts = new Map();
+    for (const m of wowauditRoster) nameCounts.set(m.name, (nameCounts.get(m.name) ?? 0) + 1);
+    const collidingNames = new Set([...nameCounts].filter(([, count]) => count > 1).map(([name]) => name));
+    if (collidingNames.size > 0) {
+      console.warn(
+        `[roster] ${collidingNames.size} character name(s) shared by multiple wowaudit roster entries -- excluding from Warcraft Logs performance (can't safely disambiguate by name alone):`,
+        [...collidingNames],
+      );
+    }
+    const roleByName = Object.fromEntries(wowauditRoster.filter((m) => !collidingNames.has(m.name)).map((m) => [m.name, m.role]));
 
     const [rio, gearCompletion, wcl] = await Promise.all([
       fetchRaiderIO(guild, characters),

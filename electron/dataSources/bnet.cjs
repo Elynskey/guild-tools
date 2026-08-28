@@ -8,7 +8,7 @@
 // same caveat as Warcraft Logs' table/rankings JSON.
 
 const { getClientCredentialsToken } = require('./oauth.cjs');
-const { slugifyRealm } = require('./raiderio.cjs');
+const { slugifyRealm, charKey } = require('./raiderio.cjs');
 
 const TOKEN_URL = 'https://oauth.battle.net/token';
 
@@ -71,13 +71,17 @@ function computeGearCompletion(equipmentData) {
 /**
  * @param {{ name: string, realm: string, region: string }} guild — guild.realm is only the fallback
  * @param {Array<{ name: string, realm?: string }>} characters
- * @returns {Promise<Record<string, number>>} name -> gearCompletion (0-100)
+ * @returns {Promise<Record<string, number>>} charKey(name, realm) -> gearCompletion (0-100) -- keyed by realm-aware
+ *   composite key, not bare name, for the same reason raiderio.cjs's charKey exists: two different real people can
+ *   share a character name on different realms, and a bare-name key would silently overwrite one's gear score with
+ *   the other's.
  */
 async function fetchGearCompletion(guild, characters) {
   const entries = await Promise.all(
     characters.map(async (c) => {
-      const equipment = await fetchCharacterEquipment(guild.region, c.realm || guild.realm, c.name);
-      return [c.name, computeGearCompletion(equipment)];
+      const realm = c.realm || guild.realm;
+      const equipment = await fetchCharacterEquipment(guild.region, realm, c.name);
+      return [charKey(c.name, realm), computeGearCompletion(equipment)];
     }),
   );
   return Object.fromEntries(entries);

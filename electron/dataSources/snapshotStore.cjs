@@ -25,18 +25,23 @@ function save(store) {
 }
 
 /**
- * @param {{ name: string, rioCurrent: number, ilvlEquipped: number }[]} characters
+ * Keyed by charKey(name, realm) (see raiderio.cjs), not bare name -- two different
+ * real people sharing a character name on different realms would otherwise share
+ * (and corrupt) each other's season-high record. Existing installs upgrading from a
+ * bare-name-keyed store just start tracking fresh peaks under the new keys; that's a
+ * one-time reset of "highest seen so far," not a data-loss concern.
+ * @param {{ key: string, rioCurrent: number, ilvlEquipped: number }[]} characters
  * @returns {Record<string, { rioHighestThisSeason: number, ilvlHighestThisSeason: number }>}
  */
 function updateSeasonHighs(characters) {
   const store = load();
   const result = {};
   for (const c of characters) {
-    const prev = store[c.name] ?? { rioHighestThisSeason: c.rioCurrent, ilvlHighestThisSeason: c.ilvlEquipped };
+    const prev = store[c.key] ?? { rioHighestThisSeason: c.rioCurrent, ilvlHighestThisSeason: c.ilvlEquipped };
     const rioHighestThisSeason = Math.max(prev.rioHighestThisSeason, c.rioCurrent);
     const ilvlHighestThisSeason = Math.max(prev.ilvlHighestThisSeason, c.ilvlEquipped);
-    store[c.name] = { rioHighestThisSeason, ilvlHighestThisSeason };
-    result[c.name] = { rioHighestThisSeason, ilvlHighestThisSeason };
+    store[c.key] = { rioHighestThisSeason, ilvlHighestThisSeason };
+    result[c.key] = { rioHighestThisSeason, ilvlHighestThisSeason };
   }
   save(store);
   return result;
