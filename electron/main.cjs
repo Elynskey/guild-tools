@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, shell, clipboard } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, clipboard, dialog } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 
@@ -24,6 +24,7 @@ const { checkForUpdate } = require('./dataSources/updateCheck.cjs');
 const { listCraftRequests, addCraftRequest, toggleCraftRequestFulfilled, removeCraftRequest } = require('./dataSources/fetchCraftRequests.cjs');
 const { signIn: bnetSignIn } = require('./dataSources/bnetAuth.cjs');
 const { signIn: discordSignIn } = require('./dataSources/discordAuth.cjs');
+const { getLootRecords, getWowPathConfig, setWowPath, installAddon } = require('./dataSources/lootLog.cjs');
 
 // Sign-in state lives in memory only, reset every app launch by design -- a raider
 // signs in once per session rather than the app persisting a long-lived token to disk.
@@ -65,6 +66,26 @@ ipcMain.handle('craftRequests:list', async () => listCraftRequests());
 ipcMain.handle('craftRequests:add', async (_event, requester, profession, description) => addCraftRequest(requester, profession, description));
 ipcMain.handle('craftRequests:toggleFulfilled', async (_event, id) => toggleCraftRequestFulfilled(id));
 ipcMain.handle('craftRequests:remove', async (_event, id) => removeCraftRequest(id));
+ipcMain.handle('lootLog:get', async () => getLootRecords());
+ipcMain.handle('lootLog:getWowPath', async () => getWowPathConfig());
+ipcMain.handle('lootLog:setWowPath', async (_event, wowPath) => {
+  setWowPath(wowPath);
+  return getWowPathConfig();
+});
+ipcMain.handle('lootLog:pickFolder', async () => {
+  const win = BrowserWindow.getFocusedWindow();
+  const result = await dialog.showOpenDialog(win, { properties: ['openDirectory'], title: 'Select your World of Warcraft folder (the one containing "_retail_")' });
+  if (result.canceled || result.filePaths.length === 0) return null;
+  return result.filePaths[0];
+});
+ipcMain.handle('lootLog:installAddon', async () => {
+  try {
+    const dest = installAddon();
+    return { ok: true, dest };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+});
 
 function createWindow() {
   const win = new BrowserWindow({

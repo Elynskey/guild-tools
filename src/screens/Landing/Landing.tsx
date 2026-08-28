@@ -28,6 +28,12 @@ const CARDS: NavCardDef[] = [
     title: 'Pull Feedback',
     description: 'Any past raid night, pull by pull — wipe or kill, deaths, and mechanics that need the most work.',
   },
+  {
+    to: '/loot-history',
+    icon: 'gem',
+    title: 'Loot History',
+    description: 'Who won what on Need rolls, which boss it dropped from, and where it ended up if it got traded.',
+  },
 ];
 
 interface LandingProps {

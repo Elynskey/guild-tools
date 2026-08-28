@@ -1,0 +1,8 @@
+## Interface: 120100
+## Title: Guild Tools Loot
+## Notes: Logs Need-roll loot wins (and item trades you're part of) for Casual Raid Days' Guild Tools desktop app. Installed/updated automatically from Guild Tools -- edits here get overwritten on the next update.
+## Author: Casual Raid Days
+## Version: 1.0
+## SavedVariables: GuildToolsLootDB
+
+GuildToolsLoot.lua

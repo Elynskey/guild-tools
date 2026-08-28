@@ -3,6 +3,7 @@ import { Landing } from './screens/Landing/Landing';
 import { RaiderStatus } from './screens/RaiderStatus/RaiderStatus';
 import { Professions } from './screens/Professions/Professions';
 import { PullFeedback } from './screens/PullFeedback/PullFeedback';
+import { LootHistory } from './screens/LootHistory/LootHistory';
 import { UpdateBanner } from './shared/UpdateBanner';
 import { VersionTag } from './shared/VersionTag';
 import { LoginScreen } from './shared/LoginScreen';
@@ -28,6 +29,7 @@ export function App() {
         <Route path="/raider-status" element={<RaiderStatus />} />
         <Route path="/professions" element={<Professions />} />
         <Route path="/pull-feedback" element={<PullFeedback />} />
+        <Route path="/loot-history" element={<LootHistory />} />
       </Routes>
     </HashRouter>
   );
