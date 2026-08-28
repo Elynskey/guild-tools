@@ -1,6 +1,6 @@
 import { SAMPLE_ROSTER } from './sampleRoster';
 import type { Raider } from '../scoring/types';
-import type { RealmMismatch } from '../electron';
+import type { NightSnapshotEntry, RealmMismatch } from '../electron';
 
 export interface RosterResult {
   raiders: Raider[];
@@ -30,4 +30,15 @@ export async function getRoster(): Promise<RosterResult> {
     if (live) return { raiders: live.raiders, fetchedAt: live.fetchedAt, heroicBossesKilled: live.heroicBossesKilled, source: 'live', realmMismatches: live.realmMismatches };
   }
   return { raiders: SAMPLE_ROSTER, fetchedAt: new Date().toISOString(), heroicBossesKilled: null, source: 'sample', realmMismatches: [] };
+}
+
+/**
+ * Night-window stats for one specific past raid night, picked from the "pick a log"
+ * selector instead of always defaulting to the most recent. Returns null in sample
+ * mode (and on any fetch failure) -- the caller keeps each raider's existing
+ * nightParse/nightDeaths/etc rather than showing a broken partial merge.
+ */
+export async function getNightSnapshot(code: string): Promise<Record<string, NightSnapshotEntry> | null> {
+  if (window.electronAPI) return window.electronAPI.getNightSnapshot(code);
+  return null;
 }

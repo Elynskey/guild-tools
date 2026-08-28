@@ -35,7 +35,7 @@ export function OverallPerformanceDialog({ raider: r, onClose, rioGateText, ilvl
       open
       onClose={onClose}
       width={560}
-      eyebrow={r.window === 'night' ? 'Friday Night Only' : 'Rolled-Up · Tier-to-Date'}
+      eyebrow={r.window === 'night' ? 'Selected Raid Night' : 'Season Overview · Tier-to-Date'}
       title={
         <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           {r.name}

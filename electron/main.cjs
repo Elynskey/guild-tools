@@ -19,6 +19,7 @@ const { fetchRoster } = require('./dataSources/fetchRoster.cjs');
 const { fetchProfessions, getCachedProfessions } = require('./dataSources/fetchProfessions.cjs');
 const { fetchRecipeCatalogue, getCachedRecipeCatalogue } = require('./dataSources/fetchRecipeCatalogue.cjs');
 const { fetchRaidNightsList, fetchPullFeedback } = require('./dataSources/fetchPullFeedback.cjs');
+const { fetchNightSnapshotForCode } = require('./dataSources/fetchNightSnapshot.cjs');
 const { checkForUpdate } = require('./dataSources/updateCheck.cjs');
 
 ipcMain.handle('roster:fetch', async () => fetchRoster());
@@ -28,6 +29,7 @@ ipcMain.handle('recipeCatalogue:getCached', async () => getCachedRecipeCatalogue
 ipcMain.handle('recipeCatalogue:fetch', async () => fetchRecipeCatalogue());
 ipcMain.handle('raidNights:list', async () => fetchRaidNightsList());
 ipcMain.handle('pullFeedback:fetch', async (_event, code) => fetchPullFeedback(code));
+ipcMain.handle('nightSnapshot:fetch', async (_event, code) => fetchNightSnapshotForCode(code));
 ipcMain.handle('update:check', async () => checkForUpdate(app.getVersion()));
 ipcMain.handle('update:openReleasePage', async (_event, url) => {
   if (typeof url === 'string' && url.startsWith('https://github.com/')) shell.openExternal(url);

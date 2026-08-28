@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { config, freshnessCopy } from '../../config';
-import { getRoster } from '../../data/rosterSource';
+import { getNightSnapshot, getRoster } from '../../data/rosterSource';
+import { listRaidNights } from '../../raid/pullsSource';
 import { ROLE_SECTIONS, rosterSummary, scoreRaider, sortBestFirst, sortWorstFirst } from '../../scoring/scoring';
 import { buildDeathMechanicsReport } from '../../scoring/deathMechanics';
 import type { Band, Raider, Role, ScoredRaider, Window } from '../../scoring/types';
-import type { RealmMismatch } from '../../electron';
+import type { NightSnapshotEntry, RaidNight, RealmMismatch } from '../../electron';
 import { TILE_COLOR } from './bandVisuals';
 
 export interface DisplayRaider extends ScoredRaider {
@@ -75,6 +76,34 @@ export function useRaiderStatus() {
   const [, forceTick] = useState(0);
   const [state, setState] = useState<State>({ window: null, role: 'all', band: 'all', query: '', sortWorst: true, open: null });
 
+  // "Pick a log" for the night window instead of always the most recent report.
+  // selectedNightCode stays null (meaning "use the roster's own baked-in night
+  // fields, i.e. the latest report -- no extra fetch") until it's explicitly set to
+  // something other than the latest night in the list.
+  const [nights, setNights] = useState<RaidNight[]>([]);
+  const [selectedNightCode, setSelectedNightCode] = useState<string | null>(null);
+  const [nightSnapshot, setNightSnapshot] = useState<Record<string, NightSnapshotEntry> | null>(null);
+  const [loadingNightSnapshot, setLoadingNightSnapshot] = useState(false);
+
+  useEffect(() => {
+    listRaidNights().then(setNights).catch(() => {});
+  }, []);
+
+  const latestNightCode = nights[0]?.code ?? null;
+
+  useEffect(() => {
+    if (!selectedNightCode || selectedNightCode === latestNightCode) {
+      setNightSnapshot(null); // the roster's own night fields are already the latest report -- no fetch needed
+      return;
+    }
+    let cancelled = false;
+    setLoadingNightSnapshot(true);
+    getNightSnapshot(selectedNightCode)
+      .then((snapshot) => { if (!cancelled) setNightSnapshot(snapshot); })
+      .finally(() => { if (!cancelled) setLoadingNightSnapshot(false); });
+    return () => { cancelled = true; };
+  }, [selectedNightCode, latestNightCode]);
+
   const isFetchingRef = useRef(false);
   const load = useCallback((isRefresh: boolean) => {
     if (isFetchingRef.current) return Promise.resolve(); // auto-refresh timer firing mid-fetch (e.g. a slow WCL pull) -- skip, don't stack requests
@@ -114,7 +143,19 @@ export function useRaiderStatus() {
 
   const win: Window = state.window ?? config.defaultWindow;
 
-  const all = useMemo<ScoredRaider[]>(() => (roster ? roster.map((r) => scoreRaider(r, win, config.gates)) : []), [roster, win]);
+  // A picked-log snapshot only overrides the night* fields -- tier-to-date fields
+  // (perf, deaths, pulls, deathCauses) stay whatever the roster fetch computed,
+  // since "Season Overview" always means the same thing regardless of which log
+  // is selected for the night view.
+  const rosterForWindow = useMemo(() => {
+    if (win !== 'night' || !nightSnapshot || !roster) return roster;
+    return roster.map((r) => (nightSnapshot[r.name] ? { ...r, ...nightSnapshot[r.name] } : r));
+  }, [roster, win, nightSnapshot]);
+
+  const all = useMemo<ScoredRaider[]>(
+    () => (rosterForWindow ? rosterForWindow.map((r) => scoreRaider(r, win, config.gates)) : []),
+    [rosterForWindow, win],
+  );
 
   const summary = useMemo(() => rosterSummary(all, win), [all, win]);
   const deathMechanics = useMemo(() => buildDeathMechanicsReport(all), [all]);
@@ -174,8 +215,8 @@ export function useRaiderStatus() {
   );
 
   const windowTabs = [
-    { value: 'rolled', label: 'Rolled-up' },
-    { value: 'night', label: 'Last raid night' },
+    { value: 'rolled', label: 'Season Overview' },
+    { value: 'night', label: 'Raid Night' },
   ];
 
   const heroicKilled = meta?.heroicBossesKilled ?? config.tier.sampleModeKilled;
@@ -188,6 +229,10 @@ export function useRaiderStatus() {
     window: win,
     setWindow: (v: string) => setState((s) => ({ ...s, window: v as Window, open: null })),
     windowTabs,
+    nights,
+    selectedNightCode: selectedNightCode ?? latestNightCode,
+    setSelectedNightCode: (code: string) => { setSelectedNightCode(code); setState((s) => ({ ...s, open: null })); },
+    loadingNightSnapshot,
     role: state.role,
     setRole: (v: string) => setState((s) => ({ ...s, role: v as Role | 'all', open: null })),
     roleTabs,
@@ -202,7 +247,7 @@ export function useRaiderStatus() {
     empty: groups.length === 0,
     open: state.open,
     toggleRow: (name: string) => setState((s) => ({ ...s, open: s.open === name ? null : name })),
-    trendHeader: win === 'night' ? 'Last night' : 'Trend',
+    trendHeader: win === 'night' ? 'That Night' : 'Trend',
     avgLine: summary.headline,
     guildWell: summary.goingWell,
     guildStop: summary.stoppingUs,

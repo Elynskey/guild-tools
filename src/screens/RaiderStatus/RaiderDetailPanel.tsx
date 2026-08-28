@@ -12,9 +12,9 @@ interface RaiderDetailPanelProps {
 
 export function RaiderDetailPanel({ raider: r, rioGateText, ilvlGateText }: RaiderDetailPanelProps) {
   const [showFull, setShowFull] = useState(false);
-  const feedbackTitle = r.window === 'night' ? 'Friday Night Only' : 'Rolled-Up · Tier-to-Date';
+  const feedbackTitle = r.window === 'night' ? 'Selected Raid Night' : 'Season Overview · Tier-to-Date';
   const provenance =
-    r.window === 'night' ? 'Tonight’s Warcraft Logs pull only. One night, not a verdict.' : 'Warcraft Logs tier-to-date · wowaudit gear snapshot · Raider.IO';
+    r.window === 'night' ? 'That raid night’s Warcraft Logs pull only. One night, not a verdict.' : 'Warcraft Logs tier-to-date · wowaudit gear snapshot · Raider.IO';
 
   // Full death history for this window, grouped by boss + ability with counts --
   // the feedback prose above only ever cites the single most recent cause.

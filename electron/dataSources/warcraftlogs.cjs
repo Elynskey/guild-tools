@@ -261,6 +261,38 @@ const MIN_DPS_ROLE = 'dps';
 // history for the window, not just their most recent cause.
 const DEATH_CAUSE_CAP = 60;
 
+// Extracted so both fetchWarcraftLogs (tier-to-date + latest night) and
+// fetchNightSnapshot (an officer picking an arbitrary past night) share the exact
+// same "which formula does this raider's perf use" logic instead of drifting apart.
+function perfSnapshotFor(name, agg, roleByName, minDps) {
+  // Prefer the role they actually played in THIS report (WCL's own rankings data)
+  // over wowaudit's static roster role -- confirmed live to drift (an off-spec
+  // fill-in night: wowaudit still said "dps", WCL showed them tanking every kill).
+  const role = agg.actualIdentity.get(name)?.role ?? roleByName[name];
+  if (role === MIN_DPS_ROLE) {
+    const dps = agg.dps.get(name);
+    return dps == null ? null : Math.round((dps / minDps) * 100);
+  }
+  const rp = agg.rankPercent.get(name);
+  return rp == null ? null : Math.round(rp);
+}
+
+/** The "night" shape (parse/deaths/pulls/deathCauses) for every raider present in one report. */
+function nightFieldsFromAggregate(agg, roleByName, minDps) {
+  const result = {};
+  for (const name of Object.keys(roleByName)) {
+    const val = perfSnapshotFor(name, agg, roleByName, minDps);
+    if (val == null) continue;
+    result[name] = {
+      nightParse: val,
+      nightDeaths: agg.deaths.get(name) ?? 0,
+      nightPulls: agg.pullCount,
+      nightDeathCauses: (agg.deathCauses.get(name) ?? []).slice(0, DEATH_CAUSE_CAP),
+    };
+  }
+  return result;
+}
+
 /**
  * @param {{ name: string, realm: string, region: string }} guild
  * @param {string} tierZoneName — only reports in this raid tier count (config.tier.name)
@@ -278,19 +310,7 @@ async function fetchWarcraftLogs(guild, tierZoneName, roleByName) {
 
   const aggregates = await Promise.all(tierReports.map((r) => fetchReportAggregate(r.code)));
 
-  const perfSnapshot = (name, agg) => {
-    // Prefer the role they actually played in THIS report (WCL's own rankings data)
-    // over wowaudit's static roster role -- confirmed live to drift (an off-spec
-    // fill-in night: wowaudit still said "dps", WCL showed them tanking every kill).
-    // wowaudit's role only fills in when WCL has no rankings entry for them at all.
-    const role = agg.actualIdentity.get(name)?.role ?? roleByName[name];
-    if (role === MIN_DPS_ROLE) {
-      const dps = agg.dps.get(name);
-      return dps == null ? null : Math.round((dps / minDps) * 100);
-    }
-    const rp = agg.rankPercent.get(name);
-    return rp == null ? null : Math.round(rp);
-  };
+  const perfSnapshot = (name, agg) => perfSnapshotFor(name, agg, roleByName, minDps);
 
   // Same "trust what WCL actually saw" preference as perfSnapshot, but resolved once
   // per raider (not per report) since this feeds the roster's Tank/Healer/Damage
@@ -357,17 +377,13 @@ async function fetchWarcraftLogs(guild, tierZoneName, roleByName) {
     };
   }
 
-  // nightParse/nightDeaths/nightPulls/nightDeathCauses should reflect only the MOST
-  // RECENT report, not tier-to-date figures.
+  // nightParse/nightDeaths/nightPulls/nightDeathCauses default to the MOST RECENT
+  // report, not tier-to-date figures -- an officer can override this to any past
+  // night via fetchNightSnapshot (see fetchRoster.cjs merging that in on top).
   const lastAgg = aggregates[aggregates.length - 1];
+  const lastNightFields = nightFieldsFromAggregate(lastAgg, roleByName, minDps);
   for (const name of names) {
-    const nightVal = perfSnapshot(name, lastAgg);
-    if (nightVal != null) {
-      result[name].nightParse = nightVal;
-      result[name].nightDeaths = lastAgg.deaths.get(name) ?? 0;
-      result[name].nightPulls = lastAgg.pullCount;
-      result[name].nightDeathCauses = (lastAgg.deathCauses.get(name) ?? []).slice(0, DEATH_CAUSE_CAP);
-    }
+    if (lastNightFields[name]) Object.assign(result[name], lastNightFields[name]);
   }
 
   const heroicBossesKilled = new Set(aggregates.flatMap((agg) => agg.heroicKillEncounterIds)).size;
@@ -490,4 +506,21 @@ async function fetchPullBreakdown(code, roleByName) {
   return { pulls };
 }
 
-module.exports = { fetchWarcraftLogs, fetchGuildReports, fetchFights, fetchReportAggregate, fetchRaidNights, fetchPullBreakdown };
+/**
+ * Night-window stats (parse/deaths/pulls/deathCauses) for one specific past raid
+ * night, picked by an officer instead of always defaulting to the most recent --
+ * the Raider Status "Season Overview" / pick-a-log window selector. Reuses the same
+ * perf formula and 60-cause cap as the tier-wide pipeline, just scoped to one report.
+ *
+ * @param {string} code — a Warcraft Logs report code (from fetchRaidNights)
+ * @param {Record<string,'tank'|'healer'|'dps'>} roleByName
+ * @returns {Promise<Record<string, { nightParse: number, nightDeaths: number, nightPulls: number, nightDeathCauses: {boss:string,ability:string}[] }>>}
+ */
+async function fetchNightSnapshot(code, roleByName) {
+  const minDps = Number(process.env.MIN_DPS_REQUIREMENT ?? 0);
+  if (!minDps) throw new Error('MIN_DPS_REQUIREMENT is not set in .env');
+  const agg = await fetchReportAggregate(code);
+  return nightFieldsFromAggregate(agg, roleByName, minDps);
+}
+
+module.exports = { fetchWarcraftLogs, fetchGuildReports, fetchFights, fetchReportAggregate, fetchRaidNights, fetchPullBreakdown, fetchNightSnapshot };

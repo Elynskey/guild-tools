@@ -26,7 +26,15 @@ export function RaiderStatus() {
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--surface-page)', fontFamily: 'var(--font-ui)', color: 'var(--text-body)', paddingBottom: 80 }}>
-      <SiteHeader windowTabs={rs.windowTabs} windowValue={rs.window} setWindow={rs.setWindow} progressionFraction={rs.progressionFraction} />
+      <SiteHeader
+        windowTabs={rs.windowTabs}
+        windowValue={rs.window}
+        setWindow={rs.setWindow}
+        progressionFraction={rs.progressionFraction}
+        nights={rs.nights}
+        selectedNightCode={rs.selectedNightCode}
+        setSelectedNightCode={rs.setSelectedNightCode}
+      />
 
       <div style={{ maxWidth: 1160, margin: '0 auto', padding: 32 }}>
         <RealmMismatchBanner mismatches={rs.realmMismatches} />

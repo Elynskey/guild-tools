@@ -1,4 +1,4 @@
-import type { Raider } from './scoring/types';
+import type { DeathCause, Raider } from './scoring/types';
 import type { MemberProfessions, RecipeCatalogue } from './professions/types';
 
 export interface RealmMismatch {
@@ -75,6 +75,13 @@ export interface PullFeedbackResult {
   pulls: Pull[];
 }
 
+export interface NightSnapshotEntry {
+  nightParse: number;
+  nightDeaths: number;
+  nightPulls: number;
+  nightDeathCauses: DeathCause[];
+}
+
 export interface ElectronAPI {
   getRoster: () => Promise<LiveRosterResult | null>;
   getProfessions: () => Promise<LiveProfessionsResult | null>;
@@ -87,6 +94,7 @@ export interface ElectronAPI {
   copyToClipboard: (text: string) => Promise<void>;
   listRaidNights: () => Promise<RaidNight[] | null>;
   getPullFeedback: (code: string) => Promise<PullFeedbackResult | null>;
+  getNightSnapshot: (code: string) => Promise<Record<string, NightSnapshotEntry> | null>;
 }
 
 declare global {

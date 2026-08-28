@@ -18,4 +18,5 @@ contextBridge.exposeInMainWorld('electronAPI', {
   copyToClipboard: (text) => ipcRenderer.invoke('clipboard:write', text),
   listRaidNights: () => ipcRenderer.invoke('raidNights:list'),
   getPullFeedback: (code) => ipcRenderer.invoke('pullFeedback:fetch', code),
+  getNightSnapshot: (code) => ipcRenderer.invoke('nightSnapshot:fetch', code),
 });

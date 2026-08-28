@@ -1,16 +1,25 @@
 import { Link } from 'react-router-dom';
 import { Crest } from '../../design-system/Crest';
 import { Tabs, type TabDef } from '../../design-system/Tabs';
+import { Select } from '../../design-system/Select';
 import { config } from '../../config';
+import type { RaidNight } from '../../electron';
 
 interface SiteHeaderProps {
   windowTabs: TabDef[];
   windowValue: string;
   setWindow: (v: string) => void;
   progressionFraction: string;
+  nights: RaidNight[];
+  selectedNightCode: string | null;
+  setSelectedNightCode: (code: string) => void;
 }
 
-export function SiteHeader({ windowTabs, windowValue, setWindow, progressionFraction }: SiteHeaderProps) {
+function formatNightLabel(date: string): string {
+  return new Date(date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+export function SiteHeader({ windowTabs, windowValue, setWindow, progressionFraction, nights, selectedNightCode, setSelectedNightCode }: SiteHeaderProps) {
   return (
     <header
       style={{
@@ -59,6 +68,14 @@ export function SiteHeader({ windowTabs, windowValue, setWindow, progressionFrac
             </div>
           </div>
           <Tabs tabs={windowTabs} value={windowValue} onChange={setWindow} />
+          {windowValue === 'night' && nights.length > 0 && (
+            <Select
+              aria-label="Raid night"
+              value={selectedNightCode ?? ''}
+              onChange={(e) => setSelectedNightCode(e.target.value)}
+              options={nights.map((n) => ({ value: n.code, label: formatNightLabel(n.date) }))}
+            />
+          )}
         </div>
       </div>
     </header>

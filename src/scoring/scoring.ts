@@ -7,6 +7,7 @@
  */
 
 import { specIcon } from './specIcons';
+import { getRotationTip } from './rotationReference';
 import type { Band, DeathCause, Feedback, GateEvaluation, Gates, Raider, RoleSection, RosterSummary, ScoreDimension, ScoreParts, ScoredRaider, Window } from './types';
 
 export const DEFAULT_GATES: Gates = {
@@ -298,7 +299,7 @@ export function generateFeedback(r: Raider, window: Window, gates: Gates, derive
           ? pick([`${causeText} -- review that mechanic with an officer before Saturday.`, `Walk ${topCause!.boss} back and isolate ${topCause!.ability}. One rep, this week.`])
           : pick([`Survivability only this week. The damage is already there.`, `One mechanic, one pull, with an officer before Saturday. Nothing else.`])
         : {
-            perf: pick([`One boss, one log read with an officer. Not the whole night.`, `Pick the fight where it falls off and watch it back with Shortie.`]),
+            perf: getRotationTip(r.class, r.spec) ?? pick([`One boss, one log read with an officer. Not the whole night.`, `Pick the fight where it falls off and watch it back with Shortie.`]),
             gear: pick([`Gems and enchants before Saturday's Heroic. Twenty minutes.`, `Fill the empty slots this week -- cheapest point on the board.`]),
             trend: pick([`Same boss two weeks running, same officer watching.`, `Worth a quick word with Officer Vadailla on Friday.`]),
           }[weak.k],

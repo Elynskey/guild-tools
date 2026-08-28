@@ -12,7 +12,7 @@ const PERF_HEADER_TIP: Record<string, string> = {
 
 const TREND_HEADER_TIP: Record<string, string> = {
   Trend: "Slope of this metric across the whole tier -- rising, flat, or slipping. Flat scores the midpoint; each point of slope shifts the trend score by 6.",
-  'Last night': 'This metric from the most recent raid night only, not the tier-to-date average.',
+  'That Night': 'This metric from the selected raid night only, not the tier-to-date average.',
 };
 
 function HeaderTip({ label, tip }: { label: string; tip: string }) {
