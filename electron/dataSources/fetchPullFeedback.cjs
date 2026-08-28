@@ -1,5 +1,6 @@
 const { fetchWowauditRoster } = require('./wowaudit.cjs');
 const { fetchRaidNights, fetchPullBreakdown } = require('./warcraftlogs.cjs');
+const proxyClient = require('./proxyClient.cjs');
 
 // Same required env as fetchRoster.cjs's live pipeline, minus the pieces (Raider.IO,
 // Blizzard gear) this feature doesn't touch -- it's Warcraft Logs + wowaudit's role
@@ -12,6 +13,15 @@ function isConfigured() {
 
 /** @returns {Promise<{ code: string, date: string }[] | null>} null if unconfigured or the fetch fails -- renderer falls back to sample nights. */
 async function fetchRaidNightsList() {
+  if (proxyClient.isAvailable()) {
+    try {
+      return await proxyClient.fetchRaidNightsList();
+    } catch (err) {
+      console.error('[pullFeedback] Proxy failed to list raid nights:', err);
+      return null;
+    }
+  }
+
   if (!isConfigured()) return null;
   try {
     const guild = { name: process.env.GUILD_NAME, realm: process.env.GUILD_REALM, region: process.env.GUILD_REGION };
@@ -24,7 +34,18 @@ async function fetchRaidNightsList() {
 
 /** @returns {Promise<{ pulls: object[] } | null>} null if unconfigured or the fetch fails -- renderer falls back to sample pulls. */
 async function fetchPullFeedback(code) {
-  if (!isConfigured() || typeof code !== 'string') return null;
+  if (typeof code !== 'string') return null;
+
+  if (proxyClient.isAvailable()) {
+    try {
+      return await proxyClient.fetchPullFeedback(code);
+    } catch (err) {
+      console.error('[pullFeedback] Proxy failed to fetch pull breakdown:', err);
+      return null;
+    }
+  }
+
+  if (!isConfigured()) return null;
   try {
     const wowauditRoster = await fetchWowauditRoster();
     const roleByName = Object.fromEntries(wowauditRoster.map((m) => [m.name, m.role]));

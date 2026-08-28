@@ -1,5 +1,6 @@
 const { fetchRecipeCatalogue: fetchFromBlizzard } = require('./recipeCatalogue.cjs');
 const cache = require('./recipeCatalogueCache.cjs');
+const proxyClient = require('./proxyClient.cjs');
 
 const REQUIRED_ENV = ['GUILD_REGION', 'BNET_CLIENT_ID', 'BNET_CLIENT_SECRET'];
 
@@ -9,6 +10,7 @@ function isConfigured() {
 
 /** @returns {{ catalogue: object, fetchedAt: string } | null} */
 function getCachedRecipeCatalogue() {
+  if (proxyClient.isAvailable()) return proxyClient.getCachedRecipeCatalogue();
   return cache.load();
 }
 
@@ -18,6 +20,15 @@ function getCachedRecipeCatalogue() {
  * @returns {Promise<{ catalogue: object, fetchedAt: string } | null>}
  */
 async function fetchRecipeCatalogue() {
+  if (proxyClient.isAvailable()) {
+    try {
+      return await proxyClient.fetchRecipeCatalogue();
+    } catch (err) {
+      console.error('[recipeCatalogue] Proxy fetch failed:', err);
+      return proxyClient.getCachedRecipeCatalogue().catch(() => null);
+    }
+  }
+
   const cached = cache.load();
   if (!cache.isStale(cached)) return cached;
 

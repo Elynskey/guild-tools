@@ -1,7 +1,7 @@
 {
   "name": "raider-status",
   "private": true,
-  "version": "0.4.2",
+  "version": "0.5.0",
   "type": "module",
   "main": "electron/main.cjs",
   "scripts": {
@@ -13,7 +13,8 @@
     "electron:dev": "node electron/dev.mjs",
     "electron:start": "npm run build && electron .",
     "icons:build": "node scripts/build-icons.mjs",
-    "dist:win": "npm run icons:build && npm run build && electron-builder --win"
+    "proxy-config": "node scripts/inject-proxy-config.mjs",
+    "dist:win": "npm run icons:build && npm run proxy-config && npm run build && electron-builder --win"
   },
   "dependencies": {
     "dotenv": "^17.4.2",
@@ -63,7 +64,8 @@
       "oneClick": false,
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
-      "artifactName": "Guild-Tools-Setup-${version}.${ext}"
+      "artifactName": "Guild-Tools-Setup-${version}.${ext}",
+      "include": "build-resources/installer.nsh"
     }
   }
 }

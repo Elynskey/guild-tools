@@ -2,16 +2,25 @@
 // client-credentials flow (app-to-app, no human involved -- used for the Game Data
 // API calls elsewhere in this pipeline). This is the standard desktop-app OAuth
 // pattern (RFC 8252): open the system browser to Blizzard's real login page, catch
-// the redirect on a short-lived local HTTP listener, exchange the code for a token
-// server-side, done. No password ever touches this app.
+// the redirect on a short-lived local HTTP listener, done. No password ever touches
+// this app. That local-listener half stays identical in every build -- the browser
+// and the redirect are always on the signed-in person's own machine.
 //
-// Requires the SAME Battle.net API client (BNET_CLIENT_ID/SECRET) to have this
-// exact redirect URI registered at develop.battle.net -- that's a manual step only
-// the account owner can do, this code can't register it for them.
+// The code -> token EXCHANGE (the one step that needs BNET_CLIENT_SECRET) branches:
+// packaged installs have no real BNET_CLIENT_SECRET of their own, so they hand the
+// code to the API proxy's /auth/exchange instead, which holds the secret server-side
+// (see resolveUser() below). Local dev (no PROXY_BASE_URL set) still exchanges
+// directly with Blizzard using the local .env's BNET_CLIENT_SECRET, unchanged.
+//
+// Requires the SAME Battle.net API client (BNET_CLIENT_ID/SECRET, wherever they now
+// live) to have this exact redirect URI registered at develop.battle.net -- that's a
+// manual step only the account owner can do, this code can't register it for them.
 
 const http = require('node:http');
 const crypto = require('node:crypto');
 const { shell } = require('electron');
+const { getProxyConfig } = require('./proxyConfig.cjs');
+const proxyClient = require('./proxyClient.cjs');
 
 const REDIRECT_PORT = 53135;
 const REDIRECT_URI = `http://localhost:${REDIRECT_PORT}/callback`;
@@ -21,6 +30,27 @@ const USERINFO_URL = 'https://oauth.battle.net/userinfo';
 
 const SIGN_IN_TIMEOUT_MS = 5 * 60 * 1000;
 
+/** Exchanges an authorization code for the signed-in user's identity. @returns {Promise<{battletag: string, id: number}>} */
+async function resolveUser(code) {
+  if (proxyClient.isAvailable()) return proxyClient.exchangeAuthCode(code);
+
+  const tokenRes = await fetch(TOKEN_URL, {
+    method: 'POST',
+    headers: {
+      Authorization: `Basic ${Buffer.from(`${process.env.BNET_CLIENT_ID}:${process.env.BNET_CLIENT_SECRET}`).toString('base64')}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: new URLSearchParams({ grant_type: 'authorization_code', code, redirect_uri: REDIRECT_URI }).toString(),
+  });
+  if (!tokenRes.ok) throw new Error(`Battle.net token exchange failed: ${tokenRes.status} ${tokenRes.statusText}`);
+  const tokenData = await tokenRes.json();
+
+  const userRes = await fetch(USERINFO_URL, { headers: { Authorization: `Bearer ${tokenData.access_token}` } });
+  if (!userRes.ok) throw new Error(`Battle.net userinfo fetch failed: ${userRes.status} ${userRes.statusText}`);
+  const user = await userRes.json();
+  return { battletag: user.battletag, id: user.id };
+}
+
 function page(title, body) {
   return `<!doctype html><html><body style="font-family:system-ui,sans-serif;background:#12100c;color:#cfc9bb;text-align:center;padding-top:80px">` +
     `<h2 style="color:#f6efdd">${title}</h2><p>${body}</p></body></html>`;
@@ -28,8 +58,12 @@ function page(title, body) {
 
 /** @returns {Promise<{ battletag: string, id: number }>} */
 function signIn() {
-  if (!process.env.BNET_CLIENT_ID || !process.env.BNET_CLIENT_SECRET) {
-    return Promise.reject(new Error('Battle.net isn\'t configured (BNET_CLIENT_ID/BNET_CLIENT_SECRET missing).'));
+  const { bnetClientId } = getProxyConfig();
+  if (!bnetClientId) {
+    return Promise.reject(new Error('Battle.net isn\'t configured (BNET_CLIENT_ID missing).'));
+  }
+  if (!proxyClient.isAvailable() && !process.env.BNET_CLIENT_SECRET) {
+    return Promise.reject(new Error('Battle.net isn\'t configured (BNET_CLIENT_SECRET missing).'));
   }
 
   return new Promise((resolve, reject) => {
@@ -77,24 +111,11 @@ function signIn() {
       }
 
       const code = url.searchParams.get('code');
-      const tokenRes = await fetch(TOKEN_URL, {
-        method: 'POST',
-        headers: {
-          Authorization: `Basic ${Buffer.from(`${process.env.BNET_CLIENT_ID}:${process.env.BNET_CLIENT_SECRET}`).toString('base64')}`,
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: new URLSearchParams({ grant_type: 'authorization_code', code, redirect_uri: REDIRECT_URI }).toString(),
-      });
-      if (!tokenRes.ok) throw new Error(`Battle.net token exchange failed: ${tokenRes.status} ${tokenRes.statusText}`);
-      const tokenData = await tokenRes.json();
-
-      const userRes = await fetch(USERINFO_URL, { headers: { Authorization: `Bearer ${tokenData.access_token}` } });
-      if (!userRes.ok) throw new Error(`Battle.net userinfo fetch failed: ${userRes.status} ${userRes.statusText}`);
-      const user = await userRes.json();
+      const user = await resolveUser(code);
 
       res.writeHead(200, { 'Content-Type': 'text/html' });
       res.end(page(`Signed in as ${user.battletag}`, 'You can close this tab and return to Guild Tools.'));
-      finish(() => resolve({ battletag: user.battletag, id: user.id }));
+      finish(() => resolve(user));
     }
 
     function finish(action) {
@@ -111,7 +132,7 @@ function signIn() {
 
     server.listen(REDIRECT_PORT, () => {
       const authorizeUrl = `${AUTHORIZE_URL}?${new URLSearchParams({
-        client_id: process.env.BNET_CLIENT_ID,
+        client_id: bnetClientId,
         scope: 'openid',
         state,
         redirect_uri: REDIRECT_URI,

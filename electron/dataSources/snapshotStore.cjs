@@ -1,6 +1,6 @@
 const fs = require('node:fs');
 const path = require('node:path');
-const { app } = require('electron');
+const { resolveDataDir } = require('./dataDir.cjs');
 
 // Raider.IO's API doesn't track a season's high-water-mark for M+ score or item
 // level — it only ever reflects the latest crawl (confirmed against their live
@@ -9,7 +9,7 @@ const { app } = require('electron');
 // local JSON file in Electron's userData dir (survives restarts, never committed).
 
 function storePath() {
-  return path.join(app.getPath('userData'), 'roster-snapshots.json');
+  return path.join(resolveDataDir(), 'roster-snapshots.json');
 }
 
 function load() {

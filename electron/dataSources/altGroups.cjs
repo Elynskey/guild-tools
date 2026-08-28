@@ -11,10 +11,10 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { app } = require('electron');
+const { resolveDataDir } = require('./dataDir.cjs');
 
 function resolveFilePath() {
-  const userDataPath = path.join(app.getPath('userData'), 'alt-groups.json');
+  const userDataPath = path.join(resolveDataDir(), 'alt-groups.json');
   if (fs.existsSync(userDataPath)) return userDataPath;
   return path.join(__dirname, '..', '..', 'alt-groups.json');
 }

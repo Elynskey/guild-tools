@@ -1,6 +1,6 @@
 const fs = require('node:fs');
 const path = require('node:path');
-const { app } = require('electron');
+const { resolveDataDir } = require('./dataDir.cjs');
 
 // A full professions scan is ~2000 Battle.net requests across the whole guild
 // roster (hundreds of members) -- multiple minutes even with retries succeeding.
@@ -9,7 +9,7 @@ const { app } = require('electron');
 // refresh button (or an empty cache) is what actually re-scans live.
 
 function storePath() {
-  return path.join(app.getPath('userData'), 'professions-cache.json');
+  return path.join(resolveDataDir(), 'professions-cache.json');
 }
 
 function load() {

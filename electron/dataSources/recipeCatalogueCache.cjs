@@ -1,6 +1,6 @@
 const fs = require('node:fs');
 const path = require('node:path');
-const { app } = require('electron');
+const { resolveDataDir } = require('./dataDir.cjs');
 
 // Recipe existence barely changes outside an expansion patch, and a full catalogue pull is
 // ~150+ Blizzard requests (11 professions x several skill tiers each, two calls per tier) --
@@ -9,7 +9,7 @@ const { app } = require('electron');
 const TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 function storePath() {
-  return path.join(app.getPath('userData'), 'recipe-catalogue-cache.json');
+  return path.join(resolveDataDir(), 'recipe-catalogue-cache.json');
 }
 
 /** @returns {{ catalogue: object, fetchedAt: string } | null} */

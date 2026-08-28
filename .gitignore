@@ -5,6 +5,7 @@ release/
 .env
 .env.*
 !.env.example
+electron/dataSources/proxyConfig.generated.cjs
 *.log
 .claude/
 *.tsbuildinfo

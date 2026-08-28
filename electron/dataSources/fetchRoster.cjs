@@ -4,6 +4,7 @@ const { fetchWowauditRoster } = require('./wowaudit.cjs');
 const { fetchGearCompletion } = require('./bnet.cjs');
 const { mergeSources } = require('./merge.cjs');
 const { findRealmMismatches } = require('./realmCheck.cjs');
+const proxyClient = require('./proxyClient.cjs');
 
 // WOWAUDIT_TEAM_ID is deliberately not required — wowaudit.cjs reads the team ID
 // straight from /v1/team using just the API key, so it's optional (a sanity-check
@@ -35,6 +36,19 @@ function isConfigured() {
  * @returns {Promise<{ raiders: object[], fetchedAt: string, heroicBossesKilled: number, realmMismatches: Array<{name: string, wowauditRealm: string, observedRealms: string[]}> } | null>}
  */
 async function fetchRoster() {
+  // Packaged installs ship with no real API keys of their own -- they carry
+  // PROXY_BASE_URL/PROXY_API_KEY instead and go through the hosted proxy, which holds
+  // the real keys server-side. Local dev (npm run electron:dev, no PROXY_BASE_URL set)
+  // keeps using the direct-fetch path below unchanged.
+  if (proxyClient.isAvailable()) {
+    try {
+      return await proxyClient.fetchRoster();
+    } catch (err) {
+      console.error('[roster] Proxy fetch failed, falling back to sample data:', err);
+      return null;
+    }
+  }
+
   if (!isConfigured()) {
     const missing = REQUIRED_ENV.filter((key) => !process.env[key]);
     console.log(`[roster] Not fully configured, using sample data. Missing: ${missing.join(', ')}`);

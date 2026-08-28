@@ -1,5 +1,6 @@
 const { fetchActiveMembersWithProfessions } = require('./professions.cjs');
 const cache = require('./professionsCache.cjs');
+const proxyClient = require('./proxyClient.cjs');
 
 const REQUIRED_ENV = ['GUILD_NAME', 'GUILD_REALM', 'GUILD_REGION', 'BNET_CLIENT_ID', 'BNET_CLIENT_SECRET'];
 
@@ -11,6 +12,7 @@ function isConfigured() {
  * @returns {{ members: object[], fetchedAt: string } | null}
  */
 function getCachedProfessions() {
+  if (proxyClient.isAvailable()) return proxyClient.getCachedProfessions();
   return cache.load();
 }
 
@@ -19,6 +21,15 @@ function getCachedProfessions() {
  * @returns {Promise<{ members: object[], fetchedAt: string } | null>}
  */
 async function fetchProfessions(onProgress) {
+  if (proxyClient.isAvailable()) {
+    try {
+      return await proxyClient.fetchProfessions(onProgress);
+    } catch (err) {
+      console.error('[professions] Proxy fetch failed:', err);
+      return proxyClient.getCachedProfessions().catch(() => null);
+    }
+  }
+
   if (!isConfigured()) {
     const missing = REQUIRED_ENV.filter((key) => !process.env[key]);
     console.log(`[professions] Not fully configured, using sample data. Missing: ${missing.join(', ')}`);
