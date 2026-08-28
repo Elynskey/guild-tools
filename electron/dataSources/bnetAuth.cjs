@@ -75,7 +75,15 @@ async function resolveUser(code) {
   if (!tokenRes.ok) throw new Error(`Battle.net token exchange failed: ${tokenRes.status} ${tokenRes.statusText}`);
   const tokenData = await tokenRes.json();
 
-  await assertGuildMembership(tokenData.access_token);
+  // LOG-ONLY for now: profile/user/wow 403'd for real accounts in production (see the
+  // prompt:'consent' fix above and the matching note in the proxy's authExchange.cjs)
+  // -- never blocks sign-in until a real login confirms the fix actually works.
+  try {
+    await assertGuildMembership(tokenData.access_token);
+    console.log('[bnetAuth] Guild membership check: PASSED (not enforced yet).');
+  } catch (err) {
+    console.warn('[bnetAuth] Guild membership check FAILED (not enforced yet):', err.message);
+  }
 
   const userRes = await fetch(USERINFO_URL, { headers: { Authorization: `Bearer ${tokenData.access_token}` } });
   if (!userRes.ok) throw new Error(`Battle.net userinfo fetch failed: ${userRes.status} ${userRes.statusText}`);
@@ -169,6 +177,14 @@ function signIn() {
         state,
         redirect_uri: REDIRECT_URI,
         response_type: 'code',
+        // Forces a fresh consent screen -- without it, Battle.net can silently reuse
+        // an EARLIER, narrower consent grant (this app originally only requested
+        // 'openid') instead of actually granting the newly-added 'wow.profile' scope,
+        // which is what caused profile/user/wow to 403 in production even though the
+        // token exchange itself succeeded. Confirmed pattern from Blizzard's own
+        // developer forums (see the plan notes for the reasoning), not yet verified
+        // live -- that verification is why assertGuildMembership runs log-only for now.
+        prompt: 'consent',
       })}`;
       shell.openExternal(authorizeUrl);
     });
