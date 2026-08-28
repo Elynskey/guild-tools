@@ -21,13 +21,24 @@ function metricLabel(raider: PullRaider): string {
   return '';
 }
 
+// Same tone hexes as Badge.tsx's gold/info tones -- a quick role glance in the dense throughput grid.
+const ROLE_LETTER: Record<string, string> = { tank: 'T', healer: 'H', dps: 'D' };
+const ROLE_COLOR: Record<string, string> = { tank: 'var(--gold-300)', healer: '#7fb0d8', dps: 'var(--text-faint)' };
+
 function PullDetail({ pull }: { pull: Pull }) {
   return (
     <div style={{ background: 'var(--surface-raised)', borderTop: '1px solid var(--border-hairline)', boxShadow: 'var(--inset-well)', padding: '14px 20px' }}>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '4px 16px', marginBottom: pull.deaths.length || pull.mechanicMisses.length ? 12 : 0 }}>
         {pull.raiders.map((r) => (
           <div key={r.name} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 'var(--text-body-s)' }}>
-            <span style={{ color: 'var(--text-body)' }}>{r.name}</span>
+            <span style={{ color: 'var(--text-body)' }}>
+              {r.role && (
+                <span style={{ display: 'inline-block', width: 14, fontFamily: 'var(--font-mono)', fontSize: 'var(--text-micro)', color: ROLE_COLOR[r.role] }}>
+                  {ROLE_LETTER[r.role]}
+                </span>
+              )}
+              {r.name}
+            </span>
             <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>
               {formatMetric(r)} <span style={{ color: 'var(--text-faint)', fontSize: 'var(--text-micro)' }}>{metricLabel(r)}</span>
             </span>
@@ -80,6 +91,9 @@ export function PullLog({ groups }: PullLogProps) {
 
   return (
     <div>
+      <p style={{ margin: '0 0 20px', fontSize: 'var(--text-body-s)', color: 'var(--text-muted)', maxWidth: 640 }}>
+        Every attempt on each boss below, in order — a red edge means it was a wipe, green means the kill. Click any pull for the full breakdown.
+      </p>
       {groups.map((group) => {
         const kills = group.pulls.filter((p) => p.kill).length;
         return (
@@ -98,7 +112,10 @@ export function PullLog({ groups }: PullLogProps) {
               {group.pulls.map((pull) => {
                 const isOpen = open === pull.fightId;
                 return (
-                  <div key={pull.fightId}>
+                  <div
+                    key={pull.fightId}
+                    style={{ borderLeft: `3px solid ${pull.kill ? 'var(--status-success)' : 'var(--status-danger)'}`, background: pull.kill ? 'rgba(95,158,74,.05)' : 'rgba(168,50,50,.05)' }}
+                  >
                     <div
                       onClick={() => setOpen(isOpen ? null : pull.fightId)}
                       style={{

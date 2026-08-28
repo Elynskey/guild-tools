@@ -46,10 +46,24 @@ export function MechanicsSummary({ groups }: MechanicsSummaryProps) {
 
   return (
     <div className="crd-card" style={{ padding: 0, overflow: 'hidden', marginBottom: 32 }}>
-      <div style={{ padding: '10px 18px', background: 'var(--grad-header)', borderBottom: '1px solid var(--border-hairline)' }}>
-        <span className="crd-eyebrow" style={{ color: 'var(--text-gold)' }}>
+      <div style={{ padding: '16px 24px', background: 'var(--grad-header)', borderBottom: '1px solid var(--border-hairline)' }}>
+        <div className="crd-eyebrow" style={{ color: 'var(--text-gold)', marginBottom: 6 }}>
           Needs the most work
-        </span>
+        </div>
+        <div style={{ fontSize: 'var(--text-body-s)', lineHeight: 1.5, color: 'var(--text-muted)', maxWidth: 640 }}>
+          Worst first. A death weighs more than a near-miss — and only counts once a pull ends in a{' '}
+          <b style={{ color: 'var(--text-body)' }}>kill</b>; a wipe's deaths are just how the attempt ended, not a sign nobody can dodge it.
+        </div>
+        <div style={{ display: 'flex', gap: 20, marginTop: 12 }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 'var(--text-micro)', color: 'var(--text-muted)' }}>
+            <Icon name="skull" size={13} color="var(--accent-crimson)" />
+            Died to it — ended the pull
+          </span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 'var(--text-micro)', color: 'var(--text-muted)' }}>
+            <Icon name="alert-triangle" size={13} color="var(--accent-ember)" />
+            Hit, survived — still worth fixing
+          </span>
+        </div>
       </div>
       {groups.length === 0 ? (
         <div style={{ padding: '24px 18px', textAlign: 'center', color: 'var(--status-success)', fontSize: 'var(--text-body-s)' }}>
@@ -60,7 +74,7 @@ export function MechanicsSummary({ groups }: MechanicsSummaryProps) {
           <div key={g.boss}>
             <div
               style={{
-                padding: '7px 18px',
+                padding: '9px 24px',
                 background: 'var(--surface-sunken)',
                 borderBottom: '1px solid var(--border-hairline)',
                 fontFamily: 'var(--font-display)',
@@ -79,32 +93,40 @@ export function MechanicsSummary({ groups }: MechanicsSummaryProps) {
                 <div
                   key={m.ability}
                   onClick={() => setExpandedKey(expanded ? null : key)}
-                  style={{ padding: '10px 18px', borderBottom: '1px solid var(--border-hairline)', cursor: 'pointer' }}
+                  style={{ padding: '16px 24px', borderBottom: '1px solid var(--border-hairline)', cursor: 'pointer' }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
-                    <Icon name="alert-triangle" size={13} color="var(--accent-ember)" />
-                    <span style={{ fontFamily: 'var(--font-display)', fontWeight: 600, letterSpacing: '.03em', fontSize: 'var(--text-title-s)', color: 'var(--text-strong)' }}>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 10 }}>
+                    <span style={{ fontFamily: 'var(--font-display)', fontWeight: 600, letterSpacing: '.03em', fontSize: 'var(--text-title-m)', color: 'var(--text-strong)' }}>
                       {m.ability}
                     </span>
                     <div style={{ flex: 1 }} />
-                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-body-s)', color: 'var(--accent-crimson)' }}>
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-body-s)', color: m.deathCount > 0 ? 'var(--accent-crimson)' : 'var(--accent-ember)' }}>
                       {m.deathCount > 0 && `${m.deathCount} death${m.deathCount === 1 ? '' : 's'}`}
                       {m.deathCount > 0 && m.missCount > 0 && ' · '}
                       {m.missCount > 0 && `${m.missCount} missed`}
                     </span>
                     <Icon name={expanded ? 'chevron-up' : 'chevron-down'} size={13} color="var(--text-faint)" />
                   </div>
-                  {m.what && <div style={{ marginTop: 3, fontSize: 'var(--text-body-s)', color: 'var(--text-body)' }}>{m.what}</div>}
-                  {m.fix && (
-                    <div style={{ marginTop: 2, fontSize: 'var(--text-body-s)', color: 'var(--text-gold)' }}>
-                      <span style={{ color: 'var(--text-muted)' }}>Fix — </span>
-                      {m.fix}
+                  {(m.what || m.fix) && (
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 14 }}>
+                      <div>
+                        <div style={{ fontSize: 'var(--text-micro)', letterSpacing: 'var(--tracking-label)', textTransform: 'uppercase', color: 'var(--text-faint)', marginBottom: 4 }}>
+                          What's happening
+                        </div>
+                        <div style={{ fontSize: 'var(--text-body-s)', color: 'var(--text-body)', lineHeight: 1.5 }}>{m.what}</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 'var(--text-micro)', letterSpacing: 'var(--tracking-label)', textTransform: 'uppercase', color: 'var(--text-faint)', marginBottom: 4 }}>
+                          How to fix it
+                        </div>
+                        <div style={{ fontSize: 'var(--text-body-s)', color: 'var(--text-gold)', lineHeight: 1.5 }}>{m.fix}</div>
+                      </div>
                     </div>
                   )}
                   {expanded ? (
                     <MechanicDrilldown occurrences={m.occurrences} />
                   ) : (
-                    <div style={{ marginTop: 4, fontSize: 'var(--text-micro)', color: 'var(--text-faint)' }}>
+                    <div style={{ fontSize: 'var(--text-micro)', color: 'var(--text-faint)' }}>
                       {m.raiders.map((r) => `${r.name}${r.count > 1 ? ` x${r.count}` : ''}`).join(', ')}
                     </div>
                   )}

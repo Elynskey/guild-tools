@@ -3,6 +3,9 @@ import { SiteHeader } from './SiteHeader';
 import { StatusRibbon } from './StatusRibbon';
 import { ControlBar } from './ControlBar';
 import { RoleSection } from './RoleSection';
+import { RosterTable } from './RosterTable';
+import { LedgerTable } from './LedgerTable';
+import { ScoreKey } from './ScoreKey';
 import { EmptyState } from './EmptyState';
 import { KillsStrip } from './KillsStrip';
 import { DeathMechanicsReport } from './DeathMechanicsReport';
@@ -63,9 +66,34 @@ export function RaiderStatus() {
           setSortWorst={rs.setSortWorst}
         />
 
-        {rs.groups.map((group) => (
-          <RoleSection key={group.key} group={group} trendHeader={rs.trendHeader} toggleRow={rs.toggleRow} rioGateText={rs.rioGateText} ilvlGateText={rs.ilvlGateText} />
-        ))}
+        {!rs.empty && (
+          <>
+            <div style={{ marginBottom: 6 }} className="crd-eyebrow">
+              Roster
+            </div>
+            <p style={{ margin: '0 0 20px', fontSize: 'var(--text-body-s)', color: 'var(--text-muted)', maxWidth: 640 }}>
+              Who's raiding this tier — class, spec, and gear completion.
+            </p>
+            {rs.groups.map((group) => (
+              <RoleSection key={group.key} group={group}>
+                <RosterTable rows={group.rows} />
+              </RoleSection>
+            ))}
+
+            <div style={{ marginBottom: 6 }} className="crd-eyebrow">
+              Performance
+            </div>
+            <p style={{ margin: '0 0 16px', fontSize: 'var(--text-body-s)', color: 'var(--text-muted)', maxWidth: 640 }}>
+              Same roster, same order — score, trend, and death rate, {rs.window === 'night' ? 'that raid night' : 'tier-to-date'}.
+            </p>
+            <ScoreKey />
+            {rs.groups.map((group) => (
+              <RoleSection key={group.key} group={group}>
+                <LedgerTable perfHeader={group.perfHeader} trendHeader={rs.trendHeader} rows={group.rows} toggleRow={rs.toggleRow} rioGateText={rs.rioGateText} ilvlGateText={rs.ilvlGateText} />
+              </RoleSection>
+            ))}
+          </>
+        )}
 
         {rs.empty && <EmptyState />}
 

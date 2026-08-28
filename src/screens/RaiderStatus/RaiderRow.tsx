@@ -1,7 +1,6 @@
 import { Icon } from '../../design-system/Icon';
 import { Badge } from '../../design-system/Badge';
 import { ordinal, DEATH_RATE_RED_THRESHOLD, DEATH_RATE_YELLOW_THRESHOLD } from '../../scoring/scoring';
-import { specIconFallback } from '../../scoring/specIcons';
 import type { DisplayRaider } from './useRaiderStatus';
 import { BADGE_TONE, ROW_COLOR } from './bandVisuals';
 import { LEDGER_GRID_TEMPLATE } from './LedgerTable';
@@ -22,8 +21,6 @@ export function RaiderRow({ raider: r, onToggle, rioGateText, ilvlGateText }: Ra
   // dps: perf/trend are %-of-the-guild's-minimum-DPS. healer/tank: percentile within role.
   const perfValue = dps ? `${r.perf}%` : ordinal(r.perf);
   const perfW = `${r.scoreParts.perfScore}%`;
-  const gearValue = `${r.gearCompletion}%`;
-  const gearColor = r.gearCompletion >= 95 ? 'var(--status-success)' : r.gearCompletion >= 80 ? 'var(--status-warning)' : 'var(--status-danger)';
   const trendValue = dps
     ? night
       ? `${r.nightParse}%`
@@ -64,36 +61,13 @@ export function RaiderRow({ raider: r, onToggle, rioGateText, ilvlGateText }: Ra
         }}
       >
         <div style={{ alignSelf: 'stretch', background: color }} />
-        <div style={{ padding: '9px 0', minWidth: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
-          <img
-            src={r.icon}
-            alt={`${r.spec} ${r.class}`}
-            title={`${r.spec} ${r.class}`}
-            onError={(e) => {
-              e.currentTarget.onerror = null;
-              e.currentTarget.src = specIconFallback;
-            }}
-            style={{ flex: 'none', width: 26, height: 26, border: '1px solid var(--border-hairline)', borderRadius: 2, boxShadow: 'var(--shadow-1)' }}
-          />
-          <div style={{ minWidth: 0 }}>
-            <div style={{ fontFamily: 'var(--font-display)', fontSize: 'var(--text-title-s)', fontWeight: 600, letterSpacing: '.04em', color: 'var(--text-strong)' }}>
-              {r.name}
-            </div>
-            <div style={{ marginTop: 1, fontSize: 'var(--text-micro)', color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {r.subline}
-            </div>
-          </div>
+        <div style={{ padding: '9px 0', minWidth: 0, fontFamily: 'var(--font-display)', fontSize: 'var(--text-title-s)', fontWeight: 600, letterSpacing: '.04em', color: 'var(--text-strong)' }}>
+          {r.name}
         </div>
         <div>
           <div style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-body-s)', color: 'var(--text-body)' }}>{perfValue}</div>
           <div style={{ marginTop: 4, height: 3, background: 'var(--surface-sunken)', overflow: 'hidden' }}>
             <div style={{ height: '100%', background: color, width: perfW }} />
-          </div>
-        </div>
-        <div>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-body-s)', color: 'var(--text-body)' }}>{gearValue}</div>
-          <div style={{ marginTop: 4, height: 3, background: 'var(--surface-sunken)', overflow: 'hidden' }}>
-            <div style={{ height: '100%', background: gearColor, width: gearValue }} />
           </div>
         </div>
         <div style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-body-s)', color: trendColor }}>{trendValue}</div>

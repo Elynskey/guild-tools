@@ -29,6 +29,10 @@ export function PullFeedback() {
           </div>
         ) : (
           <>
+            <p style={{ margin: '0 0 22px', maxWidth: 720, fontSize: 'var(--text-body-m)', lineHeight: 1.6, color: 'var(--text-body)' }}>
+              Every attempt from this raid night, wipe or kill — and what's worth practicing before the next one.{' '}
+              <span style={{ color: 'var(--text-muted)' }}>Ranked below by what's actually costing us pulls, then broken down attempt by attempt underneath.</span>
+            </p>
             <div className="crd-eyebrow" style={{ color: 'var(--text-gold)', marginBottom: 20 }}>
               {pf.totalPulls} pull{pf.totalPulls === 1 ? '' : 's'} · {pf.kills} kill{pf.kills === 1 ? '' : 's'}
               {pf.refreshing && ' · loading…'}

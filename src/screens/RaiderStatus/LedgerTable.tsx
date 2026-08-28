@@ -2,7 +2,7 @@ import { Tooltip } from '../../design-system/Tooltip';
 import type { DisplayRaider } from './useRaiderStatus';
 import { RaiderRow } from './RaiderRow';
 
-export const LEDGER_GRID_TEMPLATE = '3px minmax(160px,1fr) 92px 122px 78px 58px 62px 104px';
+export const LEDGER_GRID_TEMPLATE = '3px minmax(140px,1fr) 122px 78px 58px 62px 104px';
 
 const PERF_HEADER_TIP: Record<string, string> = {
   'Survivability percentile': "Where this tank's damage-taken ranks against the guild's other tanks on the same pulls -- not judged on damage output at all.",
@@ -53,9 +53,6 @@ export function LedgerTable({ perfHeader, trendHeader, rows, toggleRow, rioGateT
         <div className="crd-eyebrow">Raider</div>
         <div className="crd-eyebrow">
           <HeaderTip label={perfHeader} tip={PERF_HEADER_TIP[perfHeader] ?? perfHeader} />
-        </div>
-        <div className="crd-eyebrow">
-          <HeaderTip label="Gems & enchants" tip="Percentage of gem/enchant slots correct against this month's reference table -- 30% of the weighted score." />
         </div>
         <div className="crd-eyebrow">
           <HeaderTip label={trendHeader} tip={TREND_HEADER_TIP[trendHeader] ?? trendHeader} />
