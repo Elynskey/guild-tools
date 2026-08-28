@@ -24,7 +24,8 @@ const { checkForUpdate } = require('./dataSources/updateCheck.cjs');
 const { listCraftRequests, addCraftRequest, toggleCraftRequestFulfilled, removeCraftRequest } = require('./dataSources/fetchCraftRequests.cjs');
 const { signIn: bnetSignIn } = require('./dataSources/bnetAuth.cjs');
 const { signIn: discordSignIn } = require('./dataSources/discordAuth.cjs');
-const { getLootRecords, getWowPathConfig, setWowPath, installAddon } = require('./dataSources/lootLog.cjs');
+const { getWowPathConfig, setWowPath, installAddon } = require('./dataSources/lootLog.cjs');
+const { fetchLootLog } = require('./dataSources/fetchLootLog.cjs');
 
 // Sign-in state lives in memory only, reset every app launch by design -- a raider
 // signs in once per session rather than the app persisting a long-lived token to disk.
@@ -66,7 +67,7 @@ ipcMain.handle('craftRequests:list', async () => listCraftRequests());
 ipcMain.handle('craftRequests:add', async (_event, requester, profession, description) => addCraftRequest(requester, profession, description));
 ipcMain.handle('craftRequests:toggleFulfilled', async (_event, id) => toggleCraftRequestFulfilled(id));
 ipcMain.handle('craftRequests:remove', async (_event, id) => removeCraftRequest(id));
-ipcMain.handle('lootLog:get', async () => getLootRecords());
+ipcMain.handle('lootLog:get', async () => fetchLootLog());
 ipcMain.handle('lootLog:getWowPath', async () => getWowPathConfig());
 ipcMain.handle('lootLog:setWowPath', async (_event, wowPath) => {
   setWowPath(wowPath);

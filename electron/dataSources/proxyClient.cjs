@@ -136,6 +136,14 @@ async function removeCraftRequest(id) {
   return proxyFetchJson(`/craft-requests/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }
 
+async function getSharedLootRecords() {
+  return proxyFetchJson('/loot-records');
+}
+
+async function syncLootRecords(records, trades) {
+  return proxyFetchJson('/loot-records/sync', { method: 'POST', body: JSON.stringify({ records, trades }) });
+}
+
 module.exports = {
   isAvailable,
   fetchRoster,
@@ -152,4 +160,6 @@ module.exports = {
   addCraftRequest,
   toggleCraftRequestFulfilled,
   removeCraftRequest,
+  getSharedLootRecords,
+  syncLootRecords,
 };
