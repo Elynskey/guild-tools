@@ -17,9 +17,9 @@ async function addCraftRequest(requester, profession, description) {
   return store.add(requester, profession, description);
 }
 
-async function toggleCraftRequestFulfilled(id) {
-  if (proxyClient.isAvailable()) return proxyClient.toggleCraftRequestFulfilled(id);
-  return store.toggleFulfilled(id);
+async function fulfillCraftRequest(id, fulfilledBy) {
+  if (proxyClient.isAvailable()) return proxyClient.fulfillCraftRequest(id, fulfilledBy);
+  return store.fulfill(id, fulfilledBy);
 }
 
 async function removeCraftRequest(id) {
@@ -27,4 +27,4 @@ async function removeCraftRequest(id) {
   return store.remove(id);
 }
 
-module.exports = { listCraftRequests, addCraftRequest, toggleCraftRequestFulfilled, removeCraftRequest };
+module.exports = { listCraftRequests, addCraftRequest, fulfillCraftRequest, removeCraftRequest };

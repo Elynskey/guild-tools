@@ -100,9 +100,9 @@ describe('findNearMax / findStalled', () => {
 describe('buildRequestSummary', () => {
   const iso = (daysAgo: number) => new Date(Date.now() - daysAgo * 86_400_000).toISOString();
   const requests: CraftRequest[] = [
-    { id: '1', requester: 'A', profession: 'Alchemy', description: 'x', createdAt: iso(5), fulfilled: false },
-    { id: '2', requester: 'B', profession: 'Alchemy', description: 'y', createdAt: iso(1), fulfilled: false },
-    { id: '3', requester: 'C', profession: 'Tailoring', description: 'z', createdAt: iso(10), fulfilled: true },
+    { id: '1', requester: 'A', profession: 'Alchemy', description: 'x', createdAt: iso(5), fulfilled: false, fulfilledBy: null, discordMessageId: null },
+    { id: '2', requester: 'B', profession: 'Alchemy', description: 'y', createdAt: iso(1), fulfilled: false, fulfilledBy: null, discordMessageId: null },
+    { id: '3', requester: 'C', profession: 'Tailoring', description: 'z', createdAt: iso(10), fulfilled: true, fulfilledBy: 'C', discordMessageId: null },
   ];
 
   it('splits open vs fulfilled and finds the oldest open request in days', () => {

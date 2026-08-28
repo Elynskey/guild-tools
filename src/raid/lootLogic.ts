@@ -3,6 +3,8 @@ export interface RawLootRecord {
   itemLink: string;
   winner: string;
   boss: string | null;
+  /** Equip slot ("Head", "Trinket", ...), or "Other" for non-equippable. Optional -- records synced before this field existed won't have it. */
+  slot?: string;
   time: number; // unix seconds
 }
 
@@ -20,6 +22,8 @@ export interface LootEntry {
   /** The Need-roll winner, or (for a standalone unmatched trade) the trade's `from`. */
   winner: string;
   boss: string | null;
+  /** Null for records synced before this field existed, and for standalone trades (trades don't carry slot). */
+  slot: string | null;
   time: number;
   /** Set once a matching trade is found -- who the item ultimately went to. */
   tradedTo: string | null;
@@ -40,7 +44,7 @@ const TRADE_WINDOW_SECONDS = 2 * 60 * 60;
 /** Matches each trade to the loot record it followed (same item, same original winner as the trade's `from`, within the BoP trade window) -- an unmatched trade becomes its own standalone entry rather than being dropped. */
 export function annotateWithTrades(records: RawLootRecord[], trades: RawTradeRecord[]): LootEntry[] {
   const consumed = new Set<number>();
-  const entries: LootEntry[] = records.map((r) => ({ ...r, tradedTo: null, standaloneTrade: false }));
+  const entries: LootEntry[] = records.map((r) => ({ ...r, slot: r.slot ?? null, tradedTo: null, standaloneTrade: false }));
 
   for (const trade of trades) {
     const match = entries.find(
@@ -56,7 +60,7 @@ export function annotateWithTrades(records: RawLootRecord[], trades: RawTradeRec
       match.tradedTo = trade.to;
       consumed.add(entries.indexOf(match));
     } else {
-      entries.push({ itemId: trade.itemId, itemLink: trade.itemLink, winner: trade.from, boss: null, time: trade.time, tradedTo: trade.to, standaloneTrade: true });
+      entries.push({ itemId: trade.itemId, itemLink: trade.itemLink, winner: trade.from, boss: null, slot: null, time: trade.time, tradedTo: trade.to, standaloneTrade: true });
     }
   }
 

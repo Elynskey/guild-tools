@@ -44,6 +44,23 @@ describe('annotateWithTrades', () => {
   });
 });
 
+describe('slot', () => {
+  it('carries the slot through from the raw record', () => {
+    const entries = annotateWithTrades([record({ time: 1000, slot: 'Head' })], []);
+    expect(entries[0].slot).toBe('Head');
+  });
+
+  it('defaults to null for records synced before slot existed', () => {
+    const entries = annotateWithTrades([record({ time: 1000 })], []);
+    expect(entries[0].slot).toBeNull();
+  });
+
+  it('is null for a standalone trade -- trades never carry slot', () => {
+    const entries = annotateWithTrades([], [{ itemId: 9, itemLink: '[Item]', from: 'Harima', to: 'Thornwick', time: 2000 }]);
+    expect(entries[0].slot).toBeNull();
+  });
+});
+
 describe('groupLootByNight', () => {
   it('groups entries within a 6-hour window into one night', () => {
     const entries = annotateWithTrades(

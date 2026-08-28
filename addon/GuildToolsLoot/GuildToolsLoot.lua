@@ -81,13 +81,43 @@ local function itemIdFromLink(link)
   return tonumber(link:match("item:(%d+)"))
 end
 
+-- Blizzard's itemClassID for Recipe -- stable across expansions, the same value every
+-- other addon that reads it hardcodes (there's no client-exposed global that names it).
+local ITEM_CLASS_RECIPE = 9
+
+-- Toys and recipes ARE Need-rollable in Group Loot, but neither counts toward the
+-- guild's 2-win cap -- they're not gear. C_ToyBox.GetToyInfo is the documented way to
+-- ask "is this a toy" (returns the itemID back if it is, nil otherwise).
+local function isExcludedFromNeedTracking(itemId)
+  if not itemId then return false end
+  local _, _, _, _, _, itemClassID = GetItemInfoInstant(itemId)
+  if itemClassID == ITEM_CLASS_RECIPE then return true end
+  if C_ToyBox and C_ToyBox.GetToyInfo and C_ToyBox.GetToyInfo(itemId) then return true end
+  return false
+end
+
+-- itemEquipLoc is a token (e.g. "INVTYPE_HEAD"), not display text -- _G[token] resolves
+-- it to whatever the client's actual localized string is, same pattern
+-- patternFromGlobalString uses for chat-message matching. GetItemInfo can return nils on
+-- an item that isn't cached yet; by the time a loot roll's outcome reaches chat the
+-- client has almost always already cached it (its tooltip had to render), but this falls
+-- back rather than blocking if it hasn't.
+local function slotLabel(itemLink)
+  local _, _, _, _, _, _, _, _, itemEquipLoc = GetItemInfo(itemLink)
+  if not itemEquipLoc or itemEquipLoc == "" or itemEquipLoc == "INVTYPE_NON_EQUIP" then return "Other" end
+  return _G[itemEquipLoc] or "Other"
+end
+
 local function recordNeedWin(winnerName, itemLink)
   if not GuildToolsLootDB.enabled or not winnerName or not itemLink then return end
+  local itemId = itemIdFromLink(itemLink)
+  if isExcludedFromNeedTracking(itemId) then return end
   table.insert(GuildToolsLootDB.records, {
-    itemId = itemIdFromLink(itemLink),
+    itemId = itemId,
     itemLink = itemLink,
     winner = winnerName,
     boss = currentBoss,
+    slot = slotLabel(itemLink),
     time = time(),
   })
 end

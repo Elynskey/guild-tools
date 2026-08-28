@@ -30,17 +30,25 @@ function save(db) {
 const recordKey = (r) => `${r.itemId}::${r.winner}::${r.time}`;
 const tradeKey = (t) => `${t.itemId}::${t.from}::${t.to}::${t.time}`;
 
-/** Merges newly-submitted records/trades into the shared store, deduped, and returns the full merged store. */
+/**
+ * Merges newly-submitted records/trades into the shared store, deduped. Returns the full
+ * merged store plus which of the incoming records/trades were genuinely new (addedRecords/
+ * addedTrades) -- callers that want to announce new loot (e.g. the Discord posting route)
+ * need that distinction so multiple officers syncing the same raid night never double-post.
+ */
 function sync(newRecords, newTrades) {
   const db = load();
   const recordKeys = new Set(db.records.map(recordKey));
   const tradeKeys = new Set(db.trades.map(tradeKey));
+  const addedRecords = [];
+  const addedTrades = [];
 
   for (const r of newRecords ?? []) {
     const k = recordKey(r);
     if (!recordKeys.has(k)) {
       db.records.push(r);
       recordKeys.add(k);
+      addedRecords.push(r);
     }
   }
   for (const t of newTrades ?? []) {
@@ -48,11 +56,12 @@ function sync(newRecords, newTrades) {
     if (!tradeKeys.has(k)) {
       db.trades.push(t);
       tradeKeys.add(k);
+      addedTrades.push(t);
     }
   }
 
   save(db);
-  return db;
+  return { records: db.records, trades: db.trades, addedRecords, addedTrades };
 }
 
 module.exports = { load, sync };

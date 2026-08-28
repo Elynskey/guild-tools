@@ -128,12 +128,40 @@ async function addCraftRequest(requester, profession, description) {
   return proxyFetchJson('/craft-requests', { method: 'POST', body: JSON.stringify({ requester, profession, description }) });
 }
 
-async function toggleCraftRequestFulfilled(id) {
-  return proxyFetchJson(`/craft-requests/${encodeURIComponent(id)}/toggle`, { method: 'PATCH' });
+async function fulfillCraftRequest(id, fulfilledBy) {
+  return proxyFetchJson(`/craft-requests/${encodeURIComponent(id)}/toggle`, { method: 'PATCH', body: JSON.stringify({ fulfilledBy }) });
 }
 
 async function removeCraftRequest(id) {
   return proxyFetchJson(`/craft-requests/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+
+async function listRaidSignups() {
+  return proxyFetchJson('/raid-signups');
+}
+
+async function getRaidSignup(id) {
+  return proxyFetchJson(`/raid-signups/${encodeURIComponent(id)}`);
+}
+
+async function createRaidSignup(raidName, teamType, signupText) {
+  return proxyFetchJson('/raid-signups', { method: 'POST', body: JSON.stringify({ raidName, teamType, signupText }) });
+}
+
+async function setRaidSignupAssignments(id, assignments) {
+  return proxyFetchJson(`/raid-signups/${encodeURIComponent(id)}/assignments`, { method: 'PUT', body: JSON.stringify({ assignments }) });
+}
+
+async function finalizeRaidSignup(id) {
+  return proxyFetchJson(`/raid-signups/${encodeURIComponent(id)}/finalize`, { method: 'POST' });
+}
+
+async function getSettings() {
+  return proxyFetchJson('/settings');
+}
+
+async function saveSettings(settings) {
+  return proxyFetchJson('/settings', { method: 'PUT', body: JSON.stringify(settings) });
 }
 
 async function getSharedLootRecords() {
@@ -158,8 +186,15 @@ module.exports = {
   exchangeDiscordAuthCode,
   listCraftRequests,
   addCraftRequest,
-  toggleCraftRequestFulfilled,
+  fulfillCraftRequest,
   removeCraftRequest,
   getSharedLootRecords,
   syncLootRecords,
+  getSettings,
+  saveSettings,
+  listRaidSignups,
+  getRaidSignup,
+  createRaidSignup,
+  setRaidSignupAssignments,
+  finalizeRaidSignup,
 };

@@ -28,10 +28,11 @@ export function LootLogTable({ entries }: LootLogTableProps) {
 
   return (
     <div className="crd-card" style={{ padding: 0, overflow: 'hidden' }}>
-      <div style={{ display: 'grid', gridTemplateColumns: '90px 1fr 1.4fr 140px 130px', gap: 12, padding: '8px 20px', background: 'var(--grad-header)', borderBottom: '1px solid var(--border-hairline)' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '90px 1fr 1.4fr 110px 140px 130px', gap: 12, padding: '8px 20px', background: 'var(--grad-header)', borderBottom: '1px solid var(--border-hairline)' }}>
         <div className="crd-eyebrow">Time</div>
         <div className="crd-eyebrow">Boss</div>
         <div className="crd-eyebrow">Item</div>
+        <div className="crd-eyebrow">Slot</div>
         <div className="crd-eyebrow">Won by</div>
         <div className="crd-eyebrow">Traded to</div>
       </div>
@@ -40,7 +41,7 @@ export function LootLogTable({ entries }: LootLogTableProps) {
           key={i}
           style={{
             display: 'grid',
-            gridTemplateColumns: '90px 1fr 1.4fr 140px 130px',
+            gridTemplateColumns: '90px 1fr 1.4fr 110px 140px 130px',
             gap: 12,
             alignItems: 'center',
             padding: '10px 20px',
@@ -54,6 +55,7 @@ export function LootLogTable({ entries }: LootLogTableProps) {
             {e.boss ?? '—'}
           </div>
           <div style={{ fontSize: 'var(--text-body-s)', color: 'var(--text-strong)', fontWeight: 600 }}>{itemLabel(e.itemLink)}</div>
+          <div style={{ fontSize: 'var(--text-body-s)', color: 'var(--text-muted)' }}>{e.slot ?? '—'}</div>
           <div style={{ fontSize: 'var(--text-body-s)', color: 'var(--text-body)' }}>
             {e.standaloneTrade ? <span style={{ color: 'var(--text-faint)' }}>unknown</span> : e.winner}
           </div>

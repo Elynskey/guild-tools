@@ -46,19 +46,28 @@ export function useCraftRequests() {
         void electron.addCraftRequest(requester, profession, description).then(setRequests);
         return;
       }
-      const entry: CraftRequest = { id: crypto.randomUUID(), requester, profession, description, createdAt: new Date().toISOString(), fulfilled: false };
+      const entry: CraftRequest = {
+        id: crypto.randomUUID(),
+        requester,
+        profession,
+        description,
+        createdAt: new Date().toISOString(),
+        fulfilled: false,
+        fulfilledBy: null,
+        discordMessageId: null,
+      };
       setRequests((prev) => [entry, ...prev]);
     },
     [electron],
   );
 
-  const toggleFulfilled = useCallback(
-    (id: string) => {
+  const fulfillRequest = useCallback(
+    (id: string, fulfilledBy: string) => {
       if (electron) {
-        void electron.toggleCraftRequestFulfilled(id).then(setRequests);
+        void electron.fulfillCraftRequest(id, fulfilledBy).then(setRequests);
         return;
       }
-      setRequests((prev) => prev.map((r) => (r.id === id ? { ...r, fulfilled: !r.fulfilled } : r)));
+      setRequests((prev) => prev.map((r) => (r.id === id ? { ...r, fulfilled: !r.fulfilled, fulfilledBy: !r.fulfilled ? fulfilledBy : null } : r)));
     },
     [electron],
   );
@@ -74,5 +83,5 @@ export function useCraftRequests() {
     [electron],
   );
 
-  return { requests, addRequest, toggleFulfilled, removeRequest };
+  return { requests, addRequest, fulfillRequest, removeRequest };
 }

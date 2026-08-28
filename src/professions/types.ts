@@ -36,6 +36,8 @@ export interface CraftRequest {
   description: string;
   createdAt: string;
   fulfilled: boolean;
+  fulfilledBy: string | null;
+  discordMessageId: string | null;
 }
 
 /**

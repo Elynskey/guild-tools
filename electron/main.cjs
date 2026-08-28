@@ -21,12 +21,21 @@ const { fetchRecipeCatalogue, getCachedRecipeCatalogue } = require('./dataSource
 const { fetchRaidNightsList, fetchPullFeedback } = require('./dataSources/fetchPullFeedback.cjs');
 const { fetchNightSnapshotForCode } = require('./dataSources/fetchNightSnapshot.cjs');
 const { checkForUpdate } = require('./dataSources/updateCheck.cjs');
-const { listCraftRequests, addCraftRequest, toggleCraftRequestFulfilled, removeCraftRequest } = require('./dataSources/fetchCraftRequests.cjs');
+const { getProxyConfig } = require('./dataSources/proxyConfig.cjs');
+const { listCraftRequests, addCraftRequest, fulfillCraftRequest, removeCraftRequest } = require('./dataSources/fetchCraftRequests.cjs');
 const { signIn: bnetSignIn } = require('./dataSources/bnetAuth.cjs');
 const { signIn: discordSignIn } = require('./dataSources/discordAuth.cjs');
 const { loadSession, saveSession, clearSession } = require('./dataSources/authSession.cjs');
 const { getWowPathConfig, setWowPath, installAddon } = require('./dataSources/lootLog.cjs');
 const { fetchLootLog } = require('./dataSources/fetchLootLog.cjs');
+const { getSettings, saveSettings } = require('./dataSources/fetchSettings.cjs');
+const {
+  listRaidSignups,
+  getRaidSignup,
+  createRaidSignup,
+  setRaidSignupAssignments,
+  finalizeRaidSignup,
+} = require('./dataSources/fetchRaidSignups.cjs');
 
 // Sign-in state is remembered for 14 days (see authSession.cjs) so an officer isn't
 // re-proving guild membership through a browser every single launch -- restored here at
@@ -64,12 +73,47 @@ ipcMain.handle('update:check', async () => checkForUpdate(app.getVersion()));
 ipcMain.handle('update:openReleasePage', async (_event, url) => {
   if (typeof url === 'string' && url.startsWith('https://github.com/')) shell.openExternal(url);
 });
+
+// One-click update: the proxy holds the only credential (GITHUB_TOKEN) that can read a
+// release asset from this private repo, so the app asks it to fetch on its behalf rather
+// than talking to GitHub directly. Downloads the installer, launches it (shell.openPath
+// runs an .exe on Windows, prompting UAC same as double-clicking it), then quits so the
+// installer's overwrite of this app's own files doesn't conflict with it still running --
+// the same close-then-install sequence used for every manual release this session.
+ipcMain.handle('update:downloadAndInstall', async () => {
+  const { baseUrl, apiKey } = getProxyConfig();
+  if (!baseUrl || !apiKey) throw new Error('Update download requires the API proxy to be configured.');
+
+  const res = await fetch(`${baseUrl}/update/download`, { headers: { 'X-Proxy-Key': apiKey } });
+  if (!res.ok) throw new Error(`Update download failed: ${res.status} ${res.statusText}`);
+
+  const buffer = Buffer.from(await res.arrayBuffer());
+  const dest = path.join(app.getPath('temp'), 'Guild-Tools-Setup-latest.exe');
+  fs.writeFileSync(dest, buffer);
+
+  const openErr = await shell.openPath(dest);
+  if (openErr) throw new Error(`Could not launch the installer: ${openErr}`);
+
+  setTimeout(() => app.quit(), 800);
+  return { ok: true };
+});
+
+// Fixed to this app's own Discord application -- not user/client-supplied, so there's no
+// open-redirect concern in exposing it over IPC. Guild scope only (no applications.commands
+// -- this bot uses buttons on messages it posts, not slash commands); permissions=83968 is
+// Send Messages + Embed Links + Read Message History. Adding the bot to a server needs
+// "Manage Server," so this is usually something to hand to the GM rather than click here.
+const DISCORD_BOT_INVITE_URL = 'https://discord.com/api/oauth2/authorize?client_id=1543017047884304474&permissions=83968&scope=bot';
+ipcMain.handle('discordBot:getInviteUrl', async () => DISCORD_BOT_INVITE_URL);
+ipcMain.handle('discordBot:openInvite', async () => {
+  shell.openExternal(DISCORD_BOT_INVITE_URL);
+});
 ipcMain.handle('clipboard:write', async (_event, text) => {
   if (typeof text === 'string') clipboard.writeText(text);
 });
 ipcMain.handle('craftRequests:list', async () => listCraftRequests());
 ipcMain.handle('craftRequests:add', async (_event, requester, profession, description) => addCraftRequest(requester, profession, description));
-ipcMain.handle('craftRequests:toggleFulfilled', async (_event, id) => toggleCraftRequestFulfilled(id));
+ipcMain.handle('craftRequests:fulfill', async (_event, id, fulfilledBy) => fulfillCraftRequest(id, fulfilledBy));
 ipcMain.handle('craftRequests:remove', async (_event, id) => removeCraftRequest(id));
 ipcMain.handle('lootLog:get', async () => fetchLootLog());
 ipcMain.handle('lootLog:getWowPath', async () => getWowPathConfig());
@@ -83,6 +127,13 @@ ipcMain.handle('lootLog:pickFolder', async () => {
   if (result.canceled || result.filePaths.length === 0) return null;
   return result.filePaths[0];
 });
+ipcMain.handle('settings:get', async () => getSettings());
+ipcMain.handle('settings:save', async (_event, settings) => saveSettings(settings));
+ipcMain.handle('raidSignups:list', async () => listRaidSignups());
+ipcMain.handle('raidSignups:get', async (_event, id) => getRaidSignup(id));
+ipcMain.handle('raidSignups:create', async (_event, raidName, teamType, signupText) => createRaidSignup(raidName, teamType, signupText));
+ipcMain.handle('raidSignups:setAssignments', async (_event, id, assignments) => setRaidSignupAssignments(id, assignments));
+ipcMain.handle('raidSignups:finalize', async (_event, id) => finalizeRaidSignup(id));
 ipcMain.handle('lootLog:installAddon', async () => {
   try {
     const dest = installAddon();

@@ -40,6 +40,14 @@ export function LootHistory() {
       <LootHistoryHeader nights={lh.nights} selectedNightKey={lh.selectedNightKey} onSelect={lh.setSelectedNightKey} />
 
       <div style={{ maxWidth: 1160, margin: '0 auto', padding: 32 }}>
+        {lh.status === 'ok' && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20, fontSize: 'var(--text-micro)', color: 'var(--text-faint)' }}>
+            <Button variant="ghost" size="sm" onClick={lh.installAddon} disabled={lh.installing} iconLeft="download">
+              {lh.installing ? 'Updating…' : 'Update addon'}
+            </Button>
+            {lh.installMessage ? lh.installMessage : 'Re-copies the addon bundled in this build of Guild Tools -- run this after updating the app to pick up addon fixes.'}
+          </div>
+        )}
         {lh.status !== 'ok' ? (
           <SetupCard lh={lh} />
         ) : lh.empty ? (

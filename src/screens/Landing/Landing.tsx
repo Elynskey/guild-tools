@@ -34,6 +34,18 @@ const CARDS: NavCardDef[] = [
     title: 'Loot History',
     description: 'Who won what on Need rolls, which boss it dropped from, and where it ended up if it got traded.',
   },
+  {
+    to: '/raid-signups',
+    icon: 'users',
+    title: 'Raid Signups',
+    description: 'Post Heroic Progression and Alt Raid signups to Discord, assign primary/backup by hand.',
+  },
+  {
+    to: '/settings',
+    icon: 'settings',
+    title: 'Settings',
+    description: 'Discord channel IDs for craft-order, loot, and raid-signup posts.',
+  },
 ];
 
 interface LandingProps {
