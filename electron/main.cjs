@@ -22,15 +22,23 @@ const { fetchRaidNightsList, fetchPullFeedback } = require('./dataSources/fetchP
 const { fetchNightSnapshotForCode } = require('./dataSources/fetchNightSnapshot.cjs');
 const { checkForUpdate } = require('./dataSources/updateCheck.cjs');
 const { signIn: bnetSignIn } = require('./dataSources/bnetAuth.cjs');
+const { signIn: discordSignIn } = require('./dataSources/discordAuth.cjs');
 
-// Sign-in state lives in memory only, reset every app launch by design -- an
-// officer signs in once per session rather than the app persisting a long-lived
-// token to disk. Simpler and safer than managing token refresh/expiry for a login
-// gate whose only job is "prove you have a real Battle.net account."
+// Sign-in state lives in memory only, reset every app launch by design -- a raider
+// signs in once per session rather than the app persisting a long-lived token to disk.
+// Simpler and safer than managing token refresh/expiry for a login gate. Either
+// provider satisfies the gate; whichever was used last is what's stored -- Discord
+// additionally proves CRD Discord-server membership (see discordAuth.cjs), Battle.net
+// only proves account ownership (unchanged from its original scope).
 let authState = null;
 ipcMain.handle('auth:getState', async () => authState);
 ipcMain.handle('auth:signIn', async () => {
-  authState = await bnetSignIn();
+  const user = await bnetSignIn();
+  authState = { provider: 'battlenet', displayName: user.battletag, id: user.id };
+  return authState;
+});
+ipcMain.handle('auth:signInDiscord', async () => {
+  authState = await discordSignIn();
   return authState;
 });
 ipcMain.handle('auth:signOut', async () => {

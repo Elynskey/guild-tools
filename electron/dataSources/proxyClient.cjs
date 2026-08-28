@@ -81,8 +81,43 @@ async function fetchNightSnapshotForCode(code) {
   return proxyFetchJson(`/night-snapshot/${encodeURIComponent(code)}`);
 }
 
+// Not a plain proxyFetchJson call -- a 403 with {error:'not_a_member'} (none of the
+// account's characters are on the CRD roster) needs to reach the caller as a
+// distinguishable error, not the generic "request failed" text proxyFetch() throws on
+// any non-2xx status.
 async function exchangeAuthCode(code) {
-  return proxyFetchJson('/auth/exchange', { method: 'POST', body: JSON.stringify({ code }) });
+  const { baseUrl, apiKey } = getProxyConfig();
+  const res = await fetch(`${baseUrl}/auth/exchange`, {
+    method: 'POST',
+    headers: { 'X-Proxy-Key': apiKey, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code }),
+  });
+  const body = await res.json();
+  if (!res.ok) {
+    const err = new Error(body.error === 'not_a_member' ? 'None of your Battle.net account\'s characters are on the Casual Raid Days roster.' : `Proxy sign-in exchange failed: ${res.status} ${res.statusText}`);
+    if (body.error === 'not_a_member') err.code = 'not_a_member';
+    throw err;
+  }
+  return body;
+}
+
+// Not a plain proxyFetchJson call -- a 403 with {error:'not_a_member'} needs to reach
+// the caller as a distinguishable error (see discordAuth.cjs), not the generic
+// "request failed" text proxyFetch() throws on any non-2xx status.
+async function exchangeDiscordAuthCode(code) {
+  const { baseUrl, apiKey } = getProxyConfig();
+  const res = await fetch(`${baseUrl}/auth/discord/exchange`, {
+    method: 'POST',
+    headers: { 'X-Proxy-Key': apiKey, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code }),
+  });
+  const body = await res.json();
+  if (!res.ok) {
+    const err = new Error(body.error === 'not_a_member' ? 'That Discord account isn\'t a member of the Casual Raid Days server.' : `Proxy sign-in exchange failed: ${res.status} ${res.statusText}`);
+    if (body.error === 'not_a_member') err.code = 'not_a_member';
+    throw err;
+  }
+  return body;
 }
 
 module.exports = {
@@ -96,4 +131,5 @@ module.exports = {
   fetchPullFeedback,
   fetchNightSnapshotForCode,
   exchangeAuthCode,
+  exchangeDiscordAuthCode,
 };

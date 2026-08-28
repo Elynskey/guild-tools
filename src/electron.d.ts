@@ -83,8 +83,9 @@ export interface NightSnapshotEntry {
 }
 
 export interface AuthState {
-  battletag: string;
-  id: number;
+  provider: 'discord' | 'battlenet';
+  displayName: string;
+  id: string | number;
 }
 
 export interface ElectronAPI {
@@ -102,6 +103,7 @@ export interface ElectronAPI {
   getNightSnapshot: (code: string) => Promise<Record<string, NightSnapshotEntry> | null>;
   getAuthState: () => Promise<AuthState | null>;
   signIn: () => Promise<AuthState>;
+  signInDiscord: () => Promise<AuthState>;
   signOut: () => Promise<void>;
 }
 

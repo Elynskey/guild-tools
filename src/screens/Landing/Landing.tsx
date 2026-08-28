@@ -31,11 +31,11 @@ const CARDS: NavCardDef[] = [
 ];
 
 interface LandingProps {
-  battletag: string | null;
+  displayName: string | null;
   signOut: () => void;
 }
 
-export function Landing({ battletag, signOut }: LandingProps) {
+export function Landing({ displayName, signOut }: LandingProps) {
   return (
     <div
       style={{
@@ -51,9 +51,9 @@ export function Landing({ battletag, signOut }: LandingProps) {
         gap: 40,
       }}
     >
-      {battletag && (
+      {displayName && (
         <div style={{ position: 'fixed', top: 16, right: 20, fontSize: 'var(--text-micro)', color: 'var(--text-faint)' }}>
-          {battletag}{' '}
+          {displayName}{' '}
           <button
             type="button"
             onClick={signOut}

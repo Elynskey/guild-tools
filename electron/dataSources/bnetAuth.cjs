@@ -12,6 +12,12 @@
 // (see resolveUser() below). Local dev (no PROXY_BASE_URL set) still exchanges
 // directly with Blizzard using the local .env's BNET_CLIENT_SECRET, unchanged.
 //
+// Also verifies guild membership: the 'wow.profile' scope lets us read which WoW
+// characters are linked to the signed-in Battle.net account, cross-checked against
+// the CRD guild's actual roster (professions.cjs's fetchGuildRoster, same Blizzard
+// guild-roster endpoint used elsewhere) -- not just "has a Battle.net account," which
+// was this gate's original (explicitly provisional) scope.
+//
 // Requires the SAME Battle.net API client (BNET_CLIENT_ID/SECRET, wherever they now
 // live) to have this exact redirect URI registered at develop.battle.net -- that's a
 // manual step only the account owner can do, this code can't register it for them.
@@ -21,6 +27,7 @@ const crypto = require('node:crypto');
 const { shell } = require('electron');
 const { getProxyConfig } = require('./proxyConfig.cjs');
 const proxyClient = require('./proxyClient.cjs');
+const { fetchGuildRoster } = require('./professions.cjs');
 
 const REDIRECT_PORT = 53135;
 const REDIRECT_URI = `http://localhost:${REDIRECT_PORT}/callback`;
@@ -30,7 +37,30 @@ const USERINFO_URL = 'https://oauth.battle.net/userinfo';
 
 const SIGN_IN_TIMEOUT_MS = 5 * 60 * 1000;
 
-/** Exchanges an authorization code for the signed-in user's identity. @returns {Promise<{battletag: string, id: number}>} */
+/** Throws a tagged (err.code = 'not_a_member') error if none of this account's WoW characters are on the CRD roster. */
+async function assertGuildMembership(accessToken) {
+  const guild = { name: process.env.GUILD_NAME, realm: process.env.GUILD_REALM, region: process.env.GUILD_REGION };
+  const region = guild.region || 'us';
+
+  const profileRes = await fetch(`https://${region}.api.blizzard.com/profile/user/wow?namespace=profile-${region}&locale=en_US`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!profileRes.ok) throw new Error(`Battle.net WoW profile fetch failed: ${profileRes.status} ${profileRes.statusText}`);
+  const profile = await profileRes.json();
+  const myCharacters = (profile.wow_accounts ?? []).flatMap((a) => a.characters ?? []);
+
+  const roster = await fetchGuildRoster(guild);
+  const rosterKeys = new Set(roster.map((r) => `${r.name.toLowerCase()}::${r.realm}`));
+
+  const isMember = myCharacters.some((c) => rosterKeys.has(`${c.name.toLowerCase()}::${c.realm?.slug}`));
+  if (!isMember) {
+    const err = new Error('None of your Battle.net account\'s characters are on the Casual Raid Days roster.');
+    err.code = 'not_a_member';
+    throw err;
+  }
+}
+
+/** Exchanges an authorization code for the signed-in user's identity, verifying CRD guild membership. @returns {Promise<{battletag: string, id: number}>} */
 async function resolveUser(code) {
   if (proxyClient.isAvailable()) return proxyClient.exchangeAuthCode(code);
 
@@ -44,6 +74,8 @@ async function resolveUser(code) {
   });
   if (!tokenRes.ok) throw new Error(`Battle.net token exchange failed: ${tokenRes.status} ${tokenRes.statusText}`);
   const tokenData = await tokenRes.json();
+
+  await assertGuildMembership(tokenData.access_token);
 
   const userRes = await fetch(USERINFO_URL, { headers: { Authorization: `Bearer ${tokenData.access_token}` } });
   if (!userRes.ok) throw new Error(`Battle.net userinfo fetch failed: ${userRes.status} ${userRes.statusText}`);
@@ -77,8 +109,8 @@ function signIn() {
     const server = http.createServer((req, res) => {
       handleRequest(req, res).catch((err) => {
         try {
-          res.writeHead(500, { 'Content-Type': 'text/html' });
-          res.end(page('Sign-in failed', 'Something went wrong. You can close this tab and try again in Guild Tools.'));
+          res.writeHead(200, { 'Content-Type': 'text/html' });
+          res.end(page(err.code === 'not_a_member' ? 'Not a CRD member' : 'Sign-in failed', `${err.code === 'not_a_member' ? err.message : 'Something went wrong.'} You can close this tab and try again in Guild Tools.`));
         } catch {
           // response already sent
         }
@@ -133,7 +165,7 @@ function signIn() {
     server.listen(REDIRECT_PORT, () => {
       const authorizeUrl = `${AUTHORIZE_URL}?${new URLSearchParams({
         client_id: bnetClientId,
-        scope: 'openid',
+        scope: 'openid wow.profile',
         state,
         redirect_uri: REDIRECT_URI,
         response_type: 'code',

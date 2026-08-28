@@ -35,7 +35,7 @@ export function LoginScreen({ signIn, signingIn, error }: LoginScreenProps) {
 
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14, maxWidth: 360, textAlign: 'center' }}>
         <p style={{ margin: 0, fontSize: 'var(--text-body-s)', color: 'var(--text-muted)', lineHeight: 1.5 }}>
-          Sign in with your Battle.net account to continue. Opens your browser -- your password never touches this app.
+          Sign in with your Battle.net account to continue. Opens your browser -- your password never touches this app. We'll check that one of your characters is on the CRD roster.
         </p>
         <Button onClick={signIn} disabled={signingIn} iconLeft="log-in">
           {signingIn ? 'Waiting for browser…' : 'Sign in with Battle.net'}

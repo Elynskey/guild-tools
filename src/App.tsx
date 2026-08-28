@@ -15,14 +15,16 @@ export function App() {
   const auth = useAuth();
 
   if (auth.checking) return null; // one tick to read the existing session, no flash of the login screen
-  if (!auth.authenticated) return <LoginScreen signIn={auth.signIn} signingIn={auth.signingIn} error={auth.error} />;
+  if (!auth.authenticated) {
+    return <LoginScreen signIn={auth.signInBattleNet} signingIn={auth.signingIn} error={auth.error} />;
+  }
 
   return (
     <HashRouter>
       <UpdateBanner />
       <VersionTag />
       <Routes>
-        <Route path="/" element={<Landing battletag={auth.battletag} signOut={auth.signOut} />} />
+        <Route path="/" element={<Landing displayName={auth.displayName} signOut={auth.signOut} />} />
         <Route path="/raider-status" element={<RaiderStatus />} />
         <Route path="/professions" element={<Professions />} />
         <Route path="/pull-feedback" element={<PullFeedback />} />

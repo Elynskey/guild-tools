@@ -21,5 +21,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getNightSnapshot: (code) => ipcRenderer.invoke('nightSnapshot:fetch', code),
   getAuthState: () => ipcRenderer.invoke('auth:getState'),
   signIn: () => ipcRenderer.invoke('auth:signIn'),
+  signInDiscord: () => ipcRenderer.invoke('auth:signInDiscord'),
   signOut: () => ipcRenderer.invoke('auth:signOut'),
 });
