@@ -35,6 +35,12 @@ export function formatPullDuration(ms: number): string {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
+export interface MechanicOccurrence {
+  name: string;
+  pullNumber: number;
+  kind: 'death' | 'miss';
+}
+
 export interface MechanicNeedingWork {
   boss: string;
   ability: string;
@@ -45,6 +51,8 @@ export interface MechanicNeedingWork {
   deathCount: number;
   missCount: number;
   raiders: { name: string; count: number }[];
+  /** Every individual death/miss feeding this entry, for the "who missed it, on what pulls" drill-down. */
+  occurrences: MechanicOccurrence[];
 }
 
 // Deaths count for more than survived-but-missed hits -- a death is the mechanic
@@ -63,7 +71,7 @@ function rankMechanics(pulls: Pull[]): MechanicNeedingWork[] {
     const key = `${boss}::${ability}`;
     let entry = byKey.get(key);
     if (!entry) {
-      entry = { boss, ability, what: '', fix: '', deathCount: 0, missCount: 0, raiders: [] };
+      entry = { boss, ability, what: '', fix: '', deathCount: 0, missCount: 0, raiders: [], occurrences: [] };
       byKey.set(key, entry);
     }
     return entry;
@@ -83,18 +91,28 @@ function rankMechanics(pulls: Pull[]): MechanicNeedingWork[] {
       entry.fix = m.fix;
       entry.missCount += 1;
       bumpRaider(entry, m.name);
+      entry.occurrences.push({ name: m.name, pullNumber: p.pullNumber, kind: 'miss' });
     }
   }
+  // Kills only -- a wipe's deaths are just how the attempt ended (everyone dies
+  // eventually on a wipe), not a meaningful "still can't handle this mechanic"
+  // signal the way a death on an otherwise-successful kill pull is. Misses (above)
+  // stay scored on every pull -- a near-miss is instructive on a wipe too.
   for (const p of pulls) {
+    if (!p.kill) continue;
     for (const d of p.deaths) {
       const entry = get(p.boss, d.ability);
       entry.deathCount += 1;
       bumpRaider(entry, d.name);
+      entry.occurrences.push({ name: d.name, pullNumber: p.pullNumber, kind: 'death' });
     }
   }
 
   const ranked = [...byKey.values()];
-  for (const entry of ranked) entry.raiders.sort((a, b) => b.count - a.count);
+  for (const entry of ranked) {
+    entry.raiders.sort((a, b) => b.count - a.count);
+    entry.occurrences.sort((a, b) => a.pullNumber - b.pullNumber);
+  }
   ranked.sort((a, b) => severity(b) - severity(a));
   return ranked;
 }
@@ -111,6 +129,21 @@ export interface BossMechanics {
  * "this needs work" list, not a log-review prompt -- the point is telling an officer
  * where to spend practice time, not sending them back into WCL.
  */
+export interface RaiderOccurrences {
+  name: string;
+  hits: { pullNumber: number; kind: 'death' | 'miss' }[];
+}
+
+/** One mechanic's occurrences grouped by raider, worst (most hits) first -- feeds the "who missed it, on what pulls" drill-down. */
+export function groupOccurrencesByRaider(occurrences: MechanicOccurrence[]): RaiderOccurrences[] {
+  const byName = new Map<string, RaiderOccurrences>();
+  for (const o of occurrences) {
+    if (!byName.has(o.name)) byName.set(o.name, { name: o.name, hits: [] });
+    byName.get(o.name)!.hits.push({ pullNumber: o.pullNumber, kind: o.kind });
+  }
+  return [...byName.values()].sort((a, b) => b.hits.length - a.hits.length);
+}
+
 export function groupMechanicsNeedingWorkByBoss(pulls: Pull[], topNPerBoss = 5): BossMechanics[] {
   const ranked = rankMechanics(pulls);
   return bossOrder(pulls)

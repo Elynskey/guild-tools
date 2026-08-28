@@ -1,5 +1,5 @@
 import type { DeathCause, Raider } from './scoring/types';
-import type { MemberProfessions, RecipeCatalogue } from './professions/types';
+import type { CraftRequest, MemberProfessions, RecipeCatalogue } from './professions/types';
 
 export interface RealmMismatch {
   name: string;
@@ -98,6 +98,10 @@ export interface ElectronAPI {
   getCachedRecipeCatalogue: () => Promise<LiveRecipeCatalogueResult | null>;
   getRecipeCatalogue: () => Promise<LiveRecipeCatalogueResult | null>;
   copyToClipboard: (text: string) => Promise<void>;
+  listCraftRequests: () => Promise<CraftRequest[]>;
+  addCraftRequest: (requester: string, profession: string, description: string) => Promise<CraftRequest[]>;
+  toggleCraftRequestFulfilled: (id: string) => Promise<CraftRequest[]>;
+  removeCraftRequest: (id: string) => Promise<CraftRequest[]>;
   listRaidNights: () => Promise<RaidNight[] | null>;
   getPullFeedback: (code: string) => Promise<PullFeedbackResult | null>;
   getNightSnapshot: (code: string) => Promise<Record<string, NightSnapshotEntry> | null>;

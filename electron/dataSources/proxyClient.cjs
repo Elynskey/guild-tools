@@ -120,6 +120,22 @@ async function exchangeDiscordAuthCode(code) {
   return body;
 }
 
+async function listCraftRequests() {
+  return proxyFetchJson('/craft-requests');
+}
+
+async function addCraftRequest(requester, profession, description) {
+  return proxyFetchJson('/craft-requests', { method: 'POST', body: JSON.stringify({ requester, profession, description }) });
+}
+
+async function toggleCraftRequestFulfilled(id) {
+  return proxyFetchJson(`/craft-requests/${encodeURIComponent(id)}/toggle`, { method: 'PATCH' });
+}
+
+async function removeCraftRequest(id) {
+  return proxyFetchJson(`/craft-requests/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+
 module.exports = {
   isAvailable,
   fetchRoster,
@@ -132,4 +148,8 @@ module.exports = {
   fetchNightSnapshotForCode,
   exchangeAuthCode,
   exchangeDiscordAuthCode,
+  listCraftRequests,
+  addCraftRequest,
+  toggleCraftRequestFulfilled,
+  removeCraftRequest,
 };

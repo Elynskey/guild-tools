@@ -21,6 +21,7 @@ const { fetchRecipeCatalogue, getCachedRecipeCatalogue } = require('./dataSource
 const { fetchRaidNightsList, fetchPullFeedback } = require('./dataSources/fetchPullFeedback.cjs');
 const { fetchNightSnapshotForCode } = require('./dataSources/fetchNightSnapshot.cjs');
 const { checkForUpdate } = require('./dataSources/updateCheck.cjs');
+const { listCraftRequests, addCraftRequest, toggleCraftRequestFulfilled, removeCraftRequest } = require('./dataSources/fetchCraftRequests.cjs');
 const { signIn: bnetSignIn } = require('./dataSources/bnetAuth.cjs');
 const { signIn: discordSignIn } = require('./dataSources/discordAuth.cjs');
 
@@ -60,6 +61,10 @@ ipcMain.handle('update:openReleasePage', async (_event, url) => {
 ipcMain.handle('clipboard:write', async (_event, text) => {
   if (typeof text === 'string') clipboard.writeText(text);
 });
+ipcMain.handle('craftRequests:list', async () => listCraftRequests());
+ipcMain.handle('craftRequests:add', async (_event, requester, profession, description) => addCraftRequest(requester, profession, description));
+ipcMain.handle('craftRequests:toggleFulfilled', async (_event, id) => toggleCraftRequestFulfilled(id));
+ipcMain.handle('craftRequests:remove', async (_event, id) => removeCraftRequest(id));
 
 function createWindow() {
   const win = new BrowserWindow({

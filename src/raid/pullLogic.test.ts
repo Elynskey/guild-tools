@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { formatPullDuration, groupMechanicsNeedingWorkByBoss, groupPullsByBoss } from './pullLogic';
+import { formatPullDuration, groupMechanicsNeedingWorkByBoss, groupOccurrencesByRaider, groupPullsByBoss } from './pullLogic';
 import type { Pull } from '../electron';
 
 function pull(overrides: Partial<Pull> & Pick<Pull, 'boss' | 'pullNumber'>): Pull {
   return {
     fightId: overrides.pullNumber,
-    kill: false,
+    kill: true,
     bossPercentage: 50,
     durationMs: 60_000,
     raiders: [],
@@ -167,5 +167,58 @@ describe('groupMechanicsNeedingWorkByBoss', () => {
 
   it('returns an empty list when nothing went wrong', () => {
     expect(groupMechanicsNeedingWorkByBoss([pull({ boss: 'Vashnik', pullNumber: 1 })])).toEqual([]);
+  });
+
+  it('does not count deaths on a wipe -- only on a kill pull', () => {
+    const pulls = [
+      pull({ boss: 'Vashnik', pullNumber: 1, kill: false, deaths: [{ name: 'Thornwick', ability: 'Plague Froth' }] }),
+      pull({ boss: 'Vashnik', pullNumber: 2, kill: true, deaths: [{ name: 'Grimsyl', ability: 'Plague Froth' }] }),
+    ];
+    const mechanics = groupMechanicsNeedingWorkByBoss(pulls)[0].mechanics;
+    expect(mechanics[0].deathCount).toBe(1);
+    expect(mechanics[0].raiders).toEqual([{ name: 'Grimsyl', count: 1 }]);
+  });
+
+  it('still counts a miss on a wipe pull -- only death-counting is kill-only', () => {
+    const pulls = [
+      pull({
+        boss: 'Vashnik',
+        pullNumber: 1,
+        kill: false,
+        mechanicMisses: [{ name: 'Grimsyl', ability: 'Plague Froth', what: 'x', fix: 'x' }],
+      }),
+    ];
+    const mechanics = groupMechanicsNeedingWorkByBoss(pulls)[0].mechanics;
+    expect(mechanics[0].missCount).toBe(1);
+  });
+
+  it('records which pull each occurrence happened on, sorted by pull number', () => {
+    const pulls = [
+      pull({ boss: 'Vashnik', pullNumber: 1, kill: false, mechanicMisses: [{ name: 'Grimsyl', ability: 'Plague Froth', what: 'x', fix: 'x' }] }),
+      pull({ boss: 'Vashnik', pullNumber: 3, kill: true, deaths: [{ name: 'Grimsyl', ability: 'Plague Froth' }] }),
+    ];
+    const mechanics = groupMechanicsNeedingWorkByBoss(pulls)[0].mechanics;
+    expect(mechanics[0].occurrences).toEqual([
+      { name: 'Grimsyl', pullNumber: 1, kind: 'miss' },
+      { name: 'Grimsyl', pullNumber: 3, kind: 'death' },
+    ]);
+  });
+});
+
+describe('groupOccurrencesByRaider', () => {
+  it('groups occurrences by raider, worst (most hits) first', () => {
+    const grouped = groupOccurrencesByRaider([
+      { name: 'Grimsyl', pullNumber: 1, kind: 'miss' },
+      { name: 'Thornwick', pullNumber: 1, kind: 'miss' },
+      { name: 'Grimsyl', pullNumber: 2, kind: 'death' },
+    ]);
+    expect(grouped).toEqual([
+      { name: 'Grimsyl', hits: [{ pullNumber: 1, kind: 'miss' }, { pullNumber: 2, kind: 'death' }] },
+      { name: 'Thornwick', hits: [{ pullNumber: 1, kind: 'miss' }] },
+    ]);
+  });
+
+  it('returns an empty array for no occurrences', () => {
+    expect(groupOccurrencesByRaider([])).toEqual([]);
   });
 });
