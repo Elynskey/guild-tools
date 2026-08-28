@@ -22,6 +22,12 @@ const CARDS: NavCardDef[] = [
     title: 'Professions',
     description: 'Who can craft what, skill and recipe knowledge across the guild, and open crafting requests.',
   },
+  {
+    to: '/pull-feedback',
+    icon: 'scroll-text',
+    title: 'Pull Feedback',
+    description: 'Any past raid night, pull by pull — wipe or kill, deaths, and mechanics that need the most work.',
+  },
 ];
 
 export function Landing() {

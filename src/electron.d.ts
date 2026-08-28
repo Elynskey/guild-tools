@@ -35,6 +35,45 @@ export interface LiveRecipeCatalogueResult {
   fetchedAt: string;
 }
 
+export interface RaidNight {
+  code: string;
+  date: string;
+}
+
+export interface PullRaider {
+  name: string;
+  role: 'tank' | 'healer' | 'dps' | null;
+  metric: 'dps' | 'hps' | 'rankPercent' | null;
+  value: number | null;
+}
+
+export interface PullDeath {
+  name: string;
+  ability: string;
+}
+
+export interface PullMechanicMiss {
+  name: string;
+  ability: string;
+  description: string;
+}
+
+export interface Pull {
+  fightId: number;
+  pullNumber: number;
+  boss: string;
+  kill: boolean;
+  bossPercentage: number | null;
+  durationMs: number;
+  raiders: PullRaider[];
+  deaths: PullDeath[];
+  mechanicMisses: PullMechanicMiss[];
+}
+
+export interface PullFeedbackResult {
+  pulls: Pull[];
+}
+
 export interface ElectronAPI {
   getRoster: () => Promise<LiveRosterResult | null>;
   getProfessions: () => Promise<LiveProfessionsResult | null>;
@@ -45,6 +84,8 @@ export interface ElectronAPI {
   getCachedRecipeCatalogue: () => Promise<LiveRecipeCatalogueResult | null>;
   getRecipeCatalogue: () => Promise<LiveRecipeCatalogueResult | null>;
   copyToClipboard: (text: string) => Promise<void>;
+  listRaidNights: () => Promise<RaidNight[] | null>;
+  getPullFeedback: (code: string) => Promise<PullFeedbackResult | null>;
 }
 
 declare global {

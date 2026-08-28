@@ -23,6 +23,7 @@
 // never a global WCL parse ranking.
 
 const { getClientCredentialsToken } = require('./oauth.cjs');
+const { BOSS_MECHANICS } = require('./mechanicReference.cjs');
 
 const TOKEN_URL = 'https://www.warcraftlogs.com/oauth/token';
 const GRAPHQL_URL = 'https://www.warcraftlogs.com/api/v2/client';
@@ -69,7 +70,7 @@ const FIGHTS_QUERY = `
   query ReportFights($code: String!) {
     reportData {
       report(code: $code) {
-        fights(killType: Encounters) { id name kill encounterID difficulty }
+        fights(killType: Encounters) { id name kill encounterID difficulty bossPercentage startTime endTime }
       }
     }
   }
@@ -184,6 +185,25 @@ function extractRankPercents(ranking) {
   return result;
 }
 
+const RANKINGS_ROLE_KEY = { tanks: 'tank', healers: 'healer', dps: 'dps' };
+
+// The role someone actually PLAYED in a given report, from WCL's own rankings role
+// buckets -- confirmed live to disagree with wowaudit's roster role (wowaudit said
+// "dps", WCL showed the same raider tanking every kill in the latest report, e.g. an
+// off-spec fill-in night). wowaudit's role field is a static roster assignment an
+// officer sets once and can go stale; this is what they actually did that night, so
+// it's what perf scoring should key off of, not the roster field.
+function extractActualRoles(ranking) {
+  const result = new Map();
+  if (!ranking?.roles) return result;
+  for (const [key, roleData] of Object.entries(ranking.roles)) {
+    const role = RANKINGS_ROLE_KEY[key];
+    if (!role) continue;
+    for (const c of roleData.characters ?? []) result.set(c.name, role);
+  }
+  return result;
+}
+
 /**
  * One report's aggregate: DPS (damage/s per player), HPS (healing/s per player),
  * deaths (count per player), pullCount (kill pulls in this report -- the
@@ -200,7 +220,7 @@ async function fetchReportAggregate(code) {
   const fightNameById = new Map(fights.map((f) => [f.id, f.name]));
 
   if (killFightIds.length === 0) {
-    return { dps: new Map(), hps: new Map(), deaths: new Map(), deathCauses: new Map(), pullCount: 0, rankPercent: new Map(), heroicKillEncounterIds, actorServers: new Map() };
+    return { dps: new Map(), hps: new Map(), deaths: new Map(), deathCauses: new Map(), pullCount: 0, rankPercent: new Map(), actualRoles: new Map(), heroicKillEncounterIds, actorServers: new Map() };
   }
 
   const [damageEntries, healingEntries, deathEntries, ranking, actorServers] = await Promise.all([
@@ -218,6 +238,7 @@ async function fetchReportAggregate(code) {
     deathCauses: extractDeathCausesByName(deathEntries, fightNameById),
     pullCount: killFightIds.length,
     rankPercent: extractRankPercents(ranking),
+    actualRoles: extractActualRoles(ranking),
     heroicKillEncounterIds,
     actorServers,
   };
@@ -247,7 +268,11 @@ async function fetchWarcraftLogs(guild, tierZoneName, roleByName) {
   const aggregates = await Promise.all(tierReports.map((r) => fetchReportAggregate(r.code)));
 
   const perfSnapshot = (name, agg) => {
-    const role = roleByName[name];
+    // Prefer the role they actually played in THIS report (WCL's own rankings data)
+    // over wowaudit's static roster role -- confirmed live to drift (an off-spec
+    // fill-in night: wowaudit still said "dps", WCL showed them tanking every kill).
+    // wowaudit's role only fills in when WCL has no rankings entry for them at all.
+    const role = agg.actualRoles.get(name) ?? roleByName[name];
     if (role === MIN_DPS_ROLE) {
       const dps = agg.dps.get(name);
       return dps == null ? null : Math.round((dps / minDps) * 100);
@@ -325,4 +350,107 @@ async function fetchWarcraftLogs(guild, tierZoneName, roleByName) {
   return { performance: result, heroicBossesKilled, observedRealms };
 }
 
-module.exports = { fetchWarcraftLogs, fetchGuildReports, fetchFights, fetchReportAggregate };
+/**
+ * Every past raid night for this tier, newest first, for a "pick a raid night"
+ * dropdown -- just the report list, no per-pull data (that's fetchPullBreakdown,
+ * called only once a specific night is selected, since it's a much heavier fetch).
+ * @returns {Promise<{ code: string, date: string }[]>}
+ */
+async function fetchRaidNights(guild, tierZoneName) {
+  const allReports = await fetchGuildReports(guild, 30);
+  return allReports
+    .filter((r) => r.zone?.name === tierZoneName)
+    .sort((a, b) => b.startTime - a.startTime)
+    .map((r) => ({ code: r.code, date: new Date(r.startTime).toISOString() }));
+}
+
+/**
+ * Pull-by-pull breakdown for one raid night: every attempt (wipes included, not just
+ * kills -- unlike fetchReportAggregate's tier-scoring path, which only counts kills),
+ * with per-raider throughput, deaths, and "mechanic miss" flags (took damage from a
+ * known avoidable ability on this boss, without dying to it -- see
+ * mechanicReference.cjs for what's covered and what isn't).
+ *
+ * rankPercent is WCL-kill-only (confirmed live: rankings(fightIDs) returns an empty
+ * roster for a wipe fight -- there's no defined percentile for an incomplete attempt),
+ * so tanks (scored on rankPercent, same convention as the tier-wide pipeline) show no
+ * number on wipes. DPS/healers show raw throughput every pull, kill or wipe.
+ *
+ * Role-for-the-night is resolved once from whichever kill fights exist in this report
+ * (same "trust WCL's rankings role bucket over wowaudit's static field" fix as the
+ * tier-wide pipeline) and applied to every pull in the report, since nobody swaps main
+ * spec mid-raid-night -- wipes have no rankings of their own to resolve it from.
+ *
+ * @returns {Promise<{ pulls: Array<{ fightId: number, pullNumber: number, boss: string, kill: boolean, bossPercentage: number|null, durationMs: number, raiders: Array<{name: string, role: string|null, metric: 'dps'|'hps'|'rankPercent'|null, value: number|null}>, deaths: Array<{name: string, ability: string}>, mechanicMisses: Array<{name: string, ability: string, description: string}> }> }>}
+ */
+async function fetchPullBreakdown(code, roleByName) {
+  const fights = await fetchFights(code);
+  if (fights.length === 0) return { pulls: [] };
+
+  const killFights = fights.filter((f) => f.kill);
+  const rankingsByKillFight = await Promise.all(killFights.map((f) => fetchRankingsForFight(code, f.id)));
+  const nightRoles = new Map();
+  for (const ranking of rankingsByKillFight) {
+    for (const [name, role] of extractActualRoles(ranking)) nightRoles.set(name, role);
+  }
+  const resolveRole = (name) => nightRoles.get(name) ?? roleByName[name] ?? null;
+
+  const killRankingByFightId = new Map(killFights.map((f, i) => [f.id, rankingsByKillFight[i]]));
+
+  const pulls = await Promise.all(
+    fights.map(async (fight, idx) => {
+      const fightIds = [fight.id];
+      const [damageEntries, healingEntries, deathEntries, damageTakenEntries] = await Promise.all([
+        fetchTable(code, fightIds, 'DamageDone'),
+        fetchTable(code, fightIds, 'Healing'),
+        fetchTable(code, fightIds, 'Deaths'),
+        fetchTable(code, fightIds, 'DamageTaken'),
+      ]);
+
+      const dps = sumThroughputByName(damageEntries);
+      const hps = sumThroughputByName(healingEntries);
+      const rankPercent = fight.kill ? extractRankPercents(killRankingByFightId.get(fight.id)) : new Map();
+      const deathNames = new Set(deathEntries.map((e) => e.name));
+      const deaths = deathEntries.map((e) => ({ name: e.name, ability: e.damage?.abilities?.[0]?.name ?? 'Unknown' }));
+
+      const damageTakenAbilitiesByName = new Map();
+      for (const e of damageTakenEntries) {
+        damageTakenAbilitiesByName.set(e.name, new Set((e.abilities ?? []).map((a) => a.name)));
+      }
+
+      const mechanicDefs = BOSS_MECHANICS[fight.name] ?? [];
+      const mechanicMisses = [];
+      for (const [name, abilities] of damageTakenAbilitiesByName) {
+        if (deathNames.has(name)) continue; // died to it -- that's covered by deaths, not a "survived but missed it"
+        for (const def of mechanicDefs) {
+          if (abilities.has(def.ability)) mechanicMisses.push({ name, ability: def.ability, description: def.description });
+        }
+      }
+
+      const names = new Set([...dps.keys(), ...hps.keys(), ...damageTakenAbilitiesByName.keys()]);
+      const raiders = [...names].map((name) => {
+        const role = resolveRole(name);
+        if (role === 'dps') return { name, role, metric: 'dps', value: dps.get(name) ?? null };
+        if (role === 'healer') return { name, role, metric: 'hps', value: hps.get(name) ?? null };
+        if (role === 'tank') return { name, role, metric: 'rankPercent', value: rankPercent.get(name) ?? null };
+        return { name, role, metric: null, value: null };
+      });
+
+      return {
+        fightId: fight.id,
+        pullNumber: idx + 1,
+        boss: fight.name,
+        kill: fight.kill,
+        bossPercentage: fight.bossPercentage ?? null,
+        durationMs: fight.endTime - fight.startTime,
+        raiders,
+        deaths,
+        mechanicMisses,
+      };
+    }),
+  );
+
+  return { pulls };
+}
+
+module.exports = { fetchWarcraftLogs, fetchGuildReports, fetchFights, fetchReportAggregate, fetchRaidNights, fetchPullBreakdown };

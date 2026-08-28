@@ -16,4 +16,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getCachedRecipeCatalogue: () => ipcRenderer.invoke('recipeCatalogue:getCached'),
   getRecipeCatalogue: () => ipcRenderer.invoke('recipeCatalogue:fetch'),
   copyToClipboard: (text) => ipcRenderer.invoke('clipboard:write', text),
+  listRaidNights: () => ipcRenderer.invoke('raidNights:list'),
+  getPullFeedback: (code) => ipcRenderer.invoke('pullFeedback:fetch', code),
 });
