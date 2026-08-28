@@ -108,6 +108,36 @@ async function fetchRankingsForFight(code, fightId) {
   return data.reportData.report.rankings?.data?.[0] ?? null;
 }
 
+const MASTER_DATA_QUERY = `
+  query ReportActors($code: String!) {
+    reportData {
+      report(code: $code) {
+        masterData { actors(type: "Player") { name server type subType } }
+      }
+    }
+  }
+`;
+
+// masterData.actors' `server` comes straight off the combat log, not from any
+// officer-entered roster field -- confirmed live earlier as the way to establish a
+// character's REAL home realm when a third-party tracker (wowaudit) had it wrong
+// for one raider ("Dunbarke": wowaudit said "Area 52", the log said "Scarlet
+// Crusade" -- two different real characters that happen to share a name). Used to
+// build an authoritative name -> observed-server(s) map so that class of data-entry
+// error gets caught automatically instead of by an officer noticing wrong stats.
+async function fetchReportActorServers(code) {
+  const data = await graphql(MASTER_DATA_QUERY, { code });
+  const actors = data.reportData.report.masterData?.actors ?? [];
+  const byName = new Map();
+  for (const a of actors) {
+    if (!a.server) continue;
+    const set = byName.get(a.name) ?? new Set();
+    set.add(a.server);
+    byName.set(a.name, set);
+  }
+  return byName;
+}
+
 /** Sums DamageDone/Healing entries per player across however many fights they're scoped to. */
 function sumThroughputByName(entries) {
   const byName = new Map();
@@ -170,14 +200,15 @@ async function fetchReportAggregate(code) {
   const fightNameById = new Map(fights.map((f) => [f.id, f.name]));
 
   if (killFightIds.length === 0) {
-    return { dps: new Map(), hps: new Map(), deaths: new Map(), deathCauses: new Map(), pullCount: 0, rankPercent: new Map(), heroicKillEncounterIds };
+    return { dps: new Map(), hps: new Map(), deaths: new Map(), deathCauses: new Map(), pullCount: 0, rankPercent: new Map(), heroicKillEncounterIds, actorServers: new Map() };
   }
 
-  const [damageEntries, healingEntries, deathEntries, ranking] = await Promise.all([
+  const [damageEntries, healingEntries, deathEntries, ranking, actorServers] = await Promise.all([
     fetchTable(code, killFightIds, 'DamageDone'),
     fetchTable(code, killFightIds, 'Healing'),
     fetchTable(code, killFightIds, 'Deaths'),
     fetchRankingsForFight(code, killFightIds[killFightIds.length - 1]),
+    fetchReportActorServers(code),
   ]);
 
   return {
@@ -188,6 +219,7 @@ async function fetchReportAggregate(code) {
     pullCount: killFightIds.length,
     rankPercent: extractRankPercents(ranking),
     heroicKillEncounterIds,
+    actorServers,
   };
 }
 
@@ -201,7 +233,7 @@ const DEATH_CAUSE_CAP = 60;
  * @param {{ name: string, realm: string, region: string }} guild
  * @param {string} tierZoneName — only reports in this raid tier count (config.tier.name)
  * @param {Record<string,'tank'|'healer'|'dps'>} roleByName — from wowaudit, since WCL doesn't know raid role assignment
- * @returns {Promise<{ performance: Record<string, { perf: number, parseTrend: number, deaths: number, pulls: number, deathCauses: {boss:string,ability:string}[], nightParse: number, nightDeaths: number, nightPulls: number, nightDeathCauses: {boss:string,ability:string}[] }>, heroicBossesKilled: number }>}
+ * @returns {Promise<{ performance: Record<string, { perf: number, parseTrend: number, deaths: number, pulls: number, deathCauses: {boss:string,ability:string}[], nightParse: number, nightDeaths: number, nightPulls: number, nightDeathCauses: {boss:string,ability:string}[] }>, heroicBossesKilled: number, observedRealms: Record<string, string[]> }>}
  */
 async function fetchWarcraftLogs(guild, tierZoneName, roleByName) {
   const minDps = Number(process.env.MIN_DPS_REQUIREMENT ?? 0);
@@ -278,7 +310,19 @@ async function fetchWarcraftLogs(guild, tierZoneName, roleByName) {
 
   const heroicBossesKilled = new Set(aggregates.flatMap((agg) => agg.heroicKillEncounterIds)).size;
 
-  return { performance: result, heroicBossesKilled };
+  // Authoritative name -> observed realm(s), straight from combat log actor data
+  // across every report this tier -- independent of what any roster tracker claims.
+  const observedRealms = {};
+  for (const agg of aggregates) {
+    for (const [name, servers] of agg.actorServers) {
+      const set = observedRealms[name] ?? new Set();
+      for (const s of servers) set.add(s);
+      observedRealms[name] = set;
+    }
+  }
+  for (const name of Object.keys(observedRealms)) observedRealms[name] = [...observedRealms[name]];
+
+  return { performance: result, heroicBossesKilled, observedRealms };
 }
 
 module.exports = { fetchWarcraftLogs, fetchGuildReports, fetchFights, fetchReportAggregate };

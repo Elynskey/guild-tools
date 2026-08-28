@@ -1,5 +1,6 @@
 import { SAMPLE_ROSTER } from './sampleRoster';
 import type { Raider } from '../scoring/types';
+import type { RealmMismatch } from '../electron';
 
 export interface RosterResult {
   raiders: Raider[];
@@ -7,6 +8,8 @@ export interface RosterResult {
   /** null in sample-data mode — there's no real kill data to report. */
   heroicBossesKilled: number | null;
   source: 'live' | 'sample';
+  /** Characters where wowaudit's realm disagrees with what Warcraft Logs' combat log actually shows. Always empty in sample mode. */
+  realmMismatches: RealmMismatch[];
 }
 
 /**
@@ -24,7 +27,7 @@ export interface RosterResult {
 export async function getRoster(): Promise<RosterResult> {
   if (window.electronAPI) {
     const live = await window.electronAPI.getRoster();
-    if (live) return { raiders: live.raiders, fetchedAt: live.fetchedAt, heroicBossesKilled: live.heroicBossesKilled, source: 'live' };
+    if (live) return { raiders: live.raiders, fetchedAt: live.fetchedAt, heroicBossesKilled: live.heroicBossesKilled, source: 'live', realmMismatches: live.realmMismatches };
   }
-  return { raiders: SAMPLE_ROSTER, fetchedAt: new Date().toISOString(), heroicBossesKilled: null, source: 'sample' };
+  return { raiders: SAMPLE_ROSTER, fetchedAt: new Date().toISOString(), heroicBossesKilled: null, source: 'sample', realmMismatches: [] };
 }

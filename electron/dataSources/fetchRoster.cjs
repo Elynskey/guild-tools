@@ -3,6 +3,7 @@ const { fetchWarcraftLogs } = require('./warcraftlogs.cjs');
 const { fetchWowauditRoster } = require('./wowaudit.cjs');
 const { fetchGearCompletion } = require('./bnet.cjs');
 const { mergeSources } = require('./merge.cjs');
+const { findRealmMismatches } = require('./realmCheck.cjs');
 
 // WOWAUDIT_TEAM_ID is deliberately not required — wowaudit.cjs reads the team ID
 // straight from /v1/team using just the API key, so it's optional (a sanity-check
@@ -31,7 +32,7 @@ function isConfigured() {
  * reason) — the renderer falls back to the sample roster in that case
  * (src/data/rosterSource.ts), so the app never shows a broken half-real result.
  *
- * @returns {Promise<{ raiders: object[], fetchedAt: string, heroicBossesKilled: number } | null>}
+ * @returns {Promise<{ raiders: object[], fetchedAt: string, heroicBossesKilled: number, realmMismatches: Array<{name: string, wowauditRealm: string, observedRealms: string[]}> } | null>}
  */
 async function fetchRoster() {
   if (!isConfigured()) {
@@ -54,7 +55,11 @@ async function fetchRoster() {
     ]);
 
     const raiders = mergeSources({ wowauditRoster, rio, gearCompletion, wcl: wcl.performance });
-    return { raiders, fetchedAt: new Date().toISOString(), heroicBossesKilled: wcl.heroicBossesKilled };
+    const realmMismatches = findRealmMismatches(wowauditRoster, wcl.observedRealms);
+    if (realmMismatches.length > 0) {
+      console.warn('[roster] Realm mismatch(es) between wowaudit and Warcraft Logs combat log data:', realmMismatches);
+    }
+    return { raiders, fetchedAt: new Date().toISOString(), heroicBossesKilled: wcl.heroicBossesKilled, realmMismatches };
   } catch (err) {
     console.error('[roster] Live fetch failed, falling back to sample data:', err);
     return null;

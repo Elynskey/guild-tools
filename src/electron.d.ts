@@ -1,10 +1,17 @@
 import type { Raider } from './scoring/types';
 import type { MemberProfessions, RecipeCatalogue } from './professions/types';
 
+export interface RealmMismatch {
+  name: string;
+  wowauditRealm: string;
+  observedRealms: string[];
+}
+
 export interface LiveRosterResult {
   raiders: Raider[];
   fetchedAt: string;
   heroicBossesKilled: number;
+  realmMismatches: RealmMismatch[];
 }
 
 export interface LiveProfessionsResult {

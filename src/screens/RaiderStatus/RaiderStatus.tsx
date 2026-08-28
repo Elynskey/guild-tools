@@ -6,6 +6,7 @@ import { RoleSection } from './RoleSection';
 import { EmptyState } from './EmptyState';
 import { KillsStrip } from './KillsStrip';
 import { DeathMechanicsReport } from './DeathMechanicsReport';
+import { RealmMismatchBanner } from './RealmMismatchBanner';
 import { useRaiderStatus } from './useRaiderStatus';
 
 export function RaiderStatus() {
@@ -28,6 +29,8 @@ export function RaiderStatus() {
       <SiteHeader windowTabs={rs.windowTabs} windowValue={rs.window} setWindow={rs.setWindow} progressionFraction={rs.progressionFraction} />
 
       <div style={{ maxWidth: 1160, margin: '0 auto', padding: 32 }}>
+        <RealmMismatchBanner mismatches={rs.realmMismatches} />
+
         <StatusRibbon
           avgLine={rs.avgLine}
           freshness={rs.freshness}

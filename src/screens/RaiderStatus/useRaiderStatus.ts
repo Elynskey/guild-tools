@@ -4,6 +4,7 @@ import { getRoster } from '../../data/rosterSource';
 import { ROLE_SECTIONS, rosterSummary, scoreRaider, sortBestFirst, sortWorstFirst } from '../../scoring/scoring';
 import { buildDeathMechanicsReport } from '../../scoring/deathMechanics';
 import type { Band, Raider, Role, ScoredRaider, Window } from '../../scoring/types';
+import type { RealmMismatch } from '../../electron';
 import { TILE_COLOR } from './bandVisuals';
 
 export interface DisplayRaider extends ScoredRaider {
@@ -35,6 +36,7 @@ interface Meta {
   fetchedAt: string;
   heroicBossesKilled: number | null;
   source: 'live' | 'sample';
+  realmMismatches: RealmMismatch[];
 }
 
 interface State {
@@ -81,7 +83,7 @@ export function useRaiderStatus() {
     return getRoster()
       .then((result) => {
         setRoster(result.raiders);
-        setMeta({ fetchedAt: result.fetchedAt, heroicBossesKilled: result.heroicBossesKilled, source: result.source });
+        setMeta({ fetchedAt: result.fetchedAt, heroicBossesKilled: result.heroicBossesKilled, source: result.source, realmMismatches: result.realmMismatches });
         setLoadError(null);
       })
       .catch(() => setLoadError('Could not load the roster.'))
@@ -206,6 +208,7 @@ export function useRaiderStatus() {
     guildStop: summary.stoppingUs,
     guildGate: summary.unscored,
     deathMechanics,
+    realmMismatches: meta?.realmMismatches ?? [],
     freshness: meta ? freshnessCopy(meta.fetchedAt, meta.source) : '',
     progressionFraction: `${heroicKilled}/${config.tier.totalBosses}`,
     dataSource: meta?.source ?? 'sample',
