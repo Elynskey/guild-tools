@@ -33,7 +33,7 @@ export function PullFeedback() {
               {pf.totalPulls} pull{pf.totalPulls === 1 ? '' : 's'} · {pf.kills} kill{pf.kills === 1 ? '' : 's'}
               {pf.refreshing && ' · loading…'}
             </div>
-            <MechanicsSummary mechanics={pf.mechanicsNeedingWork} />
+            <MechanicsSummary groups={pf.mechanicsNeedingWork} />
             <PullLog groups={pf.bossGroups} />
           </>
         )}

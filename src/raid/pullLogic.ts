@@ -5,18 +5,27 @@ export interface BossGroup {
   pulls: Pull[];
 }
 
-/** Pulls grouped by boss, in first-seen order (matches pull order within the night). */
-export function groupPullsByBoss(pulls: Pull[]): BossGroup[] {
+/** Bosses in first-seen order (matches pull order within the night). */
+function bossOrder(pulls: Pull[]): string[] {
   const order: string[] = [];
-  const byBoss = new Map<string, Pull[]>();
+  const seen = new Set<string>();
   for (const p of pulls) {
-    if (!byBoss.has(p.boss)) {
-      byBoss.set(p.boss, []);
+    if (!seen.has(p.boss)) {
+      seen.add(p.boss);
       order.push(p.boss);
     }
+  }
+  return order;
+}
+
+/** Pulls grouped by boss, in first-seen order (matches pull order within the night). */
+export function groupPullsByBoss(pulls: Pull[]): BossGroup[] {
+  const byBoss = new Map<string, Pull[]>();
+  for (const p of pulls) {
+    if (!byBoss.has(p.boss)) byBoss.set(p.boss, []);
     byBoss.get(p.boss)!.push(p);
   }
-  return order.map((boss) => ({ boss, pulls: byBoss.get(boss)! }));
+  return bossOrder(pulls).map((boss) => ({ boss, pulls: byBoss.get(boss)! }));
 }
 
 export function formatPullDuration(ms: number): string {
@@ -27,6 +36,7 @@ export function formatPullDuration(ms: number): string {
 }
 
 export interface MechanicNeedingWork {
+  boss: string;
   ability: string;
   /** What the mechanic actually is. Empty when only raw deaths fed this entry -- no curated reference for that ability yet. */
   what: string;
@@ -42,21 +52,19 @@ export interface MechanicNeedingWork {
 // ranking so officers see what to drill on, worst first, in one list.
 const DEATH_WEIGHT = 3;
 const MISS_WEIGHT = 1;
+const severity = (e: MechanicNeedingWork) => e.deathCount * DEATH_WEIGHT + e.missCount * MISS_WEIGHT;
 
-/**
- * Ranks mechanics by how much they're actually costing the raid across every pull
- * in the window (deaths weighted above survived misses), worst first. Framed as a
- * direct "this needs work" list, not a log-review prompt -- the point is telling an
- * officer where to spend practice time, not sending them back into WCL.
- */
-export function rankMechanicsNeedingWork(pulls: Pull[], topN = 5): MechanicNeedingWork[] {
-  const byAbility = new Map<string, MechanicNeedingWork>();
+function rankMechanics(pulls: Pull[]): MechanicNeedingWork[] {
+  // Keyed by boss+ability, not ability alone -- two different bosses could in
+  // principle share an ability name, and each boss needs its own grouped entry now.
+  const byKey = new Map<string, MechanicNeedingWork>();
 
-  const get = (ability: string) => {
-    let entry = byAbility.get(ability);
+  const get = (boss: string, ability: string) => {
+    const key = `${boss}::${ability}`;
+    let entry = byKey.get(key);
     if (!entry) {
-      entry = { ability, what: '', fix: '', deathCount: 0, missCount: 0, raiders: [] };
-      byAbility.set(ability, entry);
+      entry = { boss, ability, what: '', fix: '', deathCount: 0, missCount: 0, raiders: [] };
+      byKey.set(key, entry);
     }
     return entry;
   };
@@ -70,7 +78,7 @@ export function rankMechanicsNeedingWork(pulls: Pull[], topN = 5): MechanicNeedi
   // before any death-only entries get created -- deaths carry no reference text.
   for (const p of pulls) {
     for (const m of p.mechanicMisses) {
-      const entry = get(m.ability);
+      const entry = get(p.boss, m.ability);
       entry.what = m.what;
       entry.fix = m.fix;
       entry.missCount += 1;
@@ -79,14 +87,33 @@ export function rankMechanicsNeedingWork(pulls: Pull[], topN = 5): MechanicNeedi
   }
   for (const p of pulls) {
     for (const d of p.deaths) {
-      const entry = get(d.ability);
+      const entry = get(p.boss, d.ability);
       entry.deathCount += 1;
       bumpRaider(entry, d.name);
     }
   }
 
-  const ranked = [...byAbility.values()];
+  const ranked = [...byKey.values()];
   for (const entry of ranked) entry.raiders.sort((a, b) => b.count - a.count);
-  ranked.sort((a, b) => b.deathCount * DEATH_WEIGHT + b.missCount * MISS_WEIGHT - (a.deathCount * DEATH_WEIGHT + a.missCount * MISS_WEIGHT));
-  return ranked.slice(0, topN);
+  ranked.sort((a, b) => severity(b) - severity(a));
+  return ranked;
+}
+
+export interface BossMechanics {
+  boss: string;
+  mechanics: MechanicNeedingWork[];
+}
+
+/**
+ * Mechanics needing the most work, grouped by boss (in the same first-seen order as
+ * the pull log below it) so one rough boss doesn't crowd every other fight's misses
+ * out of the list -- worst mechanic first within each boss. Framed as a direct
+ * "this needs work" list, not a log-review prompt -- the point is telling an officer
+ * where to spend practice time, not sending them back into WCL.
+ */
+export function groupMechanicsNeedingWorkByBoss(pulls: Pull[], topNPerBoss = 5): BossMechanics[] {
+  const ranked = rankMechanics(pulls);
+  return bossOrder(pulls)
+    .map((boss) => ({ boss, mechanics: ranked.filter((m) => m.boss === boss).slice(0, topNPerBoss) }))
+    .filter((g) => g.mechanics.length > 0);
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatPullDuration, groupPullsByBoss, rankMechanicsNeedingWork } from './pullLogic';
+import { formatPullDuration, groupMechanicsNeedingWorkByBoss, groupPullsByBoss } from './pullLogic';
 import type { Pull } from '../electron';
 
 function pull(overrides: Partial<Pull> & Pick<Pull, 'boss' | 'pullNumber'>): Pull {
@@ -58,8 +58,19 @@ describe('formatPullDuration', () => {
   });
 });
 
-describe('rankMechanicsNeedingWork', () => {
-  it('ranks by weighted severity, deaths above misses', () => {
+describe('groupMechanicsNeedingWorkByBoss', () => {
+  it('groups by boss in first-seen order, not one flat cross-boss list', () => {
+    const pulls = [
+      pull({ boss: 'Vashnik', pullNumber: 1, deaths: [{ name: 'Thornwick', ability: 'Plague Froth' }] }),
+      pull({ boss: 'Sszorak', pullNumber: 1, deaths: [{ name: 'Harima', ability: 'Tempest' }] }),
+    ];
+    const groups = groupMechanicsNeedingWorkByBoss(pulls);
+    expect(groups.map((g) => g.boss)).toEqual(['Vashnik', 'Sszorak']);
+    expect(groups[0].mechanics.map((m) => m.ability)).toEqual(['Plague Froth']);
+    expect(groups[1].mechanics.map((m) => m.ability)).toEqual(['Tempest']);
+  });
+
+  it('ranks within a boss by weighted severity, deaths above misses', () => {
     const pulls = [
       pull({
         boss: 'Vashnik',
@@ -76,10 +87,21 @@ describe('rankMechanicsNeedingWork', () => {
         ],
       }),
     ];
-    const ranked = rankMechanicsNeedingWork(pulls);
+    const groups = groupMechanicsNeedingWorkByBoss(pulls);
+    expect(groups).toHaveLength(1);
     // One death (weight 3) beats three misses (weight 1 each = 3) only if weighted equal;
     // adjust: 1 death*3=3 vs 3 miss*1=3 -- tie, so assert both present rather than order.
-    expect(ranked.map((r) => r.ability).sort()).toEqual(['Plague Froth', 'Stygian Infection']);
+    expect(groups[0].mechanics.map((m) => m.ability).sort()).toEqual(['Plague Froth', 'Stygian Infection']);
+  });
+
+  it('keeps same-named abilities on different bosses separate', () => {
+    const pulls = [
+      pull({ boss: 'Vashnik', pullNumber: 1, deaths: [{ name: 'Thornwick', ability: 'Shared Name' }] }),
+      pull({ boss: 'Sszorak', pullNumber: 1, deaths: [{ name: 'Harima', ability: 'Shared Name' }] }),
+    ];
+    const groups = groupMechanicsNeedingWorkByBoss(pulls);
+    expect(groups[0].mechanics[0].deathCount).toBe(1);
+    expect(groups[1].mechanics[0].deathCount).toBe(1);
   });
 
   it('carries the curated what/fix onto a death for the same ability', () => {
@@ -95,8 +117,7 @@ describe('rankMechanicsNeedingWork', () => {
         deaths: [{ name: 'Thornwick', ability: 'Plague Froth' }],
       }),
     ];
-    const ranked = rankMechanicsNeedingWork(pulls);
-    const froth = ranked.find((r) => r.ability === 'Plague Froth');
+    const froth = groupMechanicsNeedingWorkByBoss(pulls)[0].mechanics.find((m) => m.ability === 'Plague Froth');
     expect(froth?.what).toBe('A poison wave.');
     expect(froth?.fix).toBe('Spread out and stand still so others can dodge it.');
     expect(froth?.deathCount).toBe(1);
@@ -105,9 +126,9 @@ describe('rankMechanicsNeedingWork', () => {
 
   it('leaves what/fix empty for a death with no curated mechanic reference', () => {
     const pulls = [pull({ boss: 'Vashnik', pullNumber: 1, deaths: [{ name: 'Thornwick', ability: 'Some Untagged Ability' }] })];
-    const ranked = rankMechanicsNeedingWork(pulls);
-    expect(ranked[0].what).toBe('');
-    expect(ranked[0].fix).toBe('');
+    const mechanics = groupMechanicsNeedingWorkByBoss(pulls)[0].mechanics;
+    expect(mechanics[0].what).toBe('');
+    expect(mechanics[0].fix).toBe('');
   });
 
   it('aggregates per-raider counts and sorts raiders worst-first', () => {
@@ -122,14 +143,14 @@ describe('rankMechanicsNeedingWork', () => {
         ],
       }),
     ];
-    const ranked = rankMechanicsNeedingWork(pulls);
-    expect(ranked[0].raiders).toEqual([
+    const mechanics = groupMechanicsNeedingWorkByBoss(pulls)[0].mechanics;
+    expect(mechanics[0].raiders).toEqual([
       { name: 'Grimsyl', count: 2 },
       { name: 'Zalanto', count: 1 },
     ]);
   });
 
-  it('caps the result at topN', () => {
+  it('caps the result at topNPerBoss, per boss', () => {
     const pulls = [
       pull({
         boss: 'Vashnik',
@@ -141,10 +162,10 @@ describe('rankMechanicsNeedingWork', () => {
         ],
       }),
     ];
-    expect(rankMechanicsNeedingWork(pulls, 2)).toHaveLength(2);
+    expect(groupMechanicsNeedingWorkByBoss(pulls, 2)[0].mechanics).toHaveLength(2);
   });
 
   it('returns an empty list when nothing went wrong', () => {
-    expect(rankMechanicsNeedingWork([pull({ boss: 'Vashnik', pullNumber: 1 })])).toEqual([]);
+    expect(groupMechanicsNeedingWorkByBoss([pull({ boss: 'Vashnik', pullNumber: 1 })])).toEqual([]);
   });
 });

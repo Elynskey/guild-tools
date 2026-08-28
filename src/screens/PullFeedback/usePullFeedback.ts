@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { getPullFeedback, listRaidNights } from '../../raid/pullsSource';
-import { groupPullsByBoss, rankMechanicsNeedingWork } from '../../raid/pullLogic';
+import { groupMechanicsNeedingWorkByBoss, groupPullsByBoss } from '../../raid/pullLogic';
 import type { Pull, RaidNight } from '../../electron';
 
 export function usePullFeedback() {
@@ -34,7 +34,7 @@ export function usePullFeedback() {
   const selectNight = useCallback((code: string) => setSelectedCode(code), []);
 
   const bossGroups = pulls ? groupPullsByBoss(pulls) : [];
-  const mechanicsNeedingWork = pulls ? rankMechanicsNeedingWork(pulls) : [];
+  const mechanicsNeedingWork = pulls ? groupMechanicsNeedingWorkByBoss(pulls) : [];
 
   return {
     nights: nights ?? [],

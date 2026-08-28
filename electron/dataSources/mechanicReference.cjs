@@ -30,6 +30,9 @@ const BOSS_MECHANICS = {
     { ability: 'Mark of Blood', what: 'A stacking debuff from standing too close to the other boss.', fix: 'Stay at least 40 yards from the other boss.' },
     { ability: 'Helical Toxins', what: 'Marks players with a number of orbs; colliding with the wrong player deals damage.', fix: 'Find the player whose orb count totals 4 with yours and collide with them, not anyone else.' },
   ],
+  // "Final Ascension" is confirmed real (Mor'zahi's energy-fill wipe) but is a
+  // raid-wide DPS-race failure, not a personal dodge/positioning miss -- left
+  // untagged on purpose, same reasoning as Sszorak's "Caustic Rain" below.
   'The Lost Explorers': [
     { ability: 'Shell Spin', what: 'A frontal cone attack that fires three shells.', fix: 'Stand outside the cone.' },
     { ability: 'Blink Nova', what: 'A teleport effect that damages anyone caught in it.', fix: "Move it away from the group before it goes off." },
@@ -39,17 +42,36 @@ const BOSS_MECHANICS = {
   ],
   // Confirmed live: this fight logs BOTH "Mutilate" (the cast) and "Mutilated Gash"
   // (the actual hit) as separate named entries -- both tagged so either shows up.
+  // Deliberately NOT tagged, confirmed real but not a personal-avoidable mechanic:
+  // "Caustic Rain" is a hard-enrage cast (3rd time at 100 energy) that ends the pull
+  // for everyone -- a raid timing failure, not a dodge/positioning one.
+  // "Ula'tek's Presence" / "Fel Armor" / "Spirit Link" show up as death-cause
+  // abilities in real logs but don't match any known Sszorak mechanic -- likely WCL
+  // attributing the death to an incidental buff/aura tick rather than the actual
+  // cause. Left untagged rather than guessed.
   Sszorak: [
     { ability: 'Ravage', what: "A frontal cleave aimed wherever the tank is facing.", fix: 'Point it away from the raid.' },
     { ability: 'Mutilate', what: 'A frontal cleave meant to be soaked by the raid.', fix: 'Point it into the group soak.' },
     { ability: 'Mutilated Gash', what: 'A frontal cleave meant to be soaked by the raid.', fix: 'Point it into the group soak.' },
     { ability: 'Tempest', what: 'Tornadoes that sweep across the arena.', fix: 'Dodge them.' },
     { ability: 'Raging Crosswinds', what: 'A directional effect that has to be paired between two players.', fix: 'Point it at a partner whose crosswind is pointed back at you.' },
+    { ability: 'Venomous Surge', what: 'Creates a venom cyst that later bursts into a Viscous Cyst.', fix: 'Place it away from the raid and make sure the wind triggers it on time.' },
+    { ability: 'Viscous Cyst', what: 'A venom glob that bursts on contact or after 2 minutes, knocking players back and leaving a damaging pool.', fix: 'Stay clear of it, especially as it nears bursting.' },
   ],
+  // "Toxic Fumes" is confirmed real but raid-wide, unavoidable periodic damage (hits
+  // everyone regardless of positioning) -- not a personal miss, left untagged on
+  // purpose. Same for "Caustic Rain" (see Sszorak above -- an enrage/wipe cast, not
+  // dodgeable). "Deadly Venom" and "Caustic Globule" (a deliberate soak) also
+  // untagged -- no confident source for the former, soaking isn't a miss for the latter.
   'The Twin Fangs': [
     { ability: 'Stir the Depths', what: 'Waves that sweep the room and add a stack of Eternal Venom.', fix: 'Dodge them.' },
     { ability: 'Submerge', what: 'A rotating laser beam during Phase 2.', fix: 'Watch the ring of orbs and avoid the path of the beam.' },
     { ability: 'Coiling Ichor', what: 'A debuff that drops a damaging pool wherever you are standing when it expires.', fix: 'Move to the edge of the room before the debuff runs out.' },
+    { ability: 'Vile Flood', what: 'A frontal torrent of toxin from Vexhul that also applies a stack of Eternal Venom.', fix: 'Get out of the frontal cone.' },
+    { ability: 'Sanguine Storm', what: 'Globs of gore that Ithraz rains across the platform.', fix: 'Watch for where they land and move out of the way.' },
+    { ability: 'Caustic Deluge', what: 'A salvo of globules that apply a stack of Eternal Venom if they hit you.', fix: 'Avoid getting hit by the globules.' },
+    { ability: 'Concentrated Spittle', what: 'Vexhul pelts whoever is out of melee range with spittle.', fix: 'Stay in melee range of Vexhul.' },
+    { ability: 'Clotted Bolt', what: 'Ithraz strikes whoever is out of melee range.', fix: 'Stay in melee range of Ithraz.' },
   ],
   'The Coiled Altar': [
     { ability: 'Gloombomb', what: 'Spawns clones that all need to be collected.', fix: 'Spread out and make sure every clone gets collected.' },
