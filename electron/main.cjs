@@ -24,28 +24,32 @@ const { checkForUpdate } = require('./dataSources/updateCheck.cjs');
 const { listCraftRequests, addCraftRequest, toggleCraftRequestFulfilled, removeCraftRequest } = require('./dataSources/fetchCraftRequests.cjs');
 const { signIn: bnetSignIn } = require('./dataSources/bnetAuth.cjs');
 const { signIn: discordSignIn } = require('./dataSources/discordAuth.cjs');
+const { loadSession, saveSession, clearSession } = require('./dataSources/authSession.cjs');
 const { getWowPathConfig, setWowPath, installAddon } = require('./dataSources/lootLog.cjs');
 const { fetchLootLog } = require('./dataSources/fetchLootLog.cjs');
 
-// Sign-in state lives in memory only, reset every app launch by design -- a raider
-// signs in once per session rather than the app persisting a long-lived token to disk.
-// Simpler and safer than managing token refresh/expiry for a login gate. Either
-// provider satisfies the gate; whichever was used last is what's stored -- Discord
-// additionally proves CRD Discord-server membership (see discordAuth.cjs), Battle.net
-// only proves account ownership (unchanged from its original scope).
-let authState = null;
+// Sign-in state is remembered for 14 days (see authSession.cjs) so an officer isn't
+// re-proving guild membership through a browser every single launch -- restored here at
+// startup, refreshed on every sign-in, cleared on explicit sign-out. Either provider
+// satisfies the gate; whichever was used last is what's stored -- Discord additionally
+// proves CRD Discord-server membership (see discordAuth.cjs), Battle.net only proves
+// account ownership (unchanged from its original scope).
+let authState = loadSession();
 ipcMain.handle('auth:getState', async () => authState);
 ipcMain.handle('auth:signIn', async () => {
   const user = await bnetSignIn();
   authState = { provider: 'battlenet', displayName: user.battletag, id: user.id };
+  saveSession(authState);
   return authState;
 });
 ipcMain.handle('auth:signInDiscord', async () => {
   authState = await discordSignIn();
+  saveSession(authState);
   return authState;
 });
 ipcMain.handle('auth:signOut', async () => {
   authState = null;
+  clearSession();
 });
 
 ipcMain.handle('roster:fetch', async () => fetchRoster());
