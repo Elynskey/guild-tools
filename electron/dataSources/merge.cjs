@@ -22,9 +22,24 @@ function mergeSources({ wowauditRoster, rio, gearCompletion, wcl }) {
 
       return {
         name: member.name,
-        role: member.role, // wowaudit's role is authoritative for the roster's raid assignment, not RIO's active spec
-        class: rioData.class,
-        spec: rioData.spec,
+        // wclData.role is the role WCL's own rankings show them actually playing
+        // (resolved in warcraftlogs.cjs, newest report wins), falling back to
+        // wowaudit's roster field only when WCL has no data for them -- confirmed
+        // live to drift from wowaudit's static field (an off-spec tank night still
+        // showing "dps" there), which put them in the wrong ledger section with a
+        // score computed by the wrong formula. Not RIO's active spec either way --
+        // that's just whatever spec they last logged into, not who they raid as.
+        role: wclData.role,
+        // Same reasoning as role, same source: WCL's own rankings carry the actual
+        // class/spec played in the historical report being shown. Raider.IO's
+        // class/spec is a live snapshot of whatever they're playing RIGHT NOW, which
+        // can silently mismatch a past raid night after a respec (confirmed live:
+        // RIO said "Havoc" days after a report where WCL showed "Vengeance" that
+        // night -- "Havoc Demon Hunter · Tank" is a contradictory pairing no one
+        // who knows the game would trust). RIO is the fallback only when WCL has no
+        // rankings data for them at all this tier.
+        class: wclData.class ?? rioData.class,
+        spec: wclData.spec ?? rioData.spec,
         rioCurrent: rioData.rioCurrent,
         rioHighestThisSeason: rioData.rioHighestThisSeason,
         ilvlEquipped: rioData.ilvlEquipped,

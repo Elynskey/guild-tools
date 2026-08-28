@@ -187,19 +187,30 @@ function extractRankPercents(ranking) {
 
 const RANKINGS_ROLE_KEY = { tanks: 'tank', healers: 'healer', dps: 'dps' };
 
-// The role someone actually PLAYED in a given report, from WCL's own rankings role
-// buckets -- confirmed live to disagree with wowaudit's roster role (wowaudit said
-// "dps", WCL showed the same raider tanking every kill in the latest report, e.g. an
-// off-spec fill-in night). wowaudit's role field is a static roster assignment an
-// officer sets once and can go stale; this is what they actually did that night, so
-// it's what perf scoring should key off of, not the roster field.
-function extractActualRoles(ranking) {
+// WCL's class/spec strings are PascalCase with no spaces ("DemonHunter",
+// "BeastMastery"); Raider.IO's (and this app's sample data) are spaced ("Demon
+// Hunter", "Beast Mastery"). Normalize so the two are interchangeable in the UI.
+function spaceWclName(s) {
+  return typeof s === 'string' ? s.replace(/([a-z])([A-Z])/g, '$1 $2') : s;
+}
+
+// Who someone actually WAS in a given report -- role, class, and spec -- straight
+// from WCL's own rankings entries (each character row carries `class`/`spec` fields
+// directly, confirmed live). Two independent staleness bugs this fixes at once:
+// wowaudit's roster role is a static field an officer sets once (confirmed live to
+// disagree -- an off-spec tank night still showing "dps" there), and Raider.IO's
+// class/spec is whatever they're CURRENTLY playing when the app happens to fetch it,
+// not what they played during the historical raid night being displayed (confirmed
+// live: RIO said "Havoc" days after a report where WCL shows they tanked as
+// "Vengeance" that night -- "Havoc Demon Hunter · Tank" is a visibly contradictory
+// spec/role pairing that game experts would immediately notice as wrong).
+function extractActualIdentity(ranking) {
   const result = new Map();
   if (!ranking?.roles) return result;
   for (const [key, roleData] of Object.entries(ranking.roles)) {
     const role = RANKINGS_ROLE_KEY[key];
     if (!role) continue;
-    for (const c of roleData.characters ?? []) result.set(c.name, role);
+    for (const c of roleData.characters ?? []) result.set(c.name, { role, class: spaceWclName(c.class), spec: spaceWclName(c.spec) });
   }
   return result;
 }
@@ -220,7 +231,7 @@ async function fetchReportAggregate(code) {
   const fightNameById = new Map(fights.map((f) => [f.id, f.name]));
 
   if (killFightIds.length === 0) {
-    return { dps: new Map(), hps: new Map(), deaths: new Map(), deathCauses: new Map(), pullCount: 0, rankPercent: new Map(), actualRoles: new Map(), heroicKillEncounterIds, actorServers: new Map() };
+    return { dps: new Map(), hps: new Map(), deaths: new Map(), deathCauses: new Map(), pullCount: 0, rankPercent: new Map(), actualIdentity: new Map(), heroicKillEncounterIds, actorServers: new Map() };
   }
 
   const [damageEntries, healingEntries, deathEntries, ranking, actorServers] = await Promise.all([
@@ -238,7 +249,7 @@ async function fetchReportAggregate(code) {
     deathCauses: extractDeathCausesByName(deathEntries, fightNameById),
     pullCount: killFightIds.length,
     rankPercent: extractRankPercents(ranking),
-    actualRoles: extractActualRoles(ranking),
+    actualIdentity: extractActualIdentity(ranking),
     heroicKillEncounterIds,
     actorServers,
   };
@@ -254,7 +265,7 @@ const DEATH_CAUSE_CAP = 60;
  * @param {{ name: string, realm: string, region: string }} guild
  * @param {string} tierZoneName — only reports in this raid tier count (config.tier.name)
  * @param {Record<string,'tank'|'healer'|'dps'>} roleByName — from wowaudit, since WCL doesn't know raid role assignment
- * @returns {Promise<{ performance: Record<string, { perf: number, parseTrend: number, deaths: number, pulls: number, deathCauses: {boss:string,ability:string}[], nightParse: number, nightDeaths: number, nightPulls: number, nightDeathCauses: {boss:string,ability:string}[] }>, heroicBossesKilled: number, observedRealms: Record<string, string[]> }>}
+ * @returns {Promise<{ performance: Record<string, { role: 'tank'|'healer'|'dps', class: string|null, spec: string|null, perf: number, parseTrend: number, deaths: number, pulls: number, deathCauses: {boss:string,ability:string}[], nightParse: number, nightDeaths: number, nightPulls: number, nightDeathCauses: {boss:string,ability:string}[] }>, heroicBossesKilled: number, observedRealms: Record<string, string[]> }>}
  */
 async function fetchWarcraftLogs(guild, tierZoneName, roleByName) {
   const minDps = Number(process.env.MIN_DPS_REQUIREMENT ?? 0);
@@ -272,7 +283,7 @@ async function fetchWarcraftLogs(guild, tierZoneName, roleByName) {
     // over wowaudit's static roster role -- confirmed live to drift (an off-spec
     // fill-in night: wowaudit still said "dps", WCL showed them tanking every kill).
     // wowaudit's role only fills in when WCL has no rankings entry for them at all.
-    const role = agg.actualRoles.get(name) ?? roleByName[name];
+    const role = agg.actualIdentity.get(name)?.role ?? roleByName[name];
     if (role === MIN_DPS_ROLE) {
       const dps = agg.dps.get(name);
       return dps == null ? null : Math.round((dps / minDps) * 100);
@@ -280,6 +291,19 @@ async function fetchWarcraftLogs(guild, tierZoneName, roleByName) {
     const rp = agg.rankPercent.get(name);
     return rp == null ? null : Math.round(rp);
   };
+
+  // Same "trust what WCL actually saw" preference as perfSnapshot, but resolved once
+  // per raider (not per report) since this feeds the roster's Tank/Healer/Damage
+  // section grouping and the class/spec shown on their row -- those need one stable
+  // answer, not a per-report one. Newest report wins so a recent respec is reflected
+  // quickly; wowaudit's roster role / Raider.IO's class+spec are the fallback only
+  // when WCL has no rankings data for them at all this tier.
+  const resolvedIdentity = {};
+  for (let i = aggregates.length - 1; i >= 0; i--) {
+    for (const [name, identity] of aggregates[i].actualIdentity) {
+      if (!(name in resolvedIdentity)) resolvedIdentity[name] = identity;
+    }
+  }
 
   const names = Object.keys(roleByName);
   const result = {};
@@ -317,7 +341,20 @@ async function fetchWarcraftLogs(guild, tierZoneName, roleByName) {
     // Most recent causes first, capped -- feedback text only ever cites the latest one or two.
     deathCauses = deathCauses.reverse().slice(0, DEATH_CAUSE_CAP);
 
-    result[name] = { perf: seriesLast, parseTrend, deaths, pulls, deathCauses, nightParse: seriesLast, nightDeaths: 0, nightPulls: 0, nightDeathCauses: [] };
+    result[name] = {
+      role: resolvedIdentity[name]?.role ?? roleByName[name],
+      class: resolvedIdentity[name]?.class ?? null,
+      spec: resolvedIdentity[name]?.spec ?? null,
+      perf: seriesLast,
+      parseTrend,
+      deaths,
+      pulls,
+      deathCauses,
+      nightParse: seriesLast,
+      nightDeaths: 0,
+      nightPulls: 0,
+      nightDeathCauses: [],
+    };
   }
 
   // nightParse/nightDeaths/nightPulls/nightDeathCauses should reflect only the MOST
@@ -391,7 +428,7 @@ async function fetchPullBreakdown(code, roleByName) {
   const rankingsByKillFight = await Promise.all(killFights.map((f) => fetchRankingsForFight(code, f.id)));
   const nightRoles = new Map();
   for (const ranking of rankingsByKillFight) {
-    for (const [name, role] of extractActualRoles(ranking)) nightRoles.set(name, role);
+    for (const [name, identity] of extractActualIdentity(ranking)) nightRoles.set(name, identity.role);
   }
   const resolveRole = (name) => nightRoles.get(name) ?? roleByName[name] ?? null;
 

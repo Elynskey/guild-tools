@@ -33,16 +33,23 @@ const BOSS_MECHANICS = {
   'The Lost Explorers': [
     { ability: 'Shell Spin', what: 'A frontal cone attack that fires three shells.', fix: 'Stand outside the cone.' },
     { ability: 'Blink Nova', what: 'A teleport effect that damages anyone caught in it.', fix: "Move it away from the group before it goes off." },
+    { ability: 'Throw Junk', what: "Soakable crates from Trader Gebbo that stack a bleed if you take too many at once.", fix: "Soak crates, but don't take more than a couple in a row." },
+    { ability: 'Blast Wave', what: "Trader Gebbo's bomb, firing an expanding ring across the room when it explodes.", fix: 'Use a mushroom to bounce over the ring, or get clear before it hits.' },
+    { ability: 'Elemental Explosion', what: 'A Fire or Frost circle exploding where it lands.', fix: 'Spread out, then walk into the puddle of the opposite element to clear it.' },
   ],
+  // Confirmed live: this fight logs BOTH "Mutilate" (the cast) and "Mutilated Gash"
+  // (the actual hit) as separate named entries -- both tagged so either shows up.
   Sszorak: [
     { ability: 'Ravage', what: "A frontal cleave aimed wherever the tank is facing.", fix: 'Point it away from the raid.' },
     { ability: 'Mutilate', what: 'A frontal cleave meant to be soaked by the raid.', fix: 'Point it into the group soak.' },
+    { ability: 'Mutilated Gash', what: 'A frontal cleave meant to be soaked by the raid.', fix: 'Point it into the group soak.' },
     { ability: 'Tempest', what: 'Tornadoes that sweep across the arena.', fix: 'Dodge them.' },
     { ability: 'Raging Crosswinds', what: 'A directional effect that has to be paired between two players.', fix: 'Point it at a partner whose crosswind is pointed back at you.' },
   ],
   'The Twin Fangs': [
     { ability: 'Stir the Depths', what: 'Waves that sweep the room and add a stack of Eternal Venom.', fix: 'Dodge them.' },
     { ability: 'Submerge', what: 'A rotating laser beam during Phase 2.', fix: 'Watch the ring of orbs and avoid the path of the beam.' },
+    { ability: 'Coiling Ichor', what: 'A debuff that drops a damaging pool wherever you are standing when it expires.', fix: 'Move to the edge of the room before the debuff runs out.' },
   ],
   'The Coiled Altar': [
     { ability: 'Gloombomb', what: 'Spawns clones that all need to be collected.', fix: 'Spread out and make sure every clone gets collected.' },
