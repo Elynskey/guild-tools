@@ -57,6 +57,14 @@ const TILE_DEFS: { key: Band; label: string; note: string }[] = [
 // accurate for a dashboard left open, without needing a full re-fetch.
 const FRESHNESS_TICK_MS = 30_000;
 
+// Officers live-log raids and want to check what's killing people between pulls
+// without remembering to hit Refresh -- keeps pulling fresh Warcraft Logs/RIO/gear/
+// wowaudit data automatically. Deliberately NOT gated on window focus/visibility:
+// the real workflow is WoW focused during the pull, tabbing over to this app between
+// pulls, so data needs to already be fresh by the time they look, not start fetching
+// only once they do.
+const AUTO_REFRESH_MS = 3 * 60 * 1000;
+
 export function useRaiderStatus() {
   const [roster, setRoster] = useState<Raider[] | null>(null);
   const [meta, setMeta] = useState<Meta | null>(null);
@@ -65,7 +73,10 @@ export function useRaiderStatus() {
   const [, forceTick] = useState(0);
   const [state, setState] = useState<State>({ window: null, role: 'all', band: 'all', query: '', sortWorst: true, open: null });
 
+  const isFetchingRef = useRef(false);
   const load = useCallback((isRefresh: boolean) => {
+    if (isFetchingRef.current) return Promise.resolve(); // auto-refresh timer firing mid-fetch (e.g. a slow WCL pull) -- skip, don't stack requests
+    isFetchingRef.current = true;
     if (isRefresh) setRefreshing(true);
     return getRoster()
       .then((result) => {
@@ -74,7 +85,10 @@ export function useRaiderStatus() {
         setLoadError(null);
       })
       .catch(() => setLoadError('Could not load the roster.'))
-      .finally(() => setRefreshing(false));
+      .finally(() => {
+        setRefreshing(false);
+        isFetchingRef.current = false;
+      });
   }, []);
 
   // See the matching comment in useProfessions.ts — StrictMode double-invokes this
@@ -90,6 +104,11 @@ export function useRaiderStatus() {
     const id = setInterval(() => forceTick((n) => n + 1), FRESHNESS_TICK_MS);
     return () => clearInterval(id);
   }, []);
+
+  useEffect(() => {
+    const id = setInterval(() => void load(true), AUTO_REFRESH_MS);
+    return () => clearInterval(id);
+  }, [load]);
 
   const win: Window = state.window ?? config.defaultWindow;
 
