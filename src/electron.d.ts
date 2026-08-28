@@ -82,6 +82,11 @@ export interface NightSnapshotEntry {
   nightDeathCauses: DeathCause[];
 }
 
+export interface AuthState {
+  battletag: string;
+  id: number;
+}
+
 export interface ElectronAPI {
   getRoster: () => Promise<LiveRosterResult | null>;
   getProfessions: () => Promise<LiveProfessionsResult | null>;
@@ -95,6 +100,9 @@ export interface ElectronAPI {
   listRaidNights: () => Promise<RaidNight[] | null>;
   getPullFeedback: (code: string) => Promise<PullFeedbackResult | null>;
   getNightSnapshot: (code: string) => Promise<Record<string, NightSnapshotEntry> | null>;
+  getAuthState: () => Promise<AuthState | null>;
+  signIn: () => Promise<AuthState>;
+  signOut: () => Promise<void>;
 }
 
 declare global {

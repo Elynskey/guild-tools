@@ -19,4 +19,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   listRaidNights: () => ipcRenderer.invoke('raidNights:list'),
   getPullFeedback: (code) => ipcRenderer.invoke('pullFeedback:fetch', code),
   getNightSnapshot: (code) => ipcRenderer.invoke('nightSnapshot:fetch', code),
+  getAuthState: () => ipcRenderer.invoke('auth:getState'),
+  signIn: () => ipcRenderer.invoke('auth:signIn'),
+  signOut: () => ipcRenderer.invoke('auth:signOut'),
 });

@@ -30,7 +30,12 @@ const CARDS: NavCardDef[] = [
   },
 ];
 
-export function Landing() {
+interface LandingProps {
+  battletag: string | null;
+  signOut: () => void;
+}
+
+export function Landing({ battletag, signOut }: LandingProps) {
   return (
     <div
       style={{
@@ -46,6 +51,18 @@ export function Landing() {
         gap: 40,
       }}
     >
+      {battletag && (
+        <div style={{ position: 'fixed', top: 16, right: 20, fontSize: 'var(--text-micro)', color: 'var(--text-faint)' }}>
+          {battletag}{' '}
+          <button
+            type="button"
+            onClick={signOut}
+            style={{ background: 'none', border: 0, padding: 0, marginLeft: 6, cursor: 'pointer', color: 'var(--text-gold)', font: 'inherit' }}
+          >
+            Sign out
+          </button>
+        </div>
+      )}
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
         <Crest size={64} />
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>

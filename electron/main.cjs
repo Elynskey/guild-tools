@@ -21,6 +21,21 @@ const { fetchRecipeCatalogue, getCachedRecipeCatalogue } = require('./dataSource
 const { fetchRaidNightsList, fetchPullFeedback } = require('./dataSources/fetchPullFeedback.cjs');
 const { fetchNightSnapshotForCode } = require('./dataSources/fetchNightSnapshot.cjs');
 const { checkForUpdate } = require('./dataSources/updateCheck.cjs');
+const { signIn: bnetSignIn } = require('./dataSources/bnetAuth.cjs');
+
+// Sign-in state lives in memory only, reset every app launch by design -- an
+// officer signs in once per session rather than the app persisting a long-lived
+// token to disk. Simpler and safer than managing token refresh/expiry for a login
+// gate whose only job is "prove you have a real Battle.net account."
+let authState = null;
+ipcMain.handle('auth:getState', async () => authState);
+ipcMain.handle('auth:signIn', async () => {
+  authState = await bnetSignIn();
+  return authState;
+});
+ipcMain.handle('auth:signOut', async () => {
+  authState = null;
+});
 
 ipcMain.handle('roster:fetch', async () => fetchRoster());
 ipcMain.handle('professions:getCached', async () => getCachedProfessions());
