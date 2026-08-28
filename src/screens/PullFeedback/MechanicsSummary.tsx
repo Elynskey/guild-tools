@@ -33,7 +33,13 @@ export function MechanicsSummary({ mechanics }: MechanicsSummaryProps) {
                 {m.missCount > 0 && `${m.missCount} missed`}
               </span>
             </div>
-            {m.description !== m.ability && <div style={{ marginTop: 3, fontSize: 'var(--text-body-s)', color: 'var(--text-muted)' }}>{m.description}</div>}
+            {m.what && <div style={{ marginTop: 3, fontSize: 'var(--text-body-s)', color: 'var(--text-body)' }}>{m.what}</div>}
+            {m.fix && (
+              <div style={{ marginTop: 2, fontSize: 'var(--text-body-s)', color: 'var(--text-gold)' }}>
+                <span style={{ color: 'var(--text-muted)' }}>Fix — </span>
+                {m.fix}
+              </div>
+            )}
             <div style={{ marginTop: 4, fontSize: 'var(--text-micro)', color: 'var(--text-faint)' }}>
               {m.raiders.map((r) => `${r.name}${r.count > 1 ? ` x${r.count}` : ''}`).join(', ')}
             </div>

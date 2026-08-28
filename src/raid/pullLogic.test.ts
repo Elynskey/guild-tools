@@ -70,9 +70,9 @@ describe('rankMechanicsNeedingWork', () => {
         boss: 'Vashnik',
         pullNumber: 2,
         mechanicMisses: [
-          { name: 'Grimsyl', ability: 'Stygian Infection', description: 'Void zone went off without moving away first.' },
-          { name: 'Zalanto', ability: 'Stygian Infection', description: 'Void zone went off without moving away first.' },
-          { name: 'Harima', ability: 'Stygian Infection', description: 'Void zone went off without moving away first.' },
+          { name: 'Grimsyl', ability: 'Stygian Infection', what: 'Void zones that burst underneath a marked player.', fix: 'Move away before it bursts.' },
+          { name: 'Zalanto', ability: 'Stygian Infection', what: 'Void zones that burst underneath a marked player.', fix: 'Move away before it bursts.' },
+          { name: 'Harima', ability: 'Stygian Infection', what: 'Void zones that burst underneath a marked player.', fix: 'Move away before it bursts.' },
         ],
       }),
     ];
@@ -82,12 +82,12 @@ describe('rankMechanicsNeedingWork', () => {
     expect(ranked.map((r) => r.ability).sort()).toEqual(['Plague Froth', 'Stygian Infection']);
   });
 
-  it('prefers a curated miss description over the raw ability name from a death', () => {
+  it('carries the curated what/fix onto a death for the same ability', () => {
     const pulls = [
       pull({
         boss: 'Vashnik',
         pullNumber: 1,
-        mechanicMisses: [{ name: 'Grimsyl', ability: 'Plague Froth', description: "Didn't spread -- stand still, let others dodge the wave." }],
+        mechanicMisses: [{ name: 'Grimsyl', ability: 'Plague Froth', what: 'A poison wave.', fix: "Spread out and stand still so others can dodge it." }],
       }),
       pull({
         boss: 'Vashnik',
@@ -97,9 +97,17 @@ describe('rankMechanicsNeedingWork', () => {
     ];
     const ranked = rankMechanicsNeedingWork(pulls);
     const froth = ranked.find((r) => r.ability === 'Plague Froth');
-    expect(froth?.description).toBe("Didn't spread -- stand still, let others dodge the wave.");
+    expect(froth?.what).toBe('A poison wave.');
+    expect(froth?.fix).toBe('Spread out and stand still so others can dodge it.');
     expect(froth?.deathCount).toBe(1);
     expect(froth?.missCount).toBe(1);
+  });
+
+  it('leaves what/fix empty for a death with no curated mechanic reference', () => {
+    const pulls = [pull({ boss: 'Vashnik', pullNumber: 1, deaths: [{ name: 'Thornwick', ability: 'Some Untagged Ability' }] })];
+    const ranked = rankMechanicsNeedingWork(pulls);
+    expect(ranked[0].what).toBe('');
+    expect(ranked[0].fix).toBe('');
   });
 
   it('aggregates per-raider counts and sorts raiders worst-first', () => {
@@ -108,9 +116,9 @@ describe('rankMechanicsNeedingWork', () => {
         boss: 'Vashnik',
         pullNumber: 1,
         mechanicMisses: [
-          { name: 'Grimsyl', ability: 'Plague Froth', description: 'x' },
-          { name: 'Grimsyl', ability: 'Plague Froth', description: 'x' },
-          { name: 'Zalanto', ability: 'Plague Froth', description: 'x' },
+          { name: 'Grimsyl', ability: 'Plague Froth', what: 'x', fix: 'x' },
+          { name: 'Grimsyl', ability: 'Plague Froth', what: 'x', fix: 'x' },
+          { name: 'Zalanto', ability: 'Plague Froth', what: 'x', fix: 'x' },
         ],
       }),
     ];
@@ -127,9 +135,9 @@ describe('rankMechanicsNeedingWork', () => {
         boss: 'Vashnik',
         pullNumber: 1,
         mechanicMisses: [
-          { name: 'A', ability: 'One', description: 'x' },
-          { name: 'B', ability: 'Two', description: 'x' },
-          { name: 'C', ability: 'Three', description: 'x' },
+          { name: 'A', ability: 'One', what: 'x', fix: 'x' },
+          { name: 'B', ability: 'Two', what: 'x', fix: 'x' },
+          { name: 'C', ability: 'Three', what: 'x', fix: 'x' },
         ],
       }),
     ];

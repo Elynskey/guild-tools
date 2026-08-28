@@ -28,8 +28,8 @@ const NIGHT_2: Pull[] = [
     ],
     deaths: [{ name: 'Thornwick', ability: 'Plague Froth' }],
     mechanicMisses: [
-      { name: 'Grimsyl', ability: 'Plague Froth', description: "Didn't spread -- stand still, let others dodge the wave." },
-      { name: 'Zalanto', ability: 'Plague Froth', description: "Didn't spread -- stand still, let others dodge the wave." },
+      { name: 'Grimsyl', ability: 'Plague Froth', what: 'A poison wave that hits anyone standing near another player.', fix: 'Spread out and stand still so others can dodge it.' },
+      { name: 'Zalanto', ability: 'Plague Froth', what: 'A poison wave that hits anyone standing near another player.', fix: 'Spread out and stand still so others can dodge it.' },
     ],
   }),
   pull({
@@ -46,7 +46,7 @@ const NIGHT_2: Pull[] = [
       { name: 'Thornwick', role: 'tank', metric: 'rankPercent', value: null },
     ],
     deaths: [],
-    mechanicMisses: [{ name: 'Grimsyl', ability: 'Plague Froth', description: "Didn't spread -- stand still, let others dodge the wave." }],
+    mechanicMisses: [{ name: 'Grimsyl', ability: 'Plague Froth', what: 'A poison wave that hits anyone standing near another player.', fix: 'Spread out and stand still so others can dodge it.' }],
   }),
   pull({
     fightId: 3,
@@ -77,7 +77,7 @@ const NIGHT_2: Pull[] = [
       { name: 'Harima', role: 'dps', metric: 'dps', value: 20100 },
     ],
     deaths: [{ name: 'Harima', ability: 'Tempest' }],
-    mechanicMisses: [{ name: 'Perseffonee', ability: 'Tempest', description: "Didn't dodge a tornado." }],
+    mechanicMisses: [{ name: 'Perseffonee', ability: 'Tempest', what: 'Tornadoes that sweep across the arena.', fix: 'Dodge them.' }],
   }),
 ];
 
@@ -95,7 +95,7 @@ const NIGHT_1: Pull[] = [
       { name: 'Harima', role: 'dps', metric: 'dps', value: 20600 },
     ],
     deaths: [],
-    mechanicMisses: [{ name: 'Grimsyl', ability: 'Plague Froth', description: "Didn't spread -- stand still, let others dodge the wave." }],
+    mechanicMisses: [{ name: 'Grimsyl', ability: 'Plague Froth', what: 'A poison wave that hits anyone standing near another player.', fix: 'Spread out and stand still so others can dodge it.' }],
   }),
   pull({
     fightId: 2,

@@ -381,7 +381,7 @@ async function fetchRaidNights(guild, tierZoneName) {
  * tier-wide pipeline) and applied to every pull in the report, since nobody swaps main
  * spec mid-raid-night -- wipes have no rankings of their own to resolve it from.
  *
- * @returns {Promise<{ pulls: Array<{ fightId: number, pullNumber: number, boss: string, kill: boolean, bossPercentage: number|null, durationMs: number, raiders: Array<{name: string, role: string|null, metric: 'dps'|'hps'|'rankPercent'|null, value: number|null}>, deaths: Array<{name: string, ability: string}>, mechanicMisses: Array<{name: string, ability: string, description: string}> }> }>}
+ * @returns {Promise<{ pulls: Array<{ fightId: number, pullNumber: number, boss: string, kill: boolean, bossPercentage: number|null, durationMs: number, raiders: Array<{name: string, role: string|null, metric: 'dps'|'hps'|'rankPercent'|null, value: number|null}>, deaths: Array<{name: string, ability: string}>, mechanicMisses: Array<{name: string, ability: string, what: string, fix: string}> }> }>}
  */
 async function fetchPullBreakdown(code, roleByName) {
   const fights = await fetchFights(code);
@@ -423,7 +423,7 @@ async function fetchPullBreakdown(code, roleByName) {
       for (const [name, abilities] of damageTakenAbilitiesByName) {
         if (deathNames.has(name)) continue; // died to it -- that's covered by deaths, not a "survived but missed it"
         for (const def of mechanicDefs) {
-          if (abilities.has(def.ability)) mechanicMisses.push({ name, ability: def.ability, description: def.description });
+          if (abilities.has(def.ability)) mechanicMisses.push({ name, ability: def.ability, what: def.what, fix: def.fix });
         }
       }
 

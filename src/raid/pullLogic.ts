@@ -28,7 +28,10 @@ export function formatPullDuration(ms: number): string {
 
 export interface MechanicNeedingWork {
   ability: string;
-  description: string;
+  /** What the mechanic actually is. Empty when only raw deaths fed this entry -- no curated reference for that ability yet. */
+  what: string;
+  /** The action that avoids it. Empty when only raw deaths fed this entry -- no curated reference for that ability yet. */
+  fix: string;
   deathCount: number;
   missCount: number;
   raiders: { name: string; count: number }[];
@@ -49,26 +52,37 @@ const MISS_WEIGHT = 1;
 export function rankMechanicsNeedingWork(pulls: Pull[], topN = 5): MechanicNeedingWork[] {
   const byAbility = new Map<string, MechanicNeedingWork>();
 
-  const bump = (ability: string, description: string, name: string, isDeath: boolean) => {
+  const get = (ability: string) => {
     let entry = byAbility.get(ability);
     if (!entry) {
-      entry = { ability, description, deathCount: 0, missCount: 0, raiders: [] };
+      entry = { ability, what: '', fix: '', deathCount: 0, missCount: 0, raiders: [] };
       byAbility.set(ability, entry);
     }
-    if (isDeath) entry.deathCount += 1;
-    else entry.missCount += 1;
+    return entry;
+  };
+  const bumpRaider = (entry: MechanicNeedingWork, name: string) => {
     const raider = entry.raiders.find((r) => r.name === name);
     if (raider) raider.count += 1;
     else entry.raiders.push({ name, count: 1 });
   };
 
-  // Misses first so a curated description (from the mechanic reference) wins over a
-  // death's fallback -- deaths only carry the raw ability name, not a description.
+  // Misses first so a curated what/fix (from the mechanic reference) is in place
+  // before any death-only entries get created -- deaths carry no reference text.
   for (const p of pulls) {
-    for (const m of p.mechanicMisses) bump(m.ability, m.description, m.name, false);
+    for (const m of p.mechanicMisses) {
+      const entry = get(m.ability);
+      entry.what = m.what;
+      entry.fix = m.fix;
+      entry.missCount += 1;
+      bumpRaider(entry, m.name);
+    }
   }
   for (const p of pulls) {
-    for (const d of p.deaths) bump(d.ability, d.ability, d.name, true);
+    for (const d of p.deaths) {
+      const entry = get(d.ability);
+      entry.deathCount += 1;
+      bumpRaider(entry, d.name);
+    }
   }
 
   const ranked = [...byAbility.values()];

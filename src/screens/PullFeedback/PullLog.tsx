@@ -58,8 +58,15 @@ function PullDetail({ pull }: { pull: Pull }) {
             </span>
           </div>
           {pull.mechanicMisses.map((m, i) => (
-            <div key={i} style={{ fontSize: 'var(--text-body-s)', color: 'var(--text-body)' }}>
+            <div key={i} style={{ fontSize: 'var(--text-body-s)', color: 'var(--text-body)', marginBottom: i < pull.mechanicMisses.length - 1 ? 6 : 0 }}>
               <span style={{ fontWeight: 600, color: 'var(--text-strong)' }}>{m.name}</span> — {m.ability}
+              {m.what && <div style={{ color: 'var(--text-muted)' }}>{m.what}</div>}
+              {m.fix && (
+                <div>
+                  <span style={{ color: 'var(--text-muted)' }}>Fix — </span>
+                  <span style={{ color: 'var(--text-gold)' }}>{m.fix}</span>
+                </div>
+              )}
             </div>
           ))}
         </div>

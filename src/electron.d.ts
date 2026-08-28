@@ -55,7 +55,8 @@ export interface PullDeath {
 export interface PullMechanicMiss {
   name: string;
   ability: string;
-  description: string;
+  what: string;
+  fix: string;
 }
 
 export interface Pull {
