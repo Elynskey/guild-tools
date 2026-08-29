@@ -216,34 +216,40 @@ local function scanLootHistory()
   if not C_LootHistory or not C_LootHistory.GetSortedDropsForEncounter then return 0 end
   local found = #GuildToolsLootDB.records
 
-  -- Union of both sources -- seenEncounters (this addon's own tracking, reliable going
-  -- forward but only knows about encounters since this code started running) AND
-  -- Blizzard's own GetAllEncounterInfos() (unreliable for a full raid on its own, but
-  -- may still remember recent bosses this addon never saw ENCOUNTER_START for -- e.g.
-  -- ones killed before a /reload picked up this code). Belt and suspenders for exactly
-  -- the "addon updated mid-raid" recovery case.
-  local toScan = {}
-  for encounterIDStr, encounterName in pairs(GuildToolsLootDB.seenEncounters) do
-    local id = tonumber(encounterIDStr)
-    if id then toScan[id] = encounterName end
-  end
-  if C_LootHistory.GetAllEncounterInfos then
-    -- GetAllEncounterInfos() can return nil (not an empty table) when there's nothing
-    -- to list yet -- ipairs(nil) throws a Lua error, which WoW swallows silently by
-    -- default (no chat message, no visible error, nothing) -- confirmed live
-    -- 2026-08-28 as the actual cause of "/gtloot scan does nothing at all," including
-    -- from a macro (ruling out a chat-input/autocomplete issue).
-    for _, encounter in ipairs(C_LootHistory.GetAllEncounterInfos() or {}) do
-      if not toScan[encounter.encounterID] then toScan[encounter.encounterID] = encounter.encounterName end
+  -- Wrapped in pcall -- this has silently crashed partway through twice already
+  -- (confirmed live 2026-08-28, two different root causes, both invisible since WoW
+  -- hides Lua errors by default). Rather than guess at a third unguarded spot, this
+  -- surfaces the real error text in chat if it happens again, instead of just quietly
+  -- stopping.
+  local ok, err = pcall(function()
+    -- Union of both sources -- seenEncounters (this addon's own tracking, reliable
+    -- going forward but only knows about encounters since this code started running)
+    -- AND Blizzard's own GetAllEncounterInfos() (unreliable for a full raid on its
+    -- own, but may still remember recent bosses this addon never saw ENCOUNTER_START
+    -- for -- e.g. ones killed before a /reload picked up this code).
+    local toScan = {}
+    for encounterIDStr, encounterName in pairs(GuildToolsLootDB.seenEncounters) do
+      local id = tonumber(encounterIDStr)
+      if id then toScan[id] = encounterName end
     end
+    if C_LootHistory.GetAllEncounterInfos then
+      for _, encounter in ipairs(C_LootHistory.GetAllEncounterInfos() or {}) do
+        if not toScan[encounter.encounterID] then toScan[encounter.encounterID] = encounter.encounterName end
+      end
+    end
+
+    for encounterID, encounterName in pairs(toScan) do
+      local drops = C_LootHistory.GetSortedDropsForEncounter(encounterID)
+      for _, drop in ipairs(drops or {}) do
+        handleLootHistoryDrop(encounterID, drop.lootListID, encounterName)
+      end
+    end
+  end)
+
+  if not ok then
+    announce("Scan error (send this to Ethan): " .. tostring(err))
   end
 
-  for encounterID, encounterName in pairs(toScan) do
-    local drops = C_LootHistory.GetSortedDropsForEncounter(encounterID)
-    for _, drop in ipairs(drops or {}) do
-      handleLootHistoryDrop(encounterID, drop.lootListID, encounterName)
-    end
-  end
   return #GuildToolsLootDB.records - found
 end
 
