@@ -104,6 +104,7 @@ function sync(newRecords, newTrades) {
 
 /** Officer-entered record -- no real itemLink available by hand, so the item name is stored as a plain "[Name]" string (the same bracketed shape LootLogTable's display parsing already expects; it just won't carry a real tooltip). */
 function manualAdd({ winner, itemName, boss, slot, time: recordTime }) {
+  if (!winner || !itemName) throw new Error('winner and itemName are both required.');
   const db = load();
   const record = {
     id: crypto.randomUUID(),

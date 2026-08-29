@@ -30,6 +30,9 @@ function save(requests) {
 }
 
 async function add(requester, profession, description) {
+  if (!requester || !profession || !description) {
+    throw new Error('requester, profession, and description are all required.');
+  }
   const requests = load();
   const entry = {
     id: crypto.randomUUID(),

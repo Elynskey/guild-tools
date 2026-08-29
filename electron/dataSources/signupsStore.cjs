@@ -73,6 +73,7 @@ function buildEmbed(entry) {
 }
 
 async function create(raidName, teamType, signupText) {
+  if (!raidName || !teamType || !signupText) throw new Error('raidName, teamType, and signupText are all required.');
   const posts = load();
   const entry = {
     id: crypto.randomUUID(),
