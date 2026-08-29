@@ -154,6 +154,11 @@ local function recordNeedWin(winnerName, itemLink, bossOverride)
     slot = slotLabel(itemLink),
     time = now,
   })
+
+  -- Real-time confirmation that a win actually got captured -- itemLink is the real
+  -- escape-coded link, so this renders as a normal clickable/hoverable item in chat,
+  -- not plain text.
+  announce(winnerName .. "'s Need win captured: " .. itemLink)
 end
 
 -- Handles LOOT_HISTORY_UPDATE_DROP: looks up the drop's full resolved state and, if
@@ -201,9 +206,26 @@ end
 local function scanLootHistory()
   if not C_LootHistory or not C_LootHistory.GetSortedDropsForEncounter then return 0 end
   local found = #GuildToolsLootDB.records
+
+  -- Union of both sources -- seenEncounters (this addon's own tracking, reliable going
+  -- forward but only knows about encounters since this code started running) AND
+  -- Blizzard's own GetAllEncounterInfos() (unreliable for a full raid on its own, but
+  -- may still remember recent bosses this addon never saw ENCOUNTER_START for -- e.g.
+  -- ones killed before a /reload picked up this code). Belt and suspenders for exactly
+  -- the "addon updated mid-raid" recovery case.
+  local toScan = {}
   for encounterIDStr, encounterName in pairs(GuildToolsLootDB.seenEncounters) do
-    local encounterID = tonumber(encounterIDStr)
-    local drops = encounterID and C_LootHistory.GetSortedDropsForEncounter(encounterID)
+    local id = tonumber(encounterIDStr)
+    if id then toScan[id] = encounterName end
+  end
+  if C_LootHistory.GetAllEncounterInfos then
+    for _, encounter in ipairs(C_LootHistory.GetAllEncounterInfos()) do
+      if not toScan[encounter.encounterID] then toScan[encounter.encounterID] = encounter.encounterName end
+    end
+  end
+
+  for encounterID, encounterName in pairs(toScan) do
+    local drops = C_LootHistory.GetSortedDropsForEncounter(encounterID)
     for _, drop in ipairs(drops or {}) do
       handleLootHistoryDrop(encounterID, drop.lootListID, encounterName)
     end
