@@ -161,6 +161,16 @@ local function recordNeedWin(winnerName, itemLink, bossOverride)
   announce(winnerName .. "'s Need win captured: " .. itemLink)
 end
 
+-- Resolved once at load, not re-indexed per call. Guarded rather than assumed --
+-- sourced from research, not a live client read, and confirmed live 2026-08-28 that an
+-- unguarded index into this exact path crashes scanLootHistory() partway through (the
+-- "Scanning now..." message shows, then nothing else ever does -- WoW hides the error).
+-- If this enum path turns out to be wrong/missing on the real client, these just stay
+-- nil, and the comparison below below never matches -- the C_LootHistory path quietly
+-- captures nothing instead of crashing, falling back to the chat-text path alone.
+local NEED_MAIN_SPEC_STATE = Enum and Enum.EncounterLootDropRollState and Enum.EncounterLootDropRollState.NeedMainSpec
+local NEED_OFF_SPEC_STATE = Enum and Enum.EncounterLootDropRollState and Enum.EncounterLootDropRollState.NeedOffSpec
+
 -- Handles LOOT_HISTORY_UPDATE_DROP: looks up the drop's full resolved state and, if
 -- the winner's roll was a genuine Need (main-spec or off-spec), records it. Silently
 -- no-ops for anything not yet resolved (dropInfo.winner nil), an all-passed drop, or
@@ -178,8 +188,7 @@ local function handleLootHistoryDrop(encounterID, lootListID, bossNameHint)
     end
   end
   if not winningRoll then return end
-  if winningRoll.state ~= Enum.EncounterLootDropRollState.NeedMainSpec
-    and winningRoll.state ~= Enum.EncounterLootDropRollState.NeedOffSpec then
+  if winningRoll.state ~= NEED_MAIN_SPEC_STATE and winningRoll.state ~= NEED_OFF_SPEC_STATE then
     return
   end
 
