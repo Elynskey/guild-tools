@@ -31,9 +31,9 @@ function load() {
   let db;
   try {
     const parsed = JSON.parse(fs.readFileSync(storePath(), 'utf8'));
-    db = { records: parsed.records ?? [], trades: parsed.trades ?? [] };
+    db = { records: parsed.records ?? [], trades: parsed.trades ?? [], removedKeys: parsed.removedKeys ?? [] };
   } catch {
-    return { records: [], trades: [] };
+    return { records: [], trades: [], removedKeys: [] };
   }
 
   let backfilled = false;
@@ -64,17 +64,24 @@ const tradeKey = (t) => `${t.itemId}::${t.from}::${t.to}::${t.time}`;
  * merged store plus which of the incoming records/trades were genuinely new (addedRecords/
  * addedTrades) -- callers that want to announce new loot (e.g. the Discord posting route)
  * need that distinction so multiple officers syncing the same raid night never double-post.
+ *
+ * Also skips anything matching a removedKeys entry -- an officer deleting a record/trade
+ * in the app must stay deleted even though the addon's own local SavedVariables still has
+ * it and will keep offering it up on every future sync from that same client (confirmed
+ * live: deleting the Hexing Spiritrender trade only removed it from the shared store, and
+ * the very next sync from the client that originally captured it silently re-added it).
  */
 function sync(newRecords, newTrades) {
   const db = load();
   const recordKeys = new Set(db.records.map(recordKey));
   const tradeKeys = new Set(db.trades.map(tradeKey));
+  const removed = new Set(db.removedKeys);
   const addedRecords = [];
   const addedTrades = [];
 
   for (const r of newRecords ?? []) {
     const k = recordKey(r);
-    if (!recordKeys.has(k)) {
+    if (!recordKeys.has(k) && !removed.has(k)) {
       const withId = { id: crypto.randomUUID(), ...r };
       db.records.push(withId);
       recordKeys.add(k);
@@ -83,7 +90,7 @@ function sync(newRecords, newTrades) {
   }
   for (const t of newTrades ?? []) {
     const k = tradeKey(t);
-    if (!tradeKeys.has(k)) {
+    if (!tradeKeys.has(k) && !removed.has(k)) {
       const withId = { id: crypto.randomUUID(), ...t };
       db.trades.push(withId);
       tradeKeys.add(k);
@@ -127,16 +134,22 @@ function update(id, patch) {
   return db.records;
 }
 
+// Manually-added records (no real natural key -- itemId is null) don't get tombstoned:
+// there's nothing for a future sync to ever re-add, since the addon never produced them.
 function remove(id) {
   const db = load();
+  const target = db.records.find((r) => r.id === id);
+  if (target && target.itemId != null) db.removedKeys.push(recordKey(target));
   db.records = db.records.filter((r) => r.id !== id);
   save(db);
   return db.records;
 }
 
-/** A trade with no matching win record (a standalone entry, e.g. a Greed-won item just passed to someone) -- no fields to correct, only ever removed outright. */
+/** A trade with no matching win record (a standalone entry, e.g. a Greed-won item just passed to someone) -- no fields to correct, only ever removed outright. Tombstoned the same way remove() does, for the same reason (the addon's local copy will keep re-offering it otherwise). */
 function removeTrade(id) {
   const db = load();
+  const target = db.trades.find((t) => t.id === id);
+  if (target) db.removedKeys.push(tradeKey(target));
   db.trades = db.trades.filter((t) => t.id !== id);
   save(db);
   return db.trades;
