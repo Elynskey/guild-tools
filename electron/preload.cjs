@@ -25,6 +25,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   addManualLootRecord: (record) => ipcRenderer.invoke('lootLog:addManual', record),
   updateLootRecord: (id, patch) => ipcRenderer.invoke('lootLog:update', id, patch),
   removeLootRecord: (id) => ipcRenderer.invoke('lootLog:remove', id),
+  removeLootTrade: (id) => ipcRenderer.invoke('lootLog:removeTrade', id),
   getItemIconUrls: (itemIds) => ipcRenderer.invoke('itemIcons:get', itemIds),
   getWowPathConfig: () => ipcRenderer.invoke('lootLog:getWowPath'),
   setWowPath: (wowPath) => ipcRenderer.invoke('lootLog:setWowPath', wowPath),

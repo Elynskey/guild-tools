@@ -11,6 +11,8 @@ export interface RawLootRecord {
 }
 
 export interface RawTradeRecord {
+  /** Assigned server-side on first sync, same as RawLootRecord.id -- lets a standalone trade (no matching win record) be removed individually. Optional since very old already-synced trades may predate this. */
+  id?: string;
   itemId: number | null;
   itemLink: string;
   from: string;
@@ -19,8 +21,10 @@ export interface RawTradeRecord {
 }
 
 export interface LootEntry {
-  /** Present for a real win record (editable/removable in the app); absent for a standalone trade, which has no single record to point at. */
+  /** Present for a real win record (editable/removable in the app); absent for a standalone trade, which has no single win record to point at -- see tradeId instead. */
   id?: string;
+  /** Present only for a standalone trade (no matching win record) -- removable via that id, but has no other editable fields (a trade isn't a "win" the app can attribute a slot/boss to). */
+  tradeId?: string;
   itemId: number | null;
   itemLink: string;
   /** The Need-roll winner, or (for a standalone unmatched trade) the trade's `from`. */
@@ -64,7 +68,7 @@ export function annotateWithTrades(records: RawLootRecord[], trades: RawTradeRec
       match.tradedTo = trade.to;
       consumed.add(entries.indexOf(match));
     } else {
-      entries.push({ itemId: trade.itemId, itemLink: trade.itemLink, winner: trade.from, boss: null, slot: null, time: trade.time, tradedTo: trade.to, standaloneTrade: true });
+      entries.push({ tradeId: trade.id, itemId: trade.itemId, itemLink: trade.itemLink, winner: trade.from, boss: null, slot: null, time: trade.time, tradedTo: trade.to, standaloneTrade: true });
     }
   }
 

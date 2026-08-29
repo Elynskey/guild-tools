@@ -219,7 +219,12 @@ local function scanLootHistory()
     if id then toScan[id] = encounterName end
   end
   if C_LootHistory.GetAllEncounterInfos then
-    for _, encounter in ipairs(C_LootHistory.GetAllEncounterInfos()) do
+    -- GetAllEncounterInfos() can return nil (not an empty table) when there's nothing
+    -- to list yet -- ipairs(nil) throws a Lua error, which WoW swallows silently by
+    -- default (no chat message, no visible error, nothing) -- confirmed live
+    -- 2026-08-28 as the actual cause of "/gtloot scan does nothing at all," including
+    -- from a macro (ruling out a chat-input/autocomplete issue).
+    for _, encounter in ipairs(C_LootHistory.GetAllEncounterInfos() or {}) do
       if not toScan[encounter.encounterID] then toScan[encounter.encounterID] = encounter.encounterName end
     end
   end
@@ -303,10 +308,18 @@ frame:SetScript("OnEvent", function(_, event, ...)
     end
 
   elseif event == "ENCOUNTER_END" then
-    currentBoss = nil
-    -- Need rolls take a little while to resolve after the kill -- delayed rather than
-    -- immediate so this doesn't scan before the last roll has actually settled.
+    -- Deliberately NOT clearing currentBoss here (it used to be nilled out on every
+    -- ENCOUNTER_END). Need-roll results post to chat well after the kill -- by the
+    -- time CHAT_MSG_LOOT's "Won:" message fires, ENCOUNTER_END has essentially always
+    -- already happened, so every chat-text-captured record was getting boss = nil
+    -- (confirmed live 2026-08-28: all 5 real captures that night had no boss at all).
+    -- currentBoss now just holds "whichever encounter's ENCOUNTER_START fired most
+    -- recently" until the next one overwrites it -- correct for the loot-resolution
+    -- window, and there's nothing else between one kill's loot settling and the next
+    -- pull's ENCOUNTER_START that would misattribute it to the wrong boss.
     if C_Timer then
+      -- Need rolls take a little while to resolve after the kill -- delayed rather
+      -- than immediate so this doesn't scan before the last roll has actually settled.
       C_Timer.After(20, scanLootHistory)
     end
 
@@ -383,6 +396,12 @@ SlashCmdList["GUILDTOOLSLOOT"] = function(msg)
     if not GuildToolsLootDB.enabled then
       announce("NOT logging right now -- /gtloot on first, then /gtloot scan.")
     else
+      -- Confirms the command actually dispatched before the (synchronous, near-instant)
+      -- scan runs -- if this never shows, the command itself never fired; if this shows
+      -- but the result line never follows, scanLootHistory() itself errored out (a real
+      -- gap found live 2026-08-28 -- Lua errors are silent by default, so without this
+      -- line there was no way to tell "didn't run" from "ran and crashed").
+      announce("Scanning now…")
       local added = scanLootHistory()
       announce(added > 0 and (added .. " new Need win" .. (added == 1 and "" or "s") .. " pulled in from Loot History.") or "Loot History checked -- nothing new to add.")
     end

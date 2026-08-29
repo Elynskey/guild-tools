@@ -43,4 +43,9 @@ async function removeLootRecord(id) {
   return lootRecordsStore.remove(id);
 }
 
-module.exports = { fetchLootLog, addManualLootRecord, updateLootRecord, removeLootRecord };
+async function removeLootTrade(id) {
+  if (proxyClient.isAvailable()) return proxyClient.removeLootTrade(id);
+  return lootRecordsStore.removeTrade(id);
+}
+
+module.exports = { fetchLootLog, addManualLootRecord, updateLootRecord, removeLootRecord, removeLootTrade };

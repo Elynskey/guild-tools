@@ -77,7 +77,7 @@ export function LootLogTable({ entries, itemIcons, onEdit }: LootLogTableProps) 
               {e.tradedTo ?? '—'}
             </div>
             <div>
-              {onEdit && e.id && <IconButton icon="pencil" label="Edit this entry" size="sm" onClick={() => onEdit(e)} />}
+              {onEdit && (e.id || e.tradeId) && <IconButton icon="pencil" label="Edit this entry" size="sm" onClick={() => onEdit(e)} />}
             </div>
           </div>
         );

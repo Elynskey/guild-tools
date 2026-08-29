@@ -23,10 +23,10 @@ function save(db) {
   fs.writeFileSync(storePath(), JSON.stringify(db, null, 2));
 }
 
-// Records synced before `id` existed (everything synced before this feature shipped)
-// need one backfilled so they're editable too -- not just newly-added ones. Self-heals
-// on first read rather than a one-off migration script, and persists the assigned ids
-// immediately so this only ever runs once per record.
+// Records/trades synced before `id` existed (everything synced before this feature
+// shipped) need one backfilled so they're editable/removable too -- not just newly-added
+// ones. Self-heals on first read rather than a one-off migration script, and persists
+// the assigned ids immediately so this only ever runs once per record.
 function load() {
   let db;
   try {
@@ -40,6 +40,12 @@ function load() {
   for (const r of db.records) {
     if (!r.id) {
       r.id = crypto.randomUUID();
+      backfilled = true;
+    }
+  }
+  for (const t of db.trades) {
+    if (!t.id) {
+      t.id = crypto.randomUUID();
       backfilled = true;
     }
   }
@@ -78,9 +84,10 @@ function sync(newRecords, newTrades) {
   for (const t of newTrades ?? []) {
     const k = tradeKey(t);
     if (!tradeKeys.has(k)) {
-      db.trades.push(t);
+      const withId = { id: crypto.randomUUID(), ...t };
+      db.trades.push(withId);
       tradeKeys.add(k);
-      addedTrades.push(t);
+      addedTrades.push(withId);
     }
   }
 
@@ -127,4 +134,12 @@ function remove(id) {
   return db.records;
 }
 
-module.exports = { load, sync, manualAdd, update, remove };
+/** A trade with no matching win record (a standalone entry, e.g. a Greed-won item just passed to someone) -- no fields to correct, only ever removed outright. */
+function removeTrade(id) {
+  const db = load();
+  db.trades = db.trades.filter((t) => t.id !== id);
+  save(db);
+  return db.trades;
+}
+
+module.exports = { load, sync, manualAdd, update, remove, removeTrade };

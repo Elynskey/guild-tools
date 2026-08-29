@@ -146,7 +146,12 @@ export function LootHistory() {
                   lh.removeRecord(editing.id!);
                   setEditing(null);
                 }
-              : undefined
+              : editing?.tradeId
+                ? () => {
+                    lh.removeTrade(editing.tradeId!);
+                    setEditing(null);
+                  }
+                : undefined
           }
         />
       )}

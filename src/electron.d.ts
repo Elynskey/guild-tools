@@ -158,6 +158,7 @@ export interface ElectronAPI {
   addManualLootRecord: (record: ManualLootRecordInput) => Promise<RawLootRecord[]>;
   updateLootRecord: (id: string, patch: LootRecordPatch) => Promise<RawLootRecord[]>;
   removeLootRecord: (id: string) => Promise<RawLootRecord[]>;
+  removeLootTrade: (id: string) => Promise<RawTradeRecord[]>;
   getItemIconUrls: (itemIds: number[]) => Promise<Record<number, string | null>>;
   getWowPathConfig: () => Promise<{ configured: string | null; resolved: string | null; valid: boolean }>;
   setWowPath: (wowPath: string) => Promise<{ configured: string | null; resolved: string | null; valid: boolean }>;

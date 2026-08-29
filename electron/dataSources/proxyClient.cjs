@@ -172,6 +172,10 @@ async function removeLootRecord(id) {
   return proxyFetchJson(`/loot-records/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }
 
+async function removeLootTrade(id) {
+  return proxyFetchJson(`/loot-trades/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+
 async function getSettings() {
   return proxyFetchJson('/settings');
 }
@@ -217,4 +221,5 @@ module.exports = {
   addManualLootRecord,
   updateLootRecord,
   removeLootRecord,
+  removeLootTrade,
 };

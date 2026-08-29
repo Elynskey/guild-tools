@@ -138,6 +138,18 @@ export function useLootHistory() {
     [electron, load],
   );
 
+  const removeTrade = useCallback(
+    (id: string) => {
+      if (!electron) return;
+      setSaving(true);
+      electron
+        .removeLootTrade(id)
+        .then(() => load())
+        .finally(() => setSaving(false));
+    },
+    [electron, load],
+  );
+
   return {
     status,
     nights,
@@ -159,6 +171,7 @@ export function useLootHistory() {
     addRecord,
     updateRecord,
     removeRecord,
+    removeTrade,
     saving,
     available: !!electron,
   };

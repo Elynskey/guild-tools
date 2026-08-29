@@ -25,6 +25,29 @@ export function LootRecordDialog({ entry, onClose, onSave, onDelete, saving }: L
   const [boss, setBoss] = useState(entry?.boss ?? '');
   const [slot, setSlot] = useState(entry?.slot ?? '');
 
+  // A standalone trade (no matching win record) isn't a "win" the app tracked -- it's
+  // just a record that this character traded an item to someone. Nothing to edit, only
+  // remove, since there's no winner/boss/slot for a trade to have been wrong about.
+  if (entry?.standaloneTrade) {
+    return (
+      <Dialog
+        title="Remove trade record"
+        eyebrow="Manual correction"
+        onClose={onClose}
+        footer={
+          <Button variant="danger" onClick={onDelete} disabled={saving || !onDelete}>
+            {saving ? 'Removing…' : 'Remove'}
+          </Button>
+        }
+      >
+        <p style={{ margin: 0, fontSize: 'var(--text-body-s)', lineHeight: 1.6, color: 'var(--text-body)' }}>
+          {itemLabel(entry.itemLink)} -- traded from <b>{entry.winner}</b> to <b>{entry.tradedTo}</b>. This isn't a tracked Need win, only a
+          trade record -- there's nothing to edit, just remove it if it shouldn't be here.
+        </p>
+      </Dialog>
+    );
+  }
+
   return (
     <Dialog
       title={entry ? 'Edit loot entry' : 'Add loot entry'}
