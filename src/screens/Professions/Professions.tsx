@@ -65,7 +65,7 @@ export function Professions() {
         {tab === 'coverage' && (
           <CoverageTab members={p.members} catalogue={p.catalogue} expansion={expansion} expansionOptions={expansionOptions} onExpansionChange={setExpansion} requests={requests} />
         )}
-        {tab === 'requests' && <RequestsTab catalogue={p.catalogue} onRequestsChange={handleRequestsChange} />}
+        {tab === 'requests' && <RequestsTab onRequestsChange={handleRequestsChange} />}
       </div>
     </div>
   );

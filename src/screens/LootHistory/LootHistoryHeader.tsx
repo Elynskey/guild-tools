@@ -1,19 +1,22 @@
 import { Link } from 'react-router-dom';
 import { Crest } from '../../design-system/Crest';
 import { Select } from '../../design-system/Select';
+import { IconButton } from '../../design-system/IconButton';
 import type { LootNight } from '../../raid/lootLogic';
 
 interface LootHistoryHeaderProps {
   nights: LootNight[];
   selectedNightKey: string | null;
   onSelect: (key: string) => void;
+  onRefresh: () => void;
+  refreshing: boolean;
 }
 
 function formatNightLabel(startTime: number): string {
   return new Date(startTime * 1000).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-export function LootHistoryHeader({ nights, selectedNightKey, onSelect }: LootHistoryHeaderProps) {
+export function LootHistoryHeader({ nights, selectedNightKey, onSelect, onRefresh, refreshing }: LootHistoryHeaderProps) {
   return (
     <header style={{ position: 'sticky', top: 0, zIndex: 6, backgroundColor: 'rgba(18,16,12,.92)', backdropFilter: 'var(--blur-panel)', borderBottom: '1px solid var(--border-soft)' }}>
       <div style={{ maxWidth: 1160, margin: '0 auto', padding: '14px 32px', display: 'flex', alignItems: 'center', gap: 24, flexWrap: 'wrap' }}>
@@ -36,6 +39,14 @@ export function LootHistoryHeader({ nights, selectedNightKey, onSelect }: LootHi
             style={{ minWidth: 200 }}
           />
         )}
+        <IconButton
+          icon="refresh-cw"
+          label={refreshing ? 'Refreshing…' : 'Refresh'}
+          framed
+          disabled={refreshing}
+          onClick={onRefresh}
+          style={{ opacity: refreshing ? 0.6 : 1 }}
+        />
       </div>
     </header>
   );

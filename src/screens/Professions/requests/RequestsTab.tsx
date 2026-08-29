@@ -1,17 +1,14 @@
 import { useEffect, useState } from 'react';
 import { Input } from '../../../design-system/Input';
-import { Select } from '../../../design-system/Select';
 import { Checkbox } from '../../../design-system/Checkbox';
 import { Switch } from '../../../design-system/Switch';
 import { Button } from '../../../design-system/Button';
 import { Badge } from '../../../design-system/Badge';
 import { Dialog } from '../../../design-system/Dialog';
-import { professionIconUrl, CRAFTING_PROFESSIONS } from '../../../professions/professionCatalog';
+import { professionIconUrl } from '../../../professions/professionCatalog';
 import { useCraftRequests } from '../../../professions/useCraftRequests';
 import { buildCraftLeaderboard } from '../../../professions/craftLeaderboard';
-import { ItemSearchInput } from './ItemSearchInput';
-import { GRAD_CREST } from '../theme';
-import type { RecipeCatalogue, CraftRequest } from '../../../professions/types';
+import type { CraftRequest } from '../../../professions/types';
 
 function ageLabel(createdAt: string): string {
   const days = Math.floor((Date.now() - new Date(createdAt).getTime()) / 86_400_000);
@@ -21,27 +18,16 @@ function ageLabel(createdAt: string): string {
 }
 
 interface RequestsTabProps {
-  catalogue: RecipeCatalogue;
   onRequestsChange: (requests: CraftRequest[]) => void;
 }
 
-export function RequestsTab({ catalogue, onRequestsChange }: RequestsTabProps) {
-  const { requests, addRequest, fulfillRequest } = useCraftRequests();
-  const [requester, setRequester] = useState('');
-  const [profession, setProfession] = useState<string>(CRAFTING_PROFESSIONS[0]);
-  const [need, setNeed] = useState('');
+export function RequestsTab({ onRequestsChange }: RequestsTabProps) {
+  const { requests, fulfillRequest } = useCraftRequests();
   const [hideFulfilled, setHideFulfilled] = useState(false);
   const [fulfillTarget, setFulfillTarget] = useState<CraftRequest | null>(null);
   const [fulfillerName, setFulfillerName] = useState('');
 
   useEffect(() => onRequestsChange(requests), [requests, onRequestsChange]);
-
-  const submit = () => {
-    const trimmedNeed = need.trim();
-    if (!trimmedNeed) return;
-    addRequest(requester.trim() || 'Anonymous guildie', profession, trimmedNeed);
-    setNeed('');
-  };
 
   const confirmFulfill = () => {
     if (!fulfillTarget) return;
@@ -56,35 +42,8 @@ export function RequestsTab({ catalogue, onRequestsChange }: RequestsTabProps) {
   const leaderboard = buildCraftLeaderboard(requests);
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '360px 1fr', gap: 18, alignItems: 'start' }}>
-      <div style={{ border: '1px solid var(--border-hairline)', borderRadius: 5, background: 'var(--surface-card)', boxShadow: 'var(--shadow-2)', overflow: 'hidden', position: 'sticky', top: 150 }}>
-        <div style={{ height: 2, background: GRAD_CREST }} />
-        <div
-          style={{
-            padding: '11px 18px',
-            background: 'var(--grad-header)',
-            borderBottom: '1px solid var(--border-soft)',
-            fontFamily: 'var(--font-display)',
-            fontWeight: 600,
-            letterSpacing: '.05em',
-            fontSize: 'var(--text-title-m)',
-            color: 'var(--text-gold)',
-          }}
-        >
-          Post a request
-        </div>
-        <div style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <Input label="Your character" placeholder="Who is asking?" value={requester} onChange={(e) => setRequester(e.target.value)} />
-          <Select label="Profession" options={[...CRAFTING_PROFESSIONS]} value={profession} onChange={(e) => setProfession(e.target.value)} />
-          <ItemSearchInput value={need} onChange={setNeed} profession={profession} catalogue={catalogue} />
-          <Button variant="primary" size="md" block iconLeft="plus" onClick={submit} disabled={!need.trim()}>
-            Post to the board
-          </Button>
-          <div style={{ fontSize: 'var(--text-micro)', color: 'var(--text-faint)', lineHeight: 1.5 }}>Posted to every officer's board, and to Discord if a craft-orders channel is set in Settings.</div>
-        </div>
-      </div>
-
-      {leaderboard.length > 0 && (
+    <div style={{ display: 'grid', gridTemplateColumns: '280px 1fr', gap: 18, alignItems: 'start' }}>
+      {leaderboard.length > 0 ? (
         <div style={{ border: '1px solid var(--border-hairline)', borderRadius: 5, background: 'var(--surface-card)', boxShadow: 'var(--shadow-2)', overflow: 'hidden' }}>
           <div style={{ padding: '11px 18px', background: 'var(--grad-header)', borderBottom: '1px solid var(--border-soft)', fontFamily: 'var(--font-display)', fontWeight: 600, letterSpacing: '.05em', fontSize: 'var(--text-title-m)', color: 'var(--text-gold)' }}>
             Top contributors
@@ -97,6 +56,10 @@ export function RequestsTab({ catalogue, onRequestsChange }: RequestsTabProps) {
               </div>
             ))}
           </div>
+        </div>
+      ) : (
+        <div style={{ border: '1px dashed var(--border-hairline)', borderRadius: 5, padding: '20px 18px', textAlign: 'center', color: 'var(--text-faint)', fontSize: 'var(--text-body-s)' }}>
+          No fulfillments tracked yet.
         </div>
       )}
 

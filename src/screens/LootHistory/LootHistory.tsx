@@ -37,7 +37,13 @@ export function LootHistory() {
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--surface-page)', fontFamily: 'var(--font-ui)', color: 'var(--text-body)', paddingBottom: 80 }}>
-      <LootHistoryHeader nights={lh.nights} selectedNightKey={lh.selectedNightKey} onSelect={lh.setSelectedNightKey} />
+      <LootHistoryHeader
+        nights={lh.nights}
+        selectedNightKey={lh.selectedNightKey}
+        onSelect={lh.setSelectedNightKey}
+        onRefresh={lh.refresh}
+        refreshing={lh.refreshing}
+      />
 
       <div style={{ maxWidth: 1160, margin: '0 auto', padding: 32 }}>
         {lh.status === 'ok' && (

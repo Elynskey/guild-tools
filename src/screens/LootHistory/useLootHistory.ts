@@ -14,6 +14,7 @@ export function useLootHistory() {
   const [wowPath, setWowPathState] = useState<{ configured: string | null; resolved: string | null; valid: boolean } | null>(null);
   const [installing, setInstalling] = useState(false);
   const [installMessage, setInstallMessage] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(() => {
     if (!electron) {
@@ -21,18 +22,29 @@ export function useLootHistory() {
       const entries = annotateWithTrades(sampleLootRecords, sampleLootTrades);
       setNights(groupLootByNight(entries));
       setStatus('ok');
-      return;
+      return Promise.resolve();
     }
-    electron.getLootLog().then((result) => {
-      const entries = annotateWithTrades(result.records, result.trades);
-      setNights(groupLootByNight(entries));
-      setStatus(result.status);
-    });
-    electron.getWowPathConfig().then(setWowPathState);
+    setRefreshing(true);
+    return Promise.all([
+      electron.getLootLog().then((result) => {
+        const entries = annotateWithTrades(result.records, result.trades);
+        setNights(groupLootByNight(entries));
+        setStatus(result.status);
+      }),
+      electron.getWowPathConfig().then(setWowPathState),
+    ]).finally(() => setRefreshing(false));
   }, [electron]);
 
   useEffect(() => {
     load();
+  }, [load]);
+
+  // Loot syncs in from whoever's raiding right now, so this screen polls for it rather
+  // than requiring a manual reopen -- 30s keeps it feeling live without hammering the
+  // proxy. Stops the moment the screen unmounts.
+  useEffect(() => {
+    const interval = setInterval(load, 30_000);
+    return () => clearInterval(interval);
   }, [load]);
 
   const selectedNight = nights.find((n) => n.key === selectedNightKey) ?? nights[0] ?? null;
@@ -88,6 +100,8 @@ export function useLootHistory() {
     installAddon,
     installing,
     installMessage,
+    refresh: load,
+    refreshing,
     empty: nights.length === 0,
   };
 }
