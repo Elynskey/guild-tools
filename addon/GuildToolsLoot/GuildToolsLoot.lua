@@ -51,20 +51,32 @@
 
 local ADDON_NAME = ...
 
-GuildToolsLootDB = GuildToolsLootDB or {}
-GuildToolsLootDB.records = GuildToolsLootDB.records or {}
-GuildToolsLootDB.trades = GuildToolsLootDB.trades or {}
--- encounterID (as a string key) -> encounterName, for every encounter THIS character
--- has personally seen this raid -- scanLootHistory() walks this instead of trusting
--- C_LootHistory.GetAllEncounterInfos() to remember the whole raid, which it doesn't
--- (confirmed live 2026-08-28: a manual /gtloot scan run after several kills only
--- picked up the most recent boss). Persisted, not just in-memory, so it survives a
--- /reload mid-raid.
-GuildToolsLootDB.seenEncounters = GuildToolsLootDB.seenEncounters or {}
--- Defaults ON, since most raid nights are current-tier progression -- toggle off with
--- /gtloot for old-content farm runs, alt runs, or anything else that shouldn't count
--- toward the loot history.
-if GuildToolsLootDB.enabled == nil then GuildToolsLootDB.enabled = true end
+-- Re-asserts every SavedVariables field is the right type, called at the top of every
+-- event/slash-command entry point rather than trusted once at file load. A live report
+-- showed GuildToolsLootDB.seenEncounters was nil at the point scanLootHistory() read it
+-- despite the equivalent one-time init below having already run earlier in the same
+-- load -- never fully explained (should be structurally impossible for a global table
+-- field to un-set itself between top-level file execution and a later function call),
+-- but re-asserting defensively at every real entry point costs nothing and closes the
+-- whole class of "assumed a table, got nil" surprises regardless of root cause.
+local function ensureDB()
+  GuildToolsLootDB = GuildToolsLootDB or {}
+  GuildToolsLootDB.records = GuildToolsLootDB.records or {}
+  GuildToolsLootDB.trades = GuildToolsLootDB.trades or {}
+  -- encounterID (as a string key) -> encounterName, for every encounter THIS character
+  -- has personally seen this raid -- scanLootHistory() walks this instead of trusting
+  -- C_LootHistory.GetAllEncounterInfos() to remember the whole raid, which it doesn't
+  -- (confirmed live 2026-08-28: a manual /gtloot scan run after several kills only
+  -- picked up the most recent boss). Persisted, not just in-memory, so it survives a
+  -- /reload mid-raid.
+  GuildToolsLootDB.seenEncounters = GuildToolsLootDB.seenEncounters or {}
+  -- Defaults ON, since most raid nights are current-tier progression -- toggle off with
+  -- /gtloot for old-content farm runs, alt runs, or anything else that shouldn't count
+  -- toward the loot history.
+  if GuildToolsLootDB.enabled == nil then GuildToolsLootDB.enabled = true end
+end
+
+ensureDB()
 
 local function announce(msg)
   DEFAULT_CHAT_FRAME:AddMessage('|cffd4b358Guild Tools Loot:|r ' .. msg)
@@ -298,6 +310,7 @@ local tradePlayerItems = {}
 local tradeCompleted = false
 
 frame:SetScript("OnEvent", function(_, event, ...)
+  ensureDB()
   if event == "PLAYER_LOGIN" then
     if GuildToolsLootDB.enabled then
       announce('logging Need wins (type /gtloot off to stop for this run).')
@@ -400,6 +413,7 @@ end)
 
 SLASH_GUILDTOOLSLOOT1 = "/gtloot"
 SlashCmdList["GUILDTOOLSLOOT"] = function(msg)
+  ensureDB()
   local arg = (msg or ""):lower():match("^%s*(%S*)")
   if arg == "on" then
     GuildToolsLootDB.enabled = true
