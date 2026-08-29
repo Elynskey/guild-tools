@@ -39,12 +39,28 @@
 -- Kept ALONGSIDE the chat parser, not instead of it, as redundancy against either
 -- one having a gap; recordNeedWin's own local dedup keeps the two paths from
 -- double-counting the same real win on this client.
+--
+-- scanLootHistory() (the backfill/rescan, triggered after each kill and via
+-- /gtloot scan) does NOT use C_LootHistory.GetAllEncounterInfos() to find which
+-- encounters to check -- confirmed live 2026-08-28 that it only surfaces a narrow
+-- recent window, not the whole raid (a manual /gtloot scan run after several kills
+-- only picked up the most recent boss). Walks GuildToolsLootDB.seenEncounters (this
+-- addon's own record of every encounterID it's seen via ENCOUNTER_START this raid)
+-- instead, which C_LootHistory.GetSortedDropsForEncounter() still answers correctly
+-- for even once GetAllEncounterInfos() has "forgotten" that encounter.
 
 local ADDON_NAME = ...
 
 GuildToolsLootDB = GuildToolsLootDB or {}
 GuildToolsLootDB.records = GuildToolsLootDB.records or {}
 GuildToolsLootDB.trades = GuildToolsLootDB.trades or {}
+-- encounterID (as a string key) -> encounterName, for every encounter THIS character
+-- has personally seen this raid -- scanLootHistory() walks this instead of trusting
+-- C_LootHistory.GetAllEncounterInfos() to remember the whole raid, which it doesn't
+-- (confirmed live 2026-08-28: a manual /gtloot scan run after several kills only
+-- picked up the most recent boss). Persisted, not just in-memory, so it survives a
+-- /reload mid-raid.
+GuildToolsLootDB.seenEncounters = GuildToolsLootDB.seenEncounters or {}
 -- Defaults ON, since most raid nights are current-tier progression -- toggle off with
 -- /gtloot for old-content farm runs, alt runs, or anything else that shouldn't count
 -- toward the loot history.
@@ -105,7 +121,12 @@ end
 local function slotLabel(itemLink)
   local _, _, _, _, _, _, _, _, itemEquipLoc = GetItemInfo(itemLink)
   if not itemEquipLoc or itemEquipLoc == "" or itemEquipLoc == "INVTYPE_NON_EQUIP" then return "Other" end
-  return _G[itemEquipLoc] or "Other"
+  -- Lua's `or` only falls through on nil/false -- an empty string from _G[itemEquipLoc]
+  -- (confirmed live 2026-08-28: happened for a real item) is truthy and would otherwise
+  -- slip through as a blank slot instead of "Other".
+  local resolved = _G[itemEquipLoc]
+  if not resolved or resolved == "" then return "Other" end
+  return resolved
 end
 
 local function recordNeedWin(winnerName, itemLink, bossOverride)
@@ -140,7 +161,7 @@ end
 -- no-ops for anything not yet resolved (dropInfo.winner nil), an all-passed drop, or
 -- a non-Need winning roll (Transmog/Greed) -- those aren't errors, just not this
 -- addon's concern.
-local function handleLootHistoryDrop(encounterID, lootListID)
+local function handleLootHistoryDrop(encounterID, lootListID, bossNameHint)
   local dropInfo = C_LootHistory.GetSortedInfoForDrop(encounterID, lootListID)
   if not dropInfo or not dropInfo.winner or not dropInfo.rollInfos then return end
 
@@ -157,15 +178,37 @@ local function handleLootHistoryDrop(encounterID, lootListID)
     return
   end
 
-  -- Resolved from the event's own encounterID, not the closure-tracked currentBoss --
-  -- loot can resolve a few seconds after ENCOUNTER_END already cleared it.
-  local bossName = currentBoss
-  if EJ_GetEncounterInfo then
+  -- Prefers a name passed in by the caller (scanLootHistory already has it from
+  -- GetAllEncounterInfos) over re-deriving one -- falls back to the event's own
+  -- encounterID via EJ_GetEncounterInfo, then the closure-tracked currentBoss, since
+  -- loot can resolve a few seconds after ENCOUNTER_END already cleared that.
+  local bossName = bossNameHint or currentBoss
+  if not bossNameHint and EJ_GetEncounterInfo then
     local name = EJ_GetEncounterInfo(encounterID)
     if name then bossName = name end
   end
 
   recordNeedWin(dropInfo.winner.playerName, dropInfo.itemHyperlink, bossName)
+end
+
+-- Backfill: re-walks EVERY encounter/drop C_LootHistory currently knows about (not
+-- just whatever the last live event happened to cover) and records any Need win not
+-- already captured -- recordNeedWin's own dedup makes re-scanning the same data
+-- repeatedly safe, so this can run as often as useful. Triggered automatically after
+-- each kill (ENCOUNTER_END) and manually via /gtloot scan, for exactly the case the
+-- live LOOT_HISTORY_UPDATE_DROP event might miss (e.g. this addon loaded after the
+-- event already fired, or the event just didn't reach a background frame).
+local function scanLootHistory()
+  if not C_LootHistory or not C_LootHistory.GetSortedDropsForEncounter then return 0 end
+  local found = #GuildToolsLootDB.records
+  for encounterIDStr, encounterName in pairs(GuildToolsLootDB.seenEncounters) do
+    local encounterID = tonumber(encounterIDStr)
+    local drops = encounterID and C_LootHistory.GetSortedDropsForEncounter(encounterID)
+    for _, drop in ipairs(drops or {}) do
+      handleLootHistoryDrop(encounterID, drop.lootListID, encounterName)
+    end
+  end
+  return #GuildToolsLootDB.records - found
 end
 
 -- Asks once per raid lockout, not on every loading screen within it (a raid with
@@ -231,11 +274,19 @@ frame:SetScript("OnEvent", function(_, event, ...)
     end
 
   elseif event == "ENCOUNTER_START" then
-    local _, encounterName = ...
+    local encounterID, encounterName = ...
     currentBoss = encounterName
+    if encounterID then
+      GuildToolsLootDB.seenEncounters[tostring(encounterID)] = encounterName
+    end
 
   elseif event == "ENCOUNTER_END" then
     currentBoss = nil
+    -- Need rolls take a little while to resolve after the kill -- delayed rather than
+    -- immediate so this doesn't scan before the last roll has actually settled.
+    if C_Timer then
+      C_Timer.After(20, scanLootHistory)
+    end
 
   elseif event == "START_LOOT_ROLL" then
     local rollID = ...
@@ -306,7 +357,14 @@ SlashCmdList["GUILDTOOLSLOOT"] = function(msg)
   elseif arg == "off" then
     GuildToolsLootDB.enabled = false
     announce("NOT logging -- use this for old-content or off-progression runs. /gtloot on to resume.")
+  elseif arg == "scan" then
+    if not GuildToolsLootDB.enabled then
+      announce("NOT logging right now -- /gtloot on first, then /gtloot scan.")
+    else
+      local added = scanLootHistory()
+      announce(added > 0 and (added .. " new Need win" .. (added == 1 and "" or "s") .. " pulled in from Loot History.") or "Loot History checked -- nothing new to add.")
+    end
   else
-    announce((GuildToolsLootDB.enabled and "currently logging Need wins." or "currently NOT logging.") .. " /gtloot on|off to change.")
+    announce((GuildToolsLootDB.enabled and "currently logging Need wins." or "currently NOT logging.") .. " /gtloot on|off to change, /gtloot scan to pull in anything Loot History has that wasn't caught live.")
   end
 end

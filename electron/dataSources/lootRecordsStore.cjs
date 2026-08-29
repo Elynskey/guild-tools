@@ -1,5 +1,6 @@
 const fs = require('node:fs');
 const path = require('node:path');
+const crypto = require('node:crypto');
 const { resolveDataDir } = require('./dataDir.cjs');
 
 // The shared, officer-wide loot log -- runs on the API proxy server. Same JSON-file
@@ -7,22 +8,44 @@ const { resolveDataDir } = require('./dataDir.cjs');
 // GuildToolsLoot addon running during the same raid (Group Loot broadcasts every Need
 // win to the whole raid, so more than one addon instance sees the exact same roll) --
 // sync() dedupes on that overlap rather than creating duplicate entries.
+//
+// Every record gets an `id` assigned here (not by the addon -- the addon's own natural
+// key is itemId+winner+time, which is what sync() dedupes on) so officers can edit or
+// remove individual entries in the app when neither capture path in the addon caught
+// something correctly. manualAdd()/update()/remove() exist for exactly that -- a
+// correction tool, not a replacement for the addon's automatic capture.
 
 function storePath() {
   return path.join(resolveDataDir(), 'loot-records.json');
 }
 
+function save(db) {
+  fs.writeFileSync(storePath(), JSON.stringify(db, null, 2));
+}
+
+// Records synced before `id` existed (everything synced before this feature shipped)
+// need one backfilled so they're editable too -- not just newly-added ones. Self-heals
+// on first read rather than a one-off migration script, and persists the assigned ids
+// immediately so this only ever runs once per record.
 function load() {
+  let db;
   try {
-    const db = JSON.parse(fs.readFileSync(storePath(), 'utf8'));
-    return { records: db.records ?? [], trades: db.trades ?? [] };
+    const parsed = JSON.parse(fs.readFileSync(storePath(), 'utf8'));
+    db = { records: parsed.records ?? [], trades: parsed.trades ?? [] };
   } catch {
     return { records: [], trades: [] };
   }
-}
 
-function save(db) {
-  fs.writeFileSync(storePath(), JSON.stringify(db, null, 2));
+  let backfilled = false;
+  for (const r of db.records) {
+    if (!r.id) {
+      r.id = crypto.randomUUID();
+      backfilled = true;
+    }
+  }
+  if (backfilled) save(db);
+
+  return db;
 }
 
 // Two different addon instances observing the same broadcasted roll produce the same
@@ -46,9 +69,10 @@ function sync(newRecords, newTrades) {
   for (const r of newRecords ?? []) {
     const k = recordKey(r);
     if (!recordKeys.has(k)) {
-      db.records.push(r);
+      const withId = { id: crypto.randomUUID(), ...r };
+      db.records.push(withId);
       recordKeys.add(k);
-      addedRecords.push(r);
+      addedRecords.push(withId);
     }
   }
   for (const t of newTrades ?? []) {
@@ -64,4 +88,43 @@ function sync(newRecords, newTrades) {
   return { records: db.records, trades: db.trades, addedRecords, addedTrades };
 }
 
-module.exports = { load, sync };
+/** Officer-entered record -- no real itemLink available by hand, so the item name is stored as a plain "[Name]" string (the same bracketed shape LootLogTable's display parsing already expects; it just won't carry a real tooltip). */
+function manualAdd({ winner, itemName, boss, slot, time: recordTime }) {
+  const db = load();
+  const record = {
+    id: crypto.randomUUID(),
+    itemId: null,
+    itemLink: `[${itemName}]`,
+    winner,
+    boss: boss || null,
+    slot: slot || 'Other',
+    time: recordTime ?? Math.floor(Date.now() / 1000),
+  };
+  db.records.push(record);
+  save(db);
+  return db.records;
+}
+
+function update(id, patch) {
+  const db = load();
+  const record = db.records.find((r) => r.id === id);
+  if (!record) return db.records;
+  if (patch.winner !== undefined) record.winner = patch.winner;
+  if (patch.itemName !== undefined) {
+    record.itemLink = `[${patch.itemName}]`;
+    record.itemId = null;
+  }
+  if (patch.boss !== undefined) record.boss = patch.boss || null;
+  if (patch.slot !== undefined) record.slot = patch.slot || 'Other';
+  save(db);
+  return db.records;
+}
+
+function remove(id) {
+  const db = load();
+  db.records = db.records.filter((r) => r.id !== id);
+  save(db);
+  return db.records;
+}
+
+module.exports = { load, sync, manualAdd, update, remove };

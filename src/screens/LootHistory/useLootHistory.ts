@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { annotateWithTrades, groupLootByNight, needWinCount } from '../../raid/lootLogic';
 import type { LootNight } from '../../raid/lootLogic';
 import { sampleLootRecords, sampleLootTrades } from '../../data/sampleLoot';
+import type { LootRecordPatch, ManualLootRecordInput } from '../../electron';
 
 type LogStatus = 'ok' | 'not_configured' | 'addon_not_installed';
 
@@ -15,8 +16,10 @@ export function useLootHistory() {
   const [installing, setInstalling] = useState(false);
   const [installMessage, setInstallMessage] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [itemIcons, setItemIcons] = useState<Record<number, string | null>>({});
+  const [saving, setSaving] = useState(false);
 
-  const load = useCallback(() => {
+  const load = useCallback((): Promise<void> => {
     if (!electron) {
       // Browser/dev-preview mode: no addon, no filesystem -- show sample data so the screen is reviewable.
       const entries = annotateWithTrades(sampleLootRecords, sampleLootTrades);
@@ -32,7 +35,9 @@ export function useLootHistory() {
         setStatus(result.status);
       }),
       electron.getWowPathConfig().then(setWowPathState),
-    ]).finally(() => setRefreshing(false));
+    ])
+      .then(() => undefined)
+      .finally(() => setRefreshing(false));
   }, [electron]);
 
   useEffect(() => {
@@ -46,6 +51,17 @@ export function useLootHistory() {
     const interval = setInterval(load, 30_000);
     return () => clearInterval(interval);
   }, [load]);
+
+  // Fetched once per set of item IDs seen -- icons never change, so no need to re-fetch
+  // on every load()/poll tick, just when a genuinely new item ID shows up.
+  useEffect(() => {
+    if (!electron) return;
+    const ids = [...new Set(nights.flatMap((n) => n.entries.map((e) => e.itemId)).filter((id): id is number => id != null))];
+    const missing = ids.filter((id) => !(id in itemIcons));
+    if (missing.length === 0) return;
+    electron.getItemIconUrls(missing).then((result) => setItemIcons((prev) => ({ ...prev, ...result })));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [electron, nights]);
 
   const selectedNight = nights.find((n) => n.key === selectedNightKey) ?? nights[0] ?? null;
 
@@ -86,6 +102,42 @@ export function useLootHistory() {
       .finally(() => setInstalling(false));
   }, [electron, load]);
 
+  const addRecord = useCallback(
+    (input: ManualLootRecordInput) => {
+      if (!electron) return;
+      setSaving(true);
+      electron
+        .addManualLootRecord(input)
+        .then(() => load())
+        .finally(() => setSaving(false));
+    },
+    [electron, load],
+  );
+
+  const updateRecord = useCallback(
+    (id: string, patch: LootRecordPatch) => {
+      if (!electron) return;
+      setSaving(true);
+      electron
+        .updateLootRecord(id, patch)
+        .then(() => load())
+        .finally(() => setSaving(false));
+    },
+    [electron, load],
+  );
+
+  const removeRecord = useCallback(
+    (id: string) => {
+      if (!electron) return;
+      setSaving(true);
+      electron
+        .removeLootRecord(id)
+        .then(() => load())
+        .finally(() => setSaving(false));
+    },
+    [electron, load],
+  );
+
   return {
     status,
     nights,
@@ -103,5 +155,11 @@ export function useLootHistory() {
     refresh: load,
     refreshing,
     empty: nights.length === 0,
+    itemIcons,
+    addRecord,
+    updateRecord,
+    removeRecord,
+    saving,
+    available: !!electron,
   };
 }

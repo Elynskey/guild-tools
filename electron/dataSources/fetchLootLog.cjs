@@ -1,5 +1,6 @@
 const { getLootRecords } = require('./lootLog.cjs');
 const proxyClient = require('./proxyClient.cjs');
+const lootRecordsStore = require('./lootRecordsStore.cjs');
 
 // Local capture (this PC's addon, if any) always happens first, then -- when the
 // proxy is configured -- gets pushed up to the shared store (a harmless no-op if
@@ -24,4 +25,22 @@ async function fetchLootLog() {
   }
 }
 
-module.exports = { fetchLootLog };
+// Officer edits/corrections -- always go through the proxy when available (this is
+// shared, officer-wide data, same as craft requests), falling back to the local store
+// only for dev-without-proxy.
+async function addManualLootRecord(record) {
+  if (proxyClient.isAvailable()) return proxyClient.addManualLootRecord(record);
+  return lootRecordsStore.manualAdd(record);
+}
+
+async function updateLootRecord(id, patch) {
+  if (proxyClient.isAvailable()) return proxyClient.updateLootRecord(id, patch);
+  return lootRecordsStore.update(id, patch);
+}
+
+async function removeLootRecord(id) {
+  if (proxyClient.isAvailable()) return proxyClient.removeLootRecord(id);
+  return lootRecordsStore.remove(id);
+}
+
+module.exports = { fetchLootLog, addManualLootRecord, updateLootRecord, removeLootRecord };

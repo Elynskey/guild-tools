@@ -1,7 +1,10 @@
+import { useState } from 'react';
 import { LootHistoryHeader } from './LootHistoryHeader';
 import { LootLogTable } from './LootLogTable';
+import { LootRecordDialog } from './LootRecordDialog';
 import { Button } from '../../design-system/Button';
 import { useLootHistory } from './useLootHistory';
+import type { LootEntry } from '../../raid/lootLogic';
 
 function SetupCard({ lh }: { lh: ReturnType<typeof useLootHistory> }) {
   const needsPath = lh.status === 'not_configured';
@@ -34,6 +37,8 @@ function SetupCard({ lh }: { lh: ReturnType<typeof useLootHistory> }) {
 
 export function LootHistory() {
   const lh = useLootHistory();
+  const [editing, setEditing] = useState<LootEntry | null>(null);
+  const [adding, setAdding] = useState(false);
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--surface-page)', fontFamily: 'var(--font-ui)', color: 'var(--text-body)', paddingBottom: 80 }}>
@@ -109,11 +114,42 @@ export function LootHistory() {
                   {lh.visibleEntries.length} match{lh.visibleEntries.length === 1 ? '' : 'es'}
                 </div>
               )}
+              <div style={{ flex: 1 }} />
+              {lh.available && (
+                <Button variant="secondary" size="sm" iconLeft="plus" onClick={() => setAdding(true)}>
+                  Add entry
+                </Button>
+              )}
             </div>
-            <LootLogTable entries={lh.visibleEntries} />
+            <LootLogTable entries={lh.visibleEntries} itemIcons={lh.itemIcons} onEdit={lh.available ? setEditing : undefined} />
           </>
         )}
       </div>
+
+      {(editing || adding) && (
+        <LootRecordDialog
+          entry={editing ?? undefined}
+          saving={lh.saving}
+          onClose={() => {
+            setEditing(null);
+            setAdding(false);
+          }}
+          onSave={(fields) => {
+            if (editing?.id) lh.updateRecord(editing.id, fields);
+            else lh.addRecord(fields);
+            setEditing(null);
+            setAdding(false);
+          }}
+          onDelete={
+            editing?.id
+              ? () => {
+                  lh.removeRecord(editing.id!);
+                  setEditing(null);
+                }
+              : undefined
+          }
+        />
+      )}
     </div>
   );
 }

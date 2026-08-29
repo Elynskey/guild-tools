@@ -2,6 +2,20 @@ import type { DeathCause, Raider } from './scoring/types';
 import type { CraftRequest, MemberProfessions, RecipeCatalogue } from './professions/types';
 import type { RawLootRecord, RawTradeRecord } from './raid/lootLogic';
 
+export interface ManualLootRecordInput {
+  winner: string;
+  itemName: string;
+  boss?: string;
+  slot?: string;
+}
+
+export interface LootRecordPatch {
+  winner?: string;
+  itemName?: string;
+  boss?: string;
+  slot?: string;
+}
+
 export interface RealmMismatch {
   name: string;
   wowauditRealm: string;
@@ -141,6 +155,10 @@ export interface ElectronAPI {
   fulfillCraftRequest: (id: string, fulfilledBy: string) => Promise<CraftRequest[]>;
   removeCraftRequest: (id: string) => Promise<CraftRequest[]>;
   getLootLog: () => Promise<{ records: RawLootRecord[]; trades: RawTradeRecord[]; status: 'ok' | 'not_configured' | 'addon_not_installed' }>;
+  addManualLootRecord: (record: ManualLootRecordInput) => Promise<RawLootRecord[]>;
+  updateLootRecord: (id: string, patch: LootRecordPatch) => Promise<RawLootRecord[]>;
+  removeLootRecord: (id: string) => Promise<RawLootRecord[]>;
+  getItemIconUrls: (itemIds: number[]) => Promise<Record<number, string | null>>;
   getWowPathConfig: () => Promise<{ configured: string | null; resolved: string | null; valid: boolean }>;
   setWowPath: (wowPath: string) => Promise<{ configured: string | null; resolved: string | null; valid: boolean }>;
   pickWowFolder: () => Promise<string | null>;

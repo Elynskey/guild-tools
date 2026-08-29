@@ -1,4 +1,6 @@
 export interface RawLootRecord {
+  /** Assigned server-side on first sync (see lootRecordsStore.cjs), not by the addon -- lets an officer edit/remove one specific record. Optional since very old already-synced records may predate this. */
+  id?: string;
   itemId: number | null;
   itemLink: string;
   winner: string;
@@ -17,6 +19,8 @@ export interface RawTradeRecord {
 }
 
 export interface LootEntry {
+  /** Present for a real win record (editable/removable in the app); absent for a standalone trade, which has no single record to point at. */
+  id?: string;
   itemId: number | null;
   itemLink: string;
   /** The Need-roll winner, or (for a standalone unmatched trade) the trade's `from`. */

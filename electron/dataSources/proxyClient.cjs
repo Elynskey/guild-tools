@@ -156,6 +156,22 @@ async function finalizeRaidSignup(id) {
   return proxyFetchJson(`/raid-signups/${encodeURIComponent(id)}/finalize`, { method: 'POST' });
 }
 
+async function getItemIconUrls(itemIds) {
+  return proxyFetchJson('/item-icons', { method: 'POST', body: JSON.stringify({ itemIds }) });
+}
+
+async function addManualLootRecord(record) {
+  return proxyFetchJson('/loot-records/manual', { method: 'POST', body: JSON.stringify(record) });
+}
+
+async function updateLootRecord(id, patch) {
+  return proxyFetchJson(`/loot-records/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(patch) });
+}
+
+async function removeLootRecord(id) {
+  return proxyFetchJson(`/loot-records/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+
 async function getSettings() {
   return proxyFetchJson('/settings');
 }
@@ -197,4 +213,8 @@ module.exports = {
   createRaidSignup,
   setRaidSignupAssignments,
   finalizeRaidSignup,
+  getItemIconUrls,
+  addManualLootRecord,
+  updateLootRecord,
+  removeLootRecord,
 };

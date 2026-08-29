@@ -27,7 +27,8 @@ const { signIn: bnetSignIn } = require('./dataSources/bnetAuth.cjs');
 const { signIn: discordSignIn } = require('./dataSources/discordAuth.cjs');
 const { loadSession, saveSession, clearSession } = require('./dataSources/authSession.cjs');
 const { getWowPathConfig, setWowPath, installAddon } = require('./dataSources/lootLog.cjs');
-const { fetchLootLog } = require('./dataSources/fetchLootLog.cjs');
+const { fetchLootLog, addManualLootRecord, updateLootRecord, removeLootRecord } = require('./dataSources/fetchLootLog.cjs');
+const { getItemIconUrls } = require('./dataSources/fetchItemIcons.cjs');
 const { getSettings, saveSettings } = require('./dataSources/fetchSettings.cjs');
 const {
   listRaidSignups,
@@ -116,6 +117,10 @@ ipcMain.handle('craftRequests:add', async (_event, requester, profession, descri
 ipcMain.handle('craftRequests:fulfill', async (_event, id, fulfilledBy) => fulfillCraftRequest(id, fulfilledBy));
 ipcMain.handle('craftRequests:remove', async (_event, id) => removeCraftRequest(id));
 ipcMain.handle('lootLog:get', async () => fetchLootLog());
+ipcMain.handle('lootLog:addManual', async (_event, record) => addManualLootRecord(record));
+ipcMain.handle('lootLog:update', async (_event, id, patch) => updateLootRecord(id, patch));
+ipcMain.handle('lootLog:remove', async (_event, id) => removeLootRecord(id));
+ipcMain.handle('itemIcons:get', async (_event, itemIds) => getItemIconUrls(itemIds));
 ipcMain.handle('lootLog:getWowPath', async () => getWowPathConfig());
 ipcMain.handle('lootLog:setWowPath', async (_event, wowPath) => {
   setWowPath(wowPath);
