@@ -12,18 +12,24 @@
 -- Announces its current state once at login too, so it's never silently off without
 -- you knowing.
 --
--- NOT TRACKED, deliberately: Greed and Transmog-intent-Greed rolls (the guild's 2-win
--- cap is Need-only, so Greed doesn't matter here), and trades between two OTHER
+-- NOT TRACKED, deliberately: Greed and Transmog rolls (the guild's 2-win cap is
+-- Need-only) -- Transmog turned out to be its own explicitly-labeled roll type in the
+-- real chat message, not just a social convention layered on Greed as first assumed;
+-- corrected once a real example was seen. Also not tracked: trades between two OTHER
 -- players -- Blizzard never broadcasts a trade to anyone but its two participants, so
 -- this addon can only ever see a trade if THIS character is one of the two people in
 -- it. Full raid-wide trade coverage would need this addon on every raider's client
 -- relaying events to each other, which is a separate, bigger build.
 --
--- HIGHEST-RISK PART OF THIS FILE: the exact global-string names Blizzard uses for the
--- "so-and-so wins: [item]" chat message have shifted across expansions historically.
--- This reads them from _G (so it doesn't hardcode English text and adapts to whatever
--- the client's actual patterns are) with a couple of known fallback names, but this is
--- the first thing to check if a real raid-night test shows missed Need wins.
+-- CHAT_MSG_LOOT matching, confirmed live from a real raid's chat log (2026-08-28):
+-- Blizzard's actual message is "[Loot]: <name> (<roll type> - <roll value>) Won:
+-- <item link>", e.g. "[Loot]: Odasa (Transmogrification - 92) Won: [Spine of the
+-- Hissing Abyss]" -- NOT the "<name> wins: <item>" shape this was originally built
+-- against from global-string docs (LOOT_ROLL_WON_NEED_S etc.), which is why nothing
+-- got captured the first two raid nights. Matching the STRUCTURE (name, then a
+-- parenthesized roll type + value, then "Won:") and checking the roll-type word in
+-- Lua rather than baking "Need" into the pattern itself -- still a real risk if this
+-- exact wording shifts again, but at least now grounded in something actually seen.
 
 local ADDON_NAME = ...
 
@@ -51,26 +57,11 @@ local function playerRealmName()
   return name, realm
 end
 
--- Builds a Lua pattern from a Blizzard global string, escaping magic characters and
--- turning each %s into a capture group -- so this matches whatever the client's actual
--- localized text is instead of a hardcoded English guess. Returns nil if the global
--- string doesn't exist on this client (older/newer patch, name changed) rather than
--- erroring -- callers just skip that pattern.
-local function patternFromGlobalString(key)
-  local raw = _G[key]
-  if not raw or raw == "" then return nil end
-  local escaped = raw:gsub("([%(%)%.%%%+%-%*%?%[%]%^%$])", "%%%1")
-  escaped = escaped:gsub("%%%%s", "(.+)")
-  return escaped
-end
-
--- Known-across-expansions candidates for "<player> wins: <item>. (Need)" -- kept as a
--- list, not a single guess, and built once at load rather than per-message.
-local NEED_WIN_PATTERNS = {}
-for _, key in ipairs({ "LOOT_ROLL_WON_NEED_S", "LOOT_ROLL_WON_S", "LOOT_ROLL_WON" }) do
-  local p = patternFromGlobalString(key)
-  if p then table.insert(NEED_WIN_PATTERNS, p) end
-end
+-- "[Loot]: <name> (<roll type> - <roll value>) Won: " -- captures (1) the winner's name
+-- and (2) the roll-type word, leaving the item link for extractItemLink() to pull from
+-- the same message separately (it carries the full |Hitem:...|h escape sequence, not
+-- just the plain bracketed name this pattern's lazy match would stop at).
+local WON_ROLL_PATTERN = "%[Loot%]: (.-) %((.-) %- %d+%) Won: "
 
 local function extractItemLink(message)
   return message:match("(|c%x+|Hitem:.-|h|r)")
@@ -199,13 +190,10 @@ frame:SetScript("OnEvent", function(_, event, ...)
 
   elseif event == "CHAT_MSG_LOOT" then
     local message = ...
-    for _, pattern in ipairs(NEED_WIN_PATTERNS) do
-      local winner, itemText = message:match(pattern)
-      if winner then
-        local link = extractItemLink(message) or extractItemLink(itemText or "")
-        if link then recordNeedWin(winner, link) end
-        break
-      end
+    local winner, rollType = message:match(WON_ROLL_PATTERN)
+    if winner and rollType and rollType:lower():find("need") then
+      local link = extractItemLink(message)
+      if link then recordNeedWin(winner, link) end
     end
 
   elseif event == "TRADE_SHOW" then
