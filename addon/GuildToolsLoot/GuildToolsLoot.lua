@@ -130,15 +130,19 @@ local lastPromptedInstanceID = nil
 StaticPopupDialogs["GUILDTOOLSLOOT_CONFIRM"] = {
   text = "Log Need-roll loot for this raid in Guild Tools?",
   button1 = "Yes",
-  button2 = "No",
+  button2 = "Not now",
   OnAccept = function()
     GuildToolsLootDB.enabled = true
     announce("logging Need wins for this raid. /gtloot off any time to stop.")
   end,
-  OnCancel = function()
-    GuildToolsLootDB.enabled = false
-    announce("not logging this raid. /gtloot on any time to turn it back on.")
-  end,
+  -- Deliberately no OnCancel that touches `enabled`. Blizzard's StaticPopup calls
+  -- OnCancel for an explicit button2 click AND for the player just hitting Escape AND
+  -- for another popup pre-empting this one (reason: "clicked" for both of the first
+  -- two -- genuinely indistinguishable from inside OnCancel; "override" for the third)
+  -- -- confirmed against Blizzard's own StaticPopup docs, not assumed. A stray Escape
+  -- press or an unrelated popup taking priority must never silently kill a whole
+  -- raid's logging with zero real user action. Turning logging OFF is only ever
+  -- explicit now, via /gtloot off -- this popup can only ever turn it ON.
   timeout = 0,
   whileDead = true,
   hideOnEscape = true,
