@@ -187,21 +187,62 @@ function extractDeathCausesByName(entries, fightNameById) {
   return causesByName;
 }
 
+// Normal CDF via the Abramowitz & Stegun approximation (good to ~1e-7) -- no
+// dependency needed for a single distribution function.
+function normalCdf(z) {
+  const t = 1 / (1 + 0.2316419 * Math.abs(z));
+  const d = 0.3989423 * Math.exp((-z * z) / 2);
+  let prob = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274))));
+  if (z > 0) prob = 1 - prob;
+  return prob;
+}
+
 /**
  * Percentile of each player in `throughputByName` among only their peers of the same
- * role (per `roleOf(name)`) -- worst of the group is 0, best is 100, evenly spaced.
- * This is the local, within-raid replacement for WCL's own rankPercent (see the file
- * header): higherIsBetter is true for HPS (healers), false for damage-taken-per-second
- * (tanks, where taking LESS damage is the better outcome). A solo healer/tank on the
- * pull has no peers to compare against, so they get 100 by definition rather than an
- * undefined percentile.
+ * role (per `roleOf(name)`) for THIS ONE REPORT -- based on how many standard
+ * deviations above/below the role's own average they are, converted to a 0-100
+ * percentile via the normal distribution. This is the local, within-raid replacement
+ * for WCL's own rankPercent (see the file header): higherIsBetter is true for HPS
+ * (healers), false for damage-taken-per-second (tanks, where taking LESS damage is
+ * the better outcome). Feeds the "Raid Night" window (nightParse) via
+ * nightFieldsFromAggregate below.
+ *
+ * Deliberately not a rank-order percentile (worst=0, best=100, evenly spaced) -- but
+ * be aware this still has a real limit of its own with exactly two peers: given only
+ * two numbers, the z-score of either one against their own pair's mean/stddev is
+ * ALWAYS exactly +-1 no matter how close or far apart the two actual numbers are (an
+ * algebraic fact, not an edge case -- see computeSeasonPercentiles below for the fix,
+ * which pools many more than two data points). This function keeps the simpler
+ * per-pair comparison because a single report only ever offers one number per raider
+ * to begin with -- there's no larger pool available to draw from within one night.
+ *
+ * A role with fewer than 2 peers has no meaningful spread, so gets 100 by definition
+ * (nothing to compare against) rather than an undefined percentile. A role where
+ * everyone posted the identical number (stddev 0) gets 50 for the same reason --
+ * there's no "above" or "below" when nobody differs.
  */
 function computeLocalPercentiles(throughputByName, roleOf, role, higherIsBetter) {
   const pool = [...throughputByName.entries()].filter(([name, v]) => v != null && roleOf(name) === role);
-  pool.sort((a, b) => (higherIsBetter ? a[1] - b[1] : b[1] - a[1])); // ascending, worst first
   const n = pool.length;
   const result = new Map();
-  pool.forEach(([name], i) => result.set(name, n === 1 ? 100 : Math.round((i / (n - 1)) * 100)));
+  if (n === 0) return result;
+  if (n === 1) {
+    result.set(pool[0][0], 100);
+    return result;
+  }
+
+  const mean = pool.reduce((sum, [, v]) => sum + v, 0) / n;
+  const variance = pool.reduce((sum, [, v]) => sum + (v - mean) ** 2, 0) / n;
+  const stddev = Math.sqrt(variance);
+
+  for (const [name, v] of pool) {
+    if (stddev === 0) {
+      result.set(name, 50);
+      continue;
+    }
+    const z = ((v - mean) / stddev) * (higherIsBetter ? 1 : -1);
+    result.set(name, Math.round(normalCdf(z) * 100));
+  }
   return result;
 }
 
@@ -254,7 +295,7 @@ async function fetchReportAggregate(code) {
   const fightNameById = new Map(fights.map((f) => [f.id, f.name]));
 
   if (killFightIds.length === 0) {
-    return { dps: new Map(), hps: new Map(), deaths: new Map(), deathCauses: new Map(), pullCount: 0, healerPercent: new Map(), tankPercent: new Map(), actualIdentity: new Map(), heroicKillEncounterIds, actorServers: new Map() };
+    return { dps: new Map(), hps: new Map(), damageTaken: new Map(), deaths: new Map(), deathCauses: new Map(), pullCount: 0, healerPercent: new Map(), tankPercent: new Map(), actualIdentity: new Map(), heroicKillEncounterIds, actorServers: new Map() };
   }
 
   const [damageEntries, healingEntries, damageTakenEntries, deathEntries, ranking, actorServers] = await Promise.all([
@@ -274,11 +315,16 @@ async function fetchReportAggregate(code) {
   return {
     dps: sumThroughputByName(damageEntries),
     hps,
+    // Exposed (not just consumed locally below) so fetchWarcraftLogs can pool it
+    // across every report this tier for the season-wide tank percentile.
+    damageTaken,
     deaths: countDeathsByName(deathEntries),
     deathCauses: extractDeathCausesByName(deathEntries, fightNameById),
     pullCount: killFightIds.length,
-    // Local, within-raid percentiles -- higher HPS is better for healers; LESS
-    // damage taken per second is better for tanks (survivability), hence false.
+    // Local, within-raid percentiles for THIS report only -- what the "Raid Night"
+    // window shows (see fetchWarcraftLogs for the season-pooled version used
+    // tier-to-date). Higher HPS is better for healers; LESS damage taken per second
+    // is better for tanks (survivability), hence false.
     healerPercent: computeLocalPercentiles(hps, roleOf, 'healer', true),
     tankPercent: computeLocalPercentiles(damageTaken, roleOf, 'tank', false),
     actualIdentity,
@@ -326,6 +372,59 @@ function nightFieldsFromAggregate(agg, roleByName, minDps) {
 }
 
 /**
+ * Season-wide healer/tank percentile. Deliberately NOT "average each raider's
+ * numbers across the season, then z-score those averages against each other" --
+ * with a role as small as two tanks, that's mathematically degenerate: given only
+ * two numbers, the z-score of either one against their own pair-mean/stddev is
+ * ALWAYS exactly +-1, no matter how close or far apart the two actual numbers are
+ * (confirmed algebraically, not just empirically -- it falls straight out of the
+ * variance formula for n=2). More season data wouldn't change that outcome even a
+ * little, which defeats the entire point of pooling it.
+ *
+ * Instead, this builds the reference distribution (mean, spread) from EVERY
+ * individual per-report sample this role posted all season -- not one number per
+ * raider -- then measures how far each raider's own seasonal average sits from
+ * that broader distribution. That's no longer degenerate at n=2 peers, because the
+ * distribution itself is built from many more than 2 data points, and it directly
+ * rewards "collects more data": more raid nights logged this tier -> a more
+ * reliable read on what's actually normal variance for this role in this raid.
+ */
+function computeSeasonPercentiles(aggregates, metricKey, role, roleOf, higherIsBetter) {
+  const samples = [];
+  const perRaider = new Map(); // name -> {total, count}
+  for (const agg of aggregates) {
+    for (const [name, value] of agg[metricKey]) {
+      if (value == null || roleOf(name) !== role) continue;
+      samples.push(value);
+      const prev = perRaider.get(name) ?? { total: 0, count: 0 };
+      perRaider.set(name, { total: prev.total + value, count: prev.count + 1 });
+    }
+  }
+
+  const result = new Map();
+  if (samples.length === 0) return result;
+  if (perRaider.size === 1) {
+    result.set([...perRaider.keys()][0], 100); // nothing to compare against
+    return result;
+  }
+
+  const mean = samples.reduce((a, v) => a + v, 0) / samples.length;
+  const variance = samples.reduce((a, v) => a + (v - mean) ** 2, 0) / samples.length;
+  const stddev = Math.sqrt(variance);
+
+  for (const [name, { total, count }] of perRaider) {
+    const avg = total / count;
+    if (stddev === 0) {
+      result.set(name, 50); // no spread in the data at all -- nobody is above or below
+      continue;
+    }
+    const z = ((avg - mean) / stddev) * (higherIsBetter ? 1 : -1);
+    result.set(name, Math.round(normalCdf(z) * 100));
+  }
+  return result;
+}
+
+/**
  * @param {{ name: string, realm: string, region: string }} guild
  * @param {string} tierZoneName — only reports in this raid tier count (config.tier.name)
  * @param {Record<string,'tank'|'healer'|'dps'>} roleByName — from wowaudit, since WCL doesn't know raid role assignment
@@ -356,6 +455,18 @@ async function fetchWarcraftLogs(guild, tierZoneName, roleByName) {
       if (!(name in resolvedIdentity)) resolvedIdentity[name] = identity;
     }
   }
+
+  // Season-wide healer/tank percentile: rank each raider against every other
+  // raider who played that role at ANY point this tier, using their AVERAGE
+  // throughput across all of it -- not just whoever happened to be logged on the
+  // most recent report. This is what makes the number stable and meaningful with
+  // a small raid roster (e.g. two tanks): the underlying average for each of them
+  // is backed by the whole season, even though there are still only two people to
+  // compare against. DPS is unaffected -- it stays %-of-the-guild's-minimum, a
+  // flat threshold rather than a ranking, so it has no "peer pool" to grow.
+  const roleOfResolved = (name) => resolvedIdentity[name]?.role ?? roleByName[name];
+  const seasonHealerPercent = computeSeasonPercentiles(aggregates, 'hps', 'healer', roleOfResolved, true);
+  const seasonTankPercent = computeSeasonPercentiles(aggregates, 'damageTaken', 'tank', roleOfResolved, false);
 
   const names = Object.keys(roleByName);
   const result = {};
@@ -393,11 +504,18 @@ async function fetchWarcraftLogs(guild, tierZoneName, roleByName) {
     // Most recent causes first, capped -- feedback text only ever cites the latest one or two.
     deathCauses = deathCauses.reverse().slice(0, DEATH_CAUSE_CAP);
 
+    // Healers/tanks: the season-pooled percentile, not just the latest report's --
+    // falls back to seriesLast on the rare miss (e.g. their only appearances this
+    // tier were all off-role, so they never entered the season pool for their
+    // primary role) so nobody silently loses a perf number.
+    const role = roleOfResolved(name);
+    const seasonPerf = role === 'healer' ? seasonHealerPercent.get(name) : role === 'tank' ? seasonTankPercent.get(name) : null;
+
     result[name] = {
-      role: resolvedIdentity[name]?.role ?? roleByName[name],
+      role,
       class: resolvedIdentity[name]?.class ?? null,
       spec: resolvedIdentity[name]?.spec ?? null,
-      perf: seriesLast,
+      perf: seasonPerf ?? seriesLast,
       parseTrend,
       deaths,
       pulls,

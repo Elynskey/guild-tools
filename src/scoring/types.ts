@@ -25,7 +25,7 @@ export interface Raider {
   rioHighestThisSeason: number;
   ilvlEquipped: number;
   ilvlHighestThisSeason: number;
-  /** DPS/tank: % of per-boss threshold while alive. Healers: HPS percentile 0-100. */
+  /** DPS: % of the guild's minimum DPS while alive. Healers/tanks: HPS/survivability percentile 0-100, pooled across the season so far (see warcraftlogs.cjs). */
   perf: number;
   /** % of gem/enchant slots correct vs the monthly reference table. */
   gearCompletion: number;

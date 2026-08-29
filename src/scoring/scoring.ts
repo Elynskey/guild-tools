@@ -87,14 +87,26 @@ export function evaluateGates(r: Raider, gates: Gates = DEFAULT_GATES): GateEval
  * guild policy ("we don't judge parses"):
  *   - dps:    %-of-the-guild's-minimum-DPS. A real, hard bar, not a
  *             ranking against other players' logs.
- *   - healer: HPS percentile among healers on that pull — healing load
- *             swings too much with comp/mechanics for a flat minimum.
- *   - tank:   survivability/damage-taken percentile among tanks on that
- *             pull, same reasoning — tanks also run much lower DPS than
- *             a DPS spec, so they were never judged on damage at all.
- * Trend mirrors this split: dps trend tracks the slope of %-of-minimum
- * across the tier; healer/tank trend tracks the slope of their own
- * percentile — still a within-role comparison, not a parse judgment.
+ *   - healer: HPS percentile among healers, pooled across the whole
+ *             season so far (not just the latest pull) — healing load
+ *             swings too much with comp/mechanics for a flat minimum,
+ *             and a season's worth of data keeps the number stable even
+ *             with only a handful of healers to compare against.
+ *   - tank:   survivability/damage-taken percentile among tanks, same
+ *             season-pooled reasoning — tanks also run much lower DPS
+ *             than a DPS spec, so they were never judged on damage at
+ *             all. Both percentiles are based on how far each raider's
+ *             season average sits above/below the role's own average
+ *             (standard deviations, not rank order) — see warcraftlogs.
+ *             cjs's computeLocalPercentiles for why: rank order alone
+ *             always puts someone at 0 and someone at 100 with a role
+ *             as small as two tanks, no matter how close they actually
+ *             are.
+ * Trend still tracks each report individually (it needs multiple points
+ * over time to show a slope, so it can't be season-pooled the same way):
+ * dps trend tracks the slope of %-of-minimum across the tier; healer/
+ * tank trend tracks the slope of their own per-report percentile —
+ * still a within-role comparison, not a parse judgment.
  * ------------------------------------------------------------------ */
 export function weightedScore(r: Raider, window: Window = 'rolled'): ScoreParts {
   const night = window === 'night';

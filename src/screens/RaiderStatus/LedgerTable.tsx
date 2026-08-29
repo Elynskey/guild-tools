@@ -5,8 +5,8 @@ import { RaiderRow } from './RaiderRow';
 export const LEDGER_GRID_TEMPLATE = '3px minmax(140px,1fr) 122px 78px 58px 62px 104px';
 
 const PERF_HEADER_TIP: Record<string, string> = {
-  'Survivability percentile': "Where this tank's damage-taken ranks against the guild's other tanks on the same pulls -- not judged on damage output at all.",
-  'HPS percentile': "Where this healer's healing throughput ranks against the guild's other healers on the same pulls -- healing load swings too much by comp/mechanics for a flat number to be fair.",
+  'Survivability percentile': "How far this tank's damage-taken sits above or below the guild's other tanks' average across the whole season -- not judged on damage output at all.",
+  'HPS percentile': "How far this healer's healing throughput sits above or below the guild's other healers' average across the whole season -- healing load swings too much by comp/mechanics for a flat number to be fair.",
   'DPS vs minimum': "Damage as a percentage of the guild's minimum DPS bar (set in .env, rises as the tier progresses) -- a real threshold, never a ranking against other players' logs.",
 };
 
