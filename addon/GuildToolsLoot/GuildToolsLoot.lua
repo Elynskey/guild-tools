@@ -109,17 +109,24 @@ local function itemIdFromLink(link)
   return tonumber(link:match("item:(%d+)"))
 end
 
--- Blizzard's itemClassID for Recipe -- stable across expansions, the same value every
--- other addon that reads it hardcodes (there's no client-exposed global that names it).
+-- Blizzard's itemClassID for Recipe, and itemClassID/itemSubClassID for Companion Pets
+-- -- stable across expansions, the same values every other addon that reads them
+-- hardcodes (there's no client-exposed global that names them). Confirmed against
+-- Warcraft Wiki's item-type table, not guessed.
 local ITEM_CLASS_RECIPE = 9
+local ITEM_CLASS_MISCELLANEOUS = 15
+local ITEM_SUBCLASS_COMPANION_PET = 2
 
--- Toys and recipes ARE Need-rollable in Group Loot, but neither counts toward the
--- guild's 2-win cap -- they're not gear. C_ToyBox.GetToyInfo is the documented way to
--- ask "is this a toy" (returns the itemID back if it is, nil otherwise).
+-- Toys, recipes, and companion pets ARE Need-rollable in Group Loot, but none of them
+-- count toward the guild's 2-win cap -- they're not gear (confirmed live 2026-08-28: a
+-- real companion pet, Soulcoil Remnant, got captured before this check existed).
+-- C_ToyBox.GetToyInfo is the documented way to ask "is this a toy" (returns the itemID
+-- back if it is, nil otherwise).
 local function isExcludedFromNeedTracking(itemId)
   if not itemId then return false end
-  local _, _, _, _, _, itemClassID = GetItemInfoInstant(itemId)
+  local _, _, _, _, _, itemClassID, itemSubClassID = GetItemInfoInstant(itemId)
   if itemClassID == ITEM_CLASS_RECIPE then return true end
+  if itemClassID == ITEM_CLASS_MISCELLANEOUS and itemSubClassID == ITEM_SUBCLASS_COMPANION_PET then return true end
   if C_ToyBox and C_ToyBox.GetToyInfo and C_ToyBox.GetToyInfo(itemId) then return true end
   return false
 end
@@ -146,14 +153,21 @@ local function recordNeedWin(winnerName, itemLink, bossOverride)
   local itemId = itemIdFromLink(itemLink)
   if isExcludedFromNeedTracking(itemId) then return end
 
-  -- Local dedup: the chat-text parser and C_LootHistory can both fire for the same
-  -- real win on this same client, moments apart -- without this, that inserts two
-  -- near-identical records a few seconds apart, which the proxy's exact-time dedup
-  -- (itemId+winner+time) wouldn't catch, since the two captures rarely land in the
-  -- exact same second.
+  -- Local dedup: the chat-text parser, C_LootHistory's live event, AND
+  -- scanLootHistory()'s backfill can all independently (re-)discover the same real win
+  -- -- without this, that inserts a fresh near-duplicate record every time, stamped
+  -- with whatever "now" happens to be at capture time (not the roll's actual time,
+  -- which C_LootHistory doesn't expose). A 10-second window only caught the
+  -- live-event-vs-chat-text case; it completely missed a LATER rescan re-surfacing an
+  -- OLDER win (confirmed live 2026-08-28: a scan run over an hour after the original
+  -- captures re-inserted all of them as "new"). 6 hours matches this app's own
+  -- same-raid-night grouping threshold (see groupLootByNight in lootLogic.ts) --
+  -- generous enough to cover any realistic rescan within one raid night, while still
+  -- letting a genuinely new win of the same item on a LATER night through.
   local now = time()
+  local DEDUP_WINDOW_SECONDS = 6 * 60 * 60
   for _, r in ipairs(GuildToolsLootDB.records) do
-    if r.itemId == itemId and r.winner == winnerName and math.abs(r.time - now) <= 10 then
+    if r.itemId == itemId and r.winner == winnerName and math.abs(r.time - now) <= DEDUP_WINDOW_SECONDS then
       return
     end
   end
