@@ -2,8 +2,6 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { resolveDataDir } = require('./dataDir.cjs');
-const settingsStore = require('./settingsStore.cjs');
-const discordPost = require('./discordPost.cjs');
 
 // Persisted crafting-request board. Same JSON-file-in-DATA_DIR pattern as
 // professionsCache.cjs/recipeCatalogueCache.cjs -- this file runs unmodified both as
@@ -11,9 +9,8 @@ const discordPost = require('./discordPost.cjs');
 // server, where it's the shared, officer-wide store (see craftRequests.cjs's
 // proxy-vs-local branch for which mode is active).
 //
-// Also posts to Discord (add() on creation, fulfill() on completion) when a craft-orders
-// channel is configured (see settingsStore.cjs) -- wrapped so a Discord outage or missing
-// config never blocks the board itself from working.
+// Requests are created and posted to Discord by the bot now, not this app -- this store
+// only tracks fulfillment and feeds the leaderboard.
 
 function storePath() {
   return path.join(resolveDataDir(), 'craft-requests.json');
@@ -32,24 +29,6 @@ function save(requests) {
   fs.writeFileSync(storePath(), JSON.stringify(requests, null, 2));
 }
 
-function buildEmbed(entry) {
-  const fields = [
-    { name: 'Requester', value: entry.requester, inline: true },
-    { name: 'Profession', value: entry.profession, inline: true },
-  ];
-  if (entry.fulfilled) fields.push({ name: 'Status', value: `✅ Completed by ${entry.fulfilledBy}` });
-  return {
-    embeds: [
-      {
-        title: entry.fulfilled ? '~~New crafting request~~' : 'New crafting request',
-        description: entry.description,
-        color: entry.fulfilled ? 0x4c7a4c : 0xd4b358,
-        fields,
-      },
-    ],
-  };
-}
-
 async function add(requester, profession, description) {
   const requests = load();
   const entry = {
@@ -60,19 +39,7 @@ async function add(requester, profession, description) {
     createdAt: new Date().toISOString(),
     fulfilled: false,
     fulfilledBy: null,
-    discordMessageId: null,
   };
-
-  const channelId = settingsStore.load().craftOrdersChannelId;
-  if (channelId) {
-    try {
-      const message = await discordPost.postMessage(channelId, buildEmbed(entry));
-      entry.discordMessageId = message.id;
-    } catch (err) {
-      console.error('[craftRequests] Discord post failed:', err);
-    }
-  }
-
   requests.unshift(entry);
   save(requests);
   return requests;
@@ -88,15 +55,6 @@ async function fulfill(id, fulfilledBy) {
   target.fulfilled = willFulfill;
   target.fulfilledBy = willFulfill ? fulfilledBy : null;
   save(requests);
-
-  const channelId = settingsStore.load().craftOrdersChannelId;
-  if (channelId && target.discordMessageId) {
-    try {
-      await discordPost.editMessage(channelId, target.discordMessageId, buildEmbed(target));
-    } catch (err) {
-      console.error('[craftRequests] Discord edit failed:', err);
-    }
-  }
 
   return requests;
 }

@@ -10,6 +10,8 @@ import { TILE_COLOR } from './bandVisuals';
 
 export interface DisplayRaider extends ScoredRaider {
   expanded: boolean;
+  /** Independent of `expanded` (the Performance ledger's feedback panel) -- this is the Roster table's gear-detail dropdown. */
+  gearExpanded: boolean;
 }
 
 export interface RoleGroup {
@@ -47,6 +49,7 @@ interface State {
   query: string;
   sortWorst: boolean;
   open: string | null;
+  openGear: string | null;
 }
 
 const TILE_DEFS: { key: Band; label: string; note: string }[] = [
@@ -74,7 +77,7 @@ export function useRaiderStatus() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [, forceTick] = useState(0);
-  const [state, setState] = useState<State>({ window: null, role: 'all', band: 'all', query: '', sortWorst: true, open: null });
+  const [state, setState] = useState<State>({ window: null, role: 'all', band: 'all', query: '', sortWorst: true, open: null, openGear: null });
 
   // "Pick a log" for the night window instead of always the most recent report.
   // selectedNightCode stays null (meaning "use the roster's own baked-in night
@@ -198,11 +201,13 @@ export function useRaiderStatus() {
       rows: [] as DisplayRaider[],
     }))
       .map((g) => {
-        const rows = filteredSorted.filter((r) => r.role === g.key).map((r) => ({ ...r, expanded: state.open === r.name }));
+        const rows = filteredSorted
+          .filter((r) => r.role === g.key)
+          .map((r) => ({ ...r, expanded: state.open === r.name, gearExpanded: state.openGear === r.name }));
         return { ...g, rows, count: rows.length };
       })
       .filter((g) => g.rows.length > 0);
-  }, [filteredSorted, state.open]);
+  }, [filteredSorted, state.open, state.openGear]);
 
   const roleTabs = useMemo(
     () => [
@@ -227,26 +232,27 @@ export function useRaiderStatus() {
     refreshing,
     refresh: () => load(true),
     window: win,
-    setWindow: (v: string) => setState((s) => ({ ...s, window: v as Window, open: null })),
+    setWindow: (v: string) => setState((s) => ({ ...s, window: v as Window, open: null, openGear: null })),
     windowTabs,
     nights,
     selectedNightCode: selectedNightCode ?? latestNightCode,
-    setSelectedNightCode: (code: string) => { setSelectedNightCode(code); setState((s) => ({ ...s, open: null })); },
+    setSelectedNightCode: (code: string) => { setSelectedNightCode(code); setState((s) => ({ ...s, open: null, openGear: null })); },
     loadingNightSnapshot,
     role: state.role,
-    setRole: (v: string) => setState((s) => ({ ...s, role: v as Role | 'all', open: null })),
+    setRole: (v: string) => setState((s) => ({ ...s, role: v as Role | 'all', open: null, openGear: null })),
     roleTabs,
     query: state.query,
     setQuery: (v: string) => setState((s) => ({ ...s, query: v })),
     sortWorst: state.sortWorst,
     setSortWorst: (v: boolean) => setState((s) => ({ ...s, sortWorst: v })),
-    toggleBand: (key: Band) => setState((s) => ({ ...s, band: s.band === key ? 'all' : key, open: null })),
+    toggleBand: (key: Band) => setState((s) => ({ ...s, band: s.band === key ? 'all' : key, open: null, openGear: null })),
     band: state.band,
     tiles,
     groups,
     empty: groups.length === 0,
     open: state.open,
     toggleRow: (name: string) => setState((s) => ({ ...s, open: s.open === name ? null : name })),
+    toggleGearRow: (name: string) => setState((s) => ({ ...s, openGear: s.openGear === name ? null : name })),
     trendHeader: win === 'night' ? 'That Night' : 'Trend',
     avgLine: summary.headline,
     guildWell: summary.goingWell,

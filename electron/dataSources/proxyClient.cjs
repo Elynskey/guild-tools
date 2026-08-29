@@ -160,6 +160,10 @@ async function getItemIconUrls(itemIds) {
   return proxyFetchJson('/item-icons', { method: 'POST', body: JSON.stringify({ itemIds }) });
 }
 
+async function getBossLootTable() {
+  return proxyFetchJson('/boss-loot-table');
+}
+
 async function addManualLootRecord(record) {
   return proxyFetchJson('/loot-records/manual', { method: 'POST', body: JSON.stringify(record) });
 }
@@ -218,6 +222,7 @@ module.exports = {
   setRaidSignupAssignments,
   finalizeRaidSignup,
   getItemIconUrls,
+  getBossLootTable,
   addManualLootRecord,
   updateLootRecord,
   removeLootRecord,

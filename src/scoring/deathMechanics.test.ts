@@ -14,6 +14,7 @@ function scoredRaider(name: string, deathCausesInWindow: { boss: string; ability
     ilvlHighestThisSeason: 700,
     perf: 100,
     gearCompletion: 90,
+    gearDetail: null,
     parseTrend: 0,
     deaths: deathCausesInWindow.length,
     pulls: 20,

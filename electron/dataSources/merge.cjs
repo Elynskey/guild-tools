@@ -7,8 +7,9 @@ const { charKey } = require('./raiderio.cjs');
 function mergeSources({ wowauditRoster, rio, gearCompletion, wcl }) {
   // rio is a list, keyed for lookup by charKey(name, realm) -- NOT bare name, since
   // two different real people can share a character name on different realms (the
-  // "Dunbarke" incident). gearCompletion already comes in as a Record keyed the
-  // same way (see bnet.cjs).
+  // "Dunbarke" incident). gearCompletion already comes in as a Record of
+  // {score, missingEnchants, emptySockets, totalSockets} keyed the same way (see
+  // bnet.cjs's computeGearDetail).
   const rioByKey = new Map(rio.map((r) => [r.key, r]));
 
   return wowauditRoster
@@ -55,7 +56,8 @@ function mergeSources({ wowauditRoster, rio, gearCompletion, wcl }) {
         rioHighestThisSeason: rioData.rioHighestThisSeason,
         ilvlEquipped: rioData.ilvlEquipped,
         ilvlHighestThisSeason: rioData.ilvlHighestThisSeason,
-        gearCompletion: gearCompletion[key] ?? 0,
+        gearCompletion: gearCompletion[key]?.score ?? 0,
+        gearDetail: gearCompletion[key] ?? null,
         perf: wclData.perf,
         parseTrend: wclData.parseTrend,
         deaths: wclData.deaths,

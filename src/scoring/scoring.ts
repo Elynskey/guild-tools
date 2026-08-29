@@ -301,7 +301,7 @@ export function generateFeedback(r: Raider, window: Window, gates: Gates, derive
         : {
             perf: getRotationTip(r.class, r.spec) ?? pick([`One boss, one log read with an officer. Not the whole night.`, `Pick the fight where it falls off and watch it back with Shortie.`]),
             gear: pick([`Gems and enchants before Saturday's Heroic. Twenty minutes.`, `Fill the empty slots this week -- cheapest point on the board.`]),
-            trend: pick([`Same boss two weeks running, same officer watching.`, `Worth a quick word with Officer Vadailla on Friday.`]),
+            trend: pick([`Flat two weeks running -- pull last week's log and find where it plateaus.`, `Trend's flat. Isolate the pull where it drops off before next week.`]),
           }[weak.k],
   };
 }

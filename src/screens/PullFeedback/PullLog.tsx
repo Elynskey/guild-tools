@@ -11,14 +11,14 @@ interface PullLogProps {
 
 function formatMetric(raider: PullRaider): string {
   if (raider.value == null) return '—';
-  if (raider.metric === 'rankPercent') return `${Math.round(raider.value)}%ile`;
+  if (raider.metric === 'survivalPercent') return `${Math.round(raider.value)}%ile`;
   return Math.round(raider.value).toLocaleString();
 }
 
 function metricLabel(raider: PullRaider): string {
   if (raider.metric === 'dps') return 'DPS';
   if (raider.metric === 'hps') return 'HPS';
-  if (raider.metric === 'rankPercent') return 'Rank';
+  if (raider.metric === 'survivalPercent') return 'Surv';
   return '';
 }
 

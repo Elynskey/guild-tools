@@ -104,13 +104,18 @@ describe('filterByRaider', () => {
 });
 
 describe('needWinCount', () => {
-  it('counts wins even after the item was traded away', () => {
+  it('no longer counts a win against the original winner once traded away', () => {
     const entries = annotateWithTrades(
       [record({ time: 1000, itemId: 1, winner: 'Grimsyl' })],
       [{ itemId: 1, itemLink: '[Item]', from: 'Grimsyl', to: 'Zalanto', time: 1100 }],
     );
-    expect(needWinCount(entries, 'Grimsyl')).toBe(1);
+    expect(needWinCount(entries, 'Grimsyl')).toBe(0);
     expect(needWinCount(entries, 'Zalanto')).toBe(0);
+  });
+
+  it('still counts a win the original winner kept (no trade)', () => {
+    const entries = annotateWithTrades([record({ time: 1000, itemId: 1, winner: 'Grimsyl' })], []);
+    expect(needWinCount(entries, 'Grimsyl')).toBe(1);
   });
 
   it('does not count a standalone trade as a win for the recipient', () => {

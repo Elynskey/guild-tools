@@ -21,10 +21,10 @@ const NIGHT_2: Pull[] = [
     bossPercentage: 62.4,
     durationMs: 118_000,
     raiders: [
-      { name: 'Vadailla', role: 'tank', metric: 'rankPercent', value: null },
+      { name: 'Vadailla', role: 'tank', metric: 'survivalPercent', value: null },
       { name: 'Perseffonee', role: 'healer', metric: 'hps', value: 8420 },
       { name: 'Harima', role: 'dps', metric: 'dps', value: 21800 },
-      { name: 'Thornwick', role: 'tank', metric: 'rankPercent', value: null },
+      { name: 'Thornwick', role: 'tank', metric: 'survivalPercent', value: null },
     ],
     deaths: [{ name: 'Thornwick', ability: 'Plague Froth' }],
     mechanicMisses: [
@@ -40,10 +40,10 @@ const NIGHT_2: Pull[] = [
     bossPercentage: 41.1,
     durationMs: 156_000,
     raiders: [
-      { name: 'Vadailla', role: 'tank', metric: 'rankPercent', value: null },
+      { name: 'Vadailla', role: 'tank', metric: 'survivalPercent', value: null },
       { name: 'Perseffonee', role: 'healer', metric: 'hps', value: 8890 },
       { name: 'Harima', role: 'dps', metric: 'dps', value: 22400 },
-      { name: 'Thornwick', role: 'tank', metric: 'rankPercent', value: null },
+      { name: 'Thornwick', role: 'tank', metric: 'survivalPercent', value: null },
     ],
     deaths: [],
     mechanicMisses: [{ name: 'Grimsyl', ability: 'Plague Froth', what: 'A poison wave that hits anyone standing near another player.', fix: 'Spread out and stand still so others can dodge it.' }],
@@ -56,10 +56,10 @@ const NIGHT_2: Pull[] = [
     bossPercentage: 0,
     durationMs: 312_000,
     raiders: [
-      { name: 'Vadailla', role: 'tank', metric: 'rankPercent', value: 62 },
+      { name: 'Vadailla', role: 'tank', metric: 'survivalPercent', value: 62 },
       { name: 'Perseffonee', role: 'healer', metric: 'hps', value: 9120 },
       { name: 'Harima', role: 'dps', metric: 'dps', value: 23100 },
-      { name: 'Thornwick', role: 'tank', metric: 'rankPercent', value: 48 },
+      { name: 'Thornwick', role: 'tank', metric: 'survivalPercent', value: 48 },
     ],
     deaths: [],
     mechanicMisses: [],
@@ -72,7 +72,7 @@ const NIGHT_2: Pull[] = [
     bossPercentage: 88.0,
     durationMs: 74_000,
     raiders: [
-      { name: 'Vadailla', role: 'tank', metric: 'rankPercent', value: null },
+      { name: 'Vadailla', role: 'tank', metric: 'survivalPercent', value: null },
       { name: 'Perseffonee', role: 'healer', metric: 'hps', value: 7900 },
       { name: 'Harima', role: 'dps', metric: 'dps', value: 20100 },
     ],
@@ -90,7 +90,7 @@ const NIGHT_1: Pull[] = [
     bossPercentage: 74.2,
     durationMs: 95_000,
     raiders: [
-      { name: 'Vadailla', role: 'tank', metric: 'rankPercent', value: null },
+      { name: 'Vadailla', role: 'tank', metric: 'survivalPercent', value: null },
       { name: 'Perseffonee', role: 'healer', metric: 'hps', value: 8010 },
       { name: 'Harima', role: 'dps', metric: 'dps', value: 20600 },
     ],
@@ -105,7 +105,7 @@ const NIGHT_1: Pull[] = [
     bossPercentage: 0,
     durationMs: 298_000,
     raiders: [
-      { name: 'Vadailla', role: 'tank', metric: 'rankPercent', value: 55 },
+      { name: 'Vadailla', role: 'tank', metric: 'survivalPercent', value: 55 },
       { name: 'Perseffonee', role: 'healer', metric: 'hps', value: 8760 },
       { name: 'Harima', role: 'dps', metric: 'dps', value: 22000 },
     ],

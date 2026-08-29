@@ -43,19 +43,26 @@ const ENCHANTABLE_SLOTS = new Set(['BACK', 'CHEST', 'WRIST', 'LEGS', 'FEET', 'FI
  * lookup, no API"), so per-spec BiS correctness checking needs a manually
  * maintained reference table as a follow-up, not something fetchable live. This
  * presence check still catches the common case (empty socket, no enchant).
+ *
+ * Also returns which enchantable slots are missing an enchant (by their display
+ * name -- `item.slot.name`, the same "localized name alongside the enum" shape
+ * Blizzard's Journal/Item APIs use elsewhere in this pipeline) so the app can show
+ * an officer exactly what's missing, not just the rounded score.
  */
-function computeGearCompletion(equipmentData) {
+function computeGearDetail(equipmentData) {
   const items = equipmentData.equipped_items ?? [];
   let enchantableCount = 0;
   let enchantedCount = 0;
   let socketCount = 0;
   let filledSocketCount = 0;
+  const missingEnchants = [];
 
   for (const item of items) {
     const slotType = item.slot?.type;
     if (ENCHANTABLE_SLOTS.has(slotType)) {
       enchantableCount++;
       if (item.enchantments?.length) enchantedCount++;
+      else missingEnchants.push(item.slot?.name ?? slotType);
     }
     for (const socket of item.sockets ?? []) {
       socketCount++;
@@ -65,26 +72,31 @@ function computeGearCompletion(equipmentData) {
 
   const enchantScore = enchantableCount ? (enchantedCount / enchantableCount) * 100 : 100;
   const socketScore = socketCount ? (filledSocketCount / socketCount) * 100 : 100;
-  return Math.round((enchantScore + socketScore) / 2);
+  return {
+    score: Math.round((enchantScore + socketScore) / 2),
+    missingEnchants,
+    emptySockets: socketCount - filledSocketCount,
+    totalSockets: socketCount,
+  };
 }
 
 /**
  * @param {{ name: string, realm: string, region: string }} guild — guild.realm is only the fallback
  * @param {Array<{ name: string, realm?: string }>} characters
- * @returns {Promise<Record<string, number>>} charKey(name, realm) -> gearCompletion (0-100) -- keyed by realm-aware
- *   composite key, not bare name, for the same reason raiderio.cjs's charKey exists: two different real people can
- *   share a character name on different realms, and a bare-name key would silently overwrite one's gear score with
- *   the other's.
+ * @returns {Promise<Record<string, {score: number, missingEnchants: string[], emptySockets: number, totalSockets: number}>>}
+ *   charKey(name, realm) -> gear detail -- keyed by realm-aware composite key, not bare name, for the same reason
+ *   raiderio.cjs's charKey exists: two different real people can share a character name on different realms, and a
+ *   bare-name key would silently overwrite one's gear data with the other's.
  */
 async function fetchGearCompletion(guild, characters) {
   const entries = await Promise.all(
     characters.map(async (c) => {
       const realm = c.realm || guild.realm;
       const equipment = await fetchCharacterEquipment(guild.region, realm, c.name);
-      return [charKey(c.name, realm), computeGearCompletion(equipment)];
+      return [charKey(c.name, realm), computeGearDetail(equipment)];
     }),
   );
   return Object.fromEntries(entries);
 }
 
-module.exports = { fetchGearCompletion, computeGearCompletion };
+module.exports = { fetchGearCompletion, computeGearDetail };

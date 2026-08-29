@@ -11,16 +11,28 @@
 //     fights(killType: Encounters) entries include `name` (the boss name), which
 //     table(dataType: Deaths) entries don't carry directly — join on `fight` id.
 //   - rankings(fightIDs) -> data[]: one entry per fight, each with
-//     roles.{tanks,healers,dps}.characters[]: { name, rankPercent, ... }, confirmed real.
+//     roles.{tanks,healers,dps}.characters[]: { name, class, spec, rankPercent, ... },
+//     confirmed real. Only class/spec/role (extractActualIdentity) are still used from
+//     this — rankPercent itself is WCL's GLOBAL parse percentile (ranked against every
+//     log on the site for that spec/boss/difficulty, not just this raid), which doesn't
+//     match guild policy; see below.
 //   - table(dataType: Healing) is assumed to mirror DamageDone's shape (same table
 //     system, same total/activeTime fields) — this specific dataType was not
 //     independently tested live; flagged here rather than silently assumed elsewhere.
+//   - table(dataType: DamageTaken) is likewise assumed to mirror DamageDone's shape
+//     (total/activeTime alongside the already-verified abilities[] used for mechanic-
+//     miss detection) — not independently tested live either.
 //
-// Guild policy ("we don't judge parses"): rankPercent is used ONLY for healers/tanks,
-// where it's a within-role comparison (healing load and damage taken both vary by
-// pull, so ranking against your own role on the same fight is the fair reference
-// point). DPS perf is %-of-the-guild's-own-minimum-DPS (MIN_DPS_REQUIREMENT env var),
-// never a global WCL parse ranking.
+// Guild policy ("we don't judge parses"): healer/tank perf is a LOCAL within-role
+// percentile — ranked only against the other healers/tanks who played that role in
+// the same report (computeLocalPercentiles, from the hps/damageTaken throughput this
+// file already fetches), never WCL's own rankPercent. rankPercent ranks against the
+// entire WCL population for that spec/boss/difficulty, which structurally skews low
+// for a non-cutting-edge guild regardless of how the guild's own healers/tanks are
+// actually doing relative to each other -- this was the root cause of healer/tank
+// percentiles reading low across the board. DPS perf is %-of-the-guild's-own-minimum-
+// DPS (MIN_DPS_REQUIREMENT env var), same "never a global WCL parse" policy, just via
+// a flat threshold instead of a percentile.
 
 const { getClientCredentialsToken } = require('./oauth.cjs');
 const { BOSS_MECHANICS } = require('./mechanicReference.cjs');
@@ -175,13 +187,21 @@ function extractDeathCausesByName(entries, fightNameById) {
   return causesByName;
 }
 
-/** rankPercent per player, per role, from a single fight's rankings. */
-function extractRankPercents(ranking) {
+/**
+ * Percentile of each player in `throughputByName` among only their peers of the same
+ * role (per `roleOf(name)`) -- worst of the group is 0, best is 100, evenly spaced.
+ * This is the local, within-raid replacement for WCL's own rankPercent (see the file
+ * header): higherIsBetter is true for HPS (healers), false for damage-taken-per-second
+ * (tanks, where taking LESS damage is the better outcome). A solo healer/tank on the
+ * pull has no peers to compare against, so they get 100 by definition rather than an
+ * undefined percentile.
+ */
+function computeLocalPercentiles(throughputByName, roleOf, role, higherIsBetter) {
+  const pool = [...throughputByName.entries()].filter(([name, v]) => v != null && roleOf(name) === role);
+  pool.sort((a, b) => (higherIsBetter ? a[1] - b[1] : b[1] - a[1])); // ascending, worst first
+  const n = pool.length;
   const result = new Map();
-  if (!ranking?.roles) return result;
-  for (const roleData of Object.values(ranking.roles)) {
-    for (const c of roleData.characters ?? []) result.set(c.name, c.rankPercent);
-  }
+  pool.forEach(([name], i) => result.set(name, n === 1 ? 100 : Math.round((i / (n - 1)) * 100)));
   return result;
 }
 
@@ -218,11 +238,14 @@ function extractActualIdentity(ranking) {
 /**
  * One report's aggregate: DPS (damage/s per player), HPS (healing/s per player),
  * deaths (count per player), pullCount (kill pulls in this report -- the
- * denominator for a per-pull death rate, not a raw tier-wide total), one
- * representative rankPercent sample (from the report's last kill, since a full
- * per-pull average isn't worth the extra API calls), and the set of encounterIDs
- * killed at Heroic difficulty in this report (for real tier-progression tracking,
- * replacing the old hardcoded "3/8" text).
+ * denominator for a per-pull death rate, not a raw tier-wide total), healerPercent/
+ * tankPercent (each player's local within-role percentile across the whole report's
+ * kills -- see computeLocalPercentiles), and the set of encounterIDs killed at
+ * Heroic difficulty in this report (for real tier-progression tracking, replacing
+ * the old hardcoded "3/8" text). Role-pool membership for the percentiles comes from
+ * `ranking` (the report's last kill only, same scope WCL's own rankPercent used) --
+ * a raider entirely absent from that one ranking sample gets no percentile, same
+ * pre-existing limitation this replaces rather than a new one.
  */
 async function fetchReportAggregate(code) {
   const fights = await fetchFights(code);
@@ -231,25 +254,34 @@ async function fetchReportAggregate(code) {
   const fightNameById = new Map(fights.map((f) => [f.id, f.name]));
 
   if (killFightIds.length === 0) {
-    return { dps: new Map(), hps: new Map(), deaths: new Map(), deathCauses: new Map(), pullCount: 0, rankPercent: new Map(), actualIdentity: new Map(), heroicKillEncounterIds, actorServers: new Map() };
+    return { dps: new Map(), hps: new Map(), deaths: new Map(), deathCauses: new Map(), pullCount: 0, healerPercent: new Map(), tankPercent: new Map(), actualIdentity: new Map(), heroicKillEncounterIds, actorServers: new Map() };
   }
 
-  const [damageEntries, healingEntries, deathEntries, ranking, actorServers] = await Promise.all([
+  const [damageEntries, healingEntries, damageTakenEntries, deathEntries, ranking, actorServers] = await Promise.all([
     fetchTable(code, killFightIds, 'DamageDone'),
     fetchTable(code, killFightIds, 'Healing'),
+    fetchTable(code, killFightIds, 'DamageTaken'),
     fetchTable(code, killFightIds, 'Deaths'),
     fetchRankingsForFight(code, killFightIds[killFightIds.length - 1]),
     fetchReportActorServers(code),
   ]);
 
+  const actualIdentity = extractActualIdentity(ranking);
+  const roleOf = (name) => actualIdentity.get(name)?.role;
+  const hps = sumThroughputByName(healingEntries);
+  const damageTaken = sumThroughputByName(damageTakenEntries);
+
   return {
     dps: sumThroughputByName(damageEntries),
-    hps: sumThroughputByName(healingEntries),
+    hps,
     deaths: countDeathsByName(deathEntries),
     deathCauses: extractDeathCausesByName(deathEntries, fightNameById),
     pullCount: killFightIds.length,
-    rankPercent: extractRankPercents(ranking),
-    actualIdentity: extractActualIdentity(ranking),
+    // Local, within-raid percentiles -- higher HPS is better for healers; LESS
+    // damage taken per second is better for tanks (survivability), hence false.
+    healerPercent: computeLocalPercentiles(hps, roleOf, 'healer', true),
+    tankPercent: computeLocalPercentiles(damageTaken, roleOf, 'tank', false),
+    actualIdentity,
     heroicKillEncounterIds,
     actorServers,
   };
@@ -273,8 +305,8 @@ function perfSnapshotFor(name, agg, roleByName, minDps) {
     const dps = agg.dps.get(name);
     return dps == null ? null : Math.round((dps / minDps) * 100);
   }
-  const rp = agg.rankPercent.get(name);
-  return rp == null ? null : Math.round(rp);
+  const pct = role === 'healer' ? agg.healerPercent.get(name) : agg.tankPercent.get(name);
+  return pct == null ? null : pct;
 }
 
 /** The "night" shape (parse/deaths/pulls/deathCauses) for every raider present in one report. */
@@ -424,17 +456,18 @@ async function fetchRaidNights(guild, tierZoneName) {
  * known avoidable ability on this boss, without dying to it -- see
  * mechanicReference.cjs for what's covered and what isn't).
  *
- * rankPercent is WCL-kill-only (confirmed live: rankings(fightIDs) returns an empty
- * roster for a wipe fight -- there's no defined percentile for an incomplete attempt),
- * so tanks (scored on rankPercent, same convention as the tier-wide pipeline) show no
- * number on wipes. DPS/healers show raw throughput every pull, kill or wipe.
+ * Tank survivability is a LOCAL percentile against just the tanks present on that one
+ * pull (least damage taken per second = 100), computed from the same DamageTaken table
+ * already fetched for mechanic-miss detection below -- unlike WCL's own rankPercent
+ * (which this replaced), it's available on wipes too, not kill pulls only, since
+ * damage-taken data exists regardless of whether the pull was a kill.
  *
  * Role-for-the-night is resolved once from whichever kill fights exist in this report
  * (same "trust WCL's rankings role bucket over wowaudit's static field" fix as the
  * tier-wide pipeline) and applied to every pull in the report, since nobody swaps main
  * spec mid-raid-night -- wipes have no rankings of their own to resolve it from.
  *
- * @returns {Promise<{ pulls: Array<{ fightId: number, pullNumber: number, boss: string, kill: boolean, bossPercentage: number|null, durationMs: number, raiders: Array<{name: string, role: string|null, metric: 'dps'|'hps'|'rankPercent'|null, value: number|null}>, deaths: Array<{name: string, ability: string}>, mechanicMisses: Array<{name: string, ability: string, what: string, fix: string}> }> }>}
+ * @returns {Promise<{ pulls: Array<{ fightId: number, pullNumber: number, boss: string, kill: boolean, bossPercentage: number|null, durationMs: number, raiders: Array<{name: string, role: string|null, metric: 'dps'|'hps'|'survivalPercent'|null, value: number|null}>, deaths: Array<{name: string, ability: string}>, mechanicMisses: Array<{name: string, ability: string, what: string, fix: string}> }> }>}
  */
 async function fetchPullBreakdown(code, roleByName) {
   const fights = await fetchFights(code);
@@ -448,8 +481,6 @@ async function fetchPullBreakdown(code, roleByName) {
   }
   const resolveRole = (name) => nightRoles.get(name) ?? roleByName[name] ?? null;
 
-  const killRankingByFightId = new Map(killFights.map((f, i) => [f.id, rankingsByKillFight[i]]));
-
   const pulls = await Promise.all(
     fights.map(async (fight, idx) => {
       const fightIds = [fight.id];
@@ -462,7 +493,8 @@ async function fetchPullBreakdown(code, roleByName) {
 
       const dps = sumThroughputByName(damageEntries);
       const hps = sumThroughputByName(healingEntries);
-      const rankPercent = fight.kill ? extractRankPercents(killRankingByFightId.get(fight.id)) : new Map();
+      const damageTaken = sumThroughputByName(damageTakenEntries);
+      const survivalPercent = computeLocalPercentiles(damageTaken, resolveRole, 'tank', false);
       const deathNames = new Set(deathEntries.map((e) => e.name));
       const deaths = deathEntries.map((e) => ({ name: e.name, ability: e.damage?.abilities?.[0]?.name ?? 'Unknown' }));
 
@@ -485,7 +517,7 @@ async function fetchPullBreakdown(code, roleByName) {
         const role = resolveRole(name);
         if (role === 'dps') return { name, role, metric: 'dps', value: dps.get(name) ?? null };
         if (role === 'healer') return { name, role, metric: 'hps', value: hps.get(name) ?? null };
-        if (role === 'tank') return { name, role, metric: 'rankPercent', value: rankPercent.get(name) ?? null };
+        if (role === 'tank') return { name, role, metric: 'survivalPercent', value: survivalPercent.get(name) ?? null };
         return { name, role, metric: null, value: null };
       });
 

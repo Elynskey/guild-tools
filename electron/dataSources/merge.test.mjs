@@ -22,13 +22,14 @@ describe('mergeSources', () => {
   it('merges a single raider normally', () => {
     const wowauditRoster = [{ name: 'Thornwick', realm: 'The Scryers', role: 'tank', rank: 'Main' }];
     const rio = [{ key: charKey('Thornwick', 'The Scryers'), name: 'Thornwick', realm: 'The Scryers', class: 'Paladin', spec: 'Protection', rioCurrent: 1500, rioHighestThisSeason: 1500, ilvlEquipped: 700, ilvlHighestThisSeason: 700 }];
-    const gearCompletion = { [charKey('Thornwick', 'The Scryers')]: 90 };
+    const gearCompletion = { [charKey('Thornwick', 'The Scryers')]: { score: 90, missingEnchants: ['Legs'], emptySockets: 1, totalSockets: 2 } };
     const wcl = { Thornwick: baseWcl({ role: 'tank' }) };
 
     const result = mergeSources({ wowauditRoster, rio, gearCompletion, wcl });
     expect(result).toHaveLength(1);
     expect(result[0].rioCurrent).toBe(1500);
     expect(result[0].gearCompletion).toBe(90);
+    expect(result[0].gearDetail).toEqual({ score: 90, missingEnchants: ['Legs'], emptySockets: 1, totalSockets: 2 });
   });
 
   // The "Dunbarke" bug class: two different real people, same character name,

@@ -17,6 +17,7 @@ const baseDps: Raider = {
   ilvlHighestThisSeason: 700,
   perf: 100,
   gearCompletion: 90,
+  gearDetail: null,
   parseTrend: 0,
   deaths: 0,
   pulls: 20,

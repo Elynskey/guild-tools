@@ -103,7 +103,7 @@ export function filterByRaider(entries: LootEntry[], name: string): LootEntry[] 
   return entries.filter((e) => e.winner === name || e.tradedTo === name);
 }
 
-/** How many Need wins this raider has this raid night -- trading an item away afterward doesn't un-count it. */
+/** How many Need wins this raider still has this raid night -- an item traded away afterward (accidental roll, wrong person won it) no longer counts against the original winner's cap. It doesn't count toward the recipient either -- they didn't Need-roll it, so it's excluded from cap-counting entirely, not reassigned. */
 export function needWinCount(entries: LootEntry[], name: string): number {
-  return entries.filter((e) => e.winner === name && !e.standaloneTrade).length;
+  return entries.filter((e) => e.winner === name && !e.standaloneTrade && !e.tradedTo).length;
 }

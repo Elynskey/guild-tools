@@ -27,6 +27,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   removeLootRecord: (id) => ipcRenderer.invoke('lootLog:remove', id),
   removeLootTrade: (id) => ipcRenderer.invoke('lootLog:removeTrade', id),
   getItemIconUrls: (itemIds) => ipcRenderer.invoke('itemIcons:get', itemIds),
+  getBossLootTable: () => ipcRenderer.invoke('bossLootTable:get'),
   getWowPathConfig: () => ipcRenderer.invoke('lootLog:getWowPath'),
   setWowPath: (wowPath) => ipcRenderer.invoke('lootLog:setWowPath', wowPath),
   pickWowFolder: () => ipcRenderer.invoke('lootLog:pickFolder'),

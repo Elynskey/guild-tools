@@ -130,6 +130,9 @@ export function LootHistory() {
         <LootRecordDialog
           entry={editing ?? undefined}
           saving={lh.saving}
+          bossLootTable={lh.bossLootTable}
+          classByName={lh.classByName}
+          itemIcons={lh.itemIcons}
           onClose={() => {
             setEditing(null);
             setAdding(false);

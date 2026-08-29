@@ -16,6 +16,20 @@ export interface LootRecordPatch {
   slot?: string;
 }
 
+export interface BossLootItem {
+  name: string;
+  slot: string;
+  /** Cloth/Leather/Mail/Plate, or null for a non-Armor item (weapons, trinkets, rings, necks, cloaks, ...) eligible for every class. */
+  armorWeight: string | null;
+}
+
+export interface BossLootTable {
+  bosses: { id: number; name: string }[];
+  /** Boss name -> item IDs that drop from it. */
+  lootByBoss: Record<string, number[]>;
+  items: Record<number, BossLootItem>;
+}
+
 export interface RealmMismatch {
   name: string;
   wowauditRealm: string;
@@ -58,7 +72,7 @@ export interface RaidNight {
 export interface PullRaider {
   name: string;
   role: 'tank' | 'healer' | 'dps' | null;
-  metric: 'dps' | 'hps' | 'rankPercent' | null;
+  metric: 'dps' | 'hps' | 'survivalPercent' | null;
   value: number | null;
 }
 
@@ -104,7 +118,6 @@ export interface AuthState {
 }
 
 export interface GuildToolsSettings {
-  craftOrdersChannelId: string;
   raidSignupsChannelId: string;
   lootLogChannelId: string;
 }
@@ -160,6 +173,7 @@ export interface ElectronAPI {
   removeLootRecord: (id: string) => Promise<RawLootRecord[]>;
   removeLootTrade: (id: string) => Promise<RawTradeRecord[]>;
   getItemIconUrls: (itemIds: number[]) => Promise<Record<number, string | null>>;
+  getBossLootTable: () => Promise<BossLootTable | null>;
   getWowPathConfig: () => Promise<{ configured: string | null; resolved: string | null; valid: boolean }>;
   setWowPath: (wowPath: string) => Promise<{ configured: string | null; resolved: string | null; valid: boolean }>;
   pickWowFolder: () => Promise<string | null>;

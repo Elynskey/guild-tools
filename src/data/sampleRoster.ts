@@ -1,4 +1,4 @@
-import type { DeathCause, Raider } from '../scoring/types';
+import type { DeathCause, GearDetail, Raider } from '../scoring/types';
 
 /**
  * Sample roster — fabricated data for the prototype. Real officer names from the
@@ -10,6 +10,23 @@ import type { DeathCause, Raider } from '../scoring/types';
 // rate (deaths column below stays the small per-window counts it already was).
 const TIER_PULLS = 24;
 const NIGHT_PULLS = 8;
+
+// Real characters don't carry per-slot equipment data in sample mode (there's no
+// Blizzard fetch behind fabricated raiders) -- this synthesizes a believable,
+// stable-per-name breakdown from gearCompletion so the "missing gems/enchants"
+// dropdown has something to show in browser-preview mode. Real data replaces this
+// entirely once bnet.cjs's computeGearDetail runs against an actual character.
+const ENCHANTABLE_SLOT_NAMES = ['Back', 'Chest', 'Wrist', 'Legs', 'Feet', 'Ring 1', 'Ring 2', 'Main Hand', 'Off Hand'];
+
+function synthesizeGearDetail(name: string, gearCompletion: number): GearDetail {
+  if (gearCompletion >= 100) return { missingEnchants: [], emptySockets: 0, totalSockets: 2 };
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) % 997;
+  const gap = 100 - gearCompletion;
+  const missingCount = Math.max(1, Math.round((gap / 100) * ENCHANTABLE_SLOT_NAMES.length));
+  const missingEnchants = [...new Set(Array.from({ length: missingCount }, (_, i) => ENCHANTABLE_SLOT_NAMES[(hash + i * 7) % ENCHANTABLE_SLOT_NAMES.length]))];
+  return { missingEnchants, emptySockets: gap > 25 ? 1 : 0, totalSockets: 2 };
+}
 
 const raider = (
   name: string,
@@ -37,6 +54,7 @@ const raider = (
   ilvlHighestThisSeason,
   perf,
   gearCompletion,
+  gearDetail: synthesizeGearDetail(name, gearCompletion),
   parseTrend,
   deaths,
   pulls: TIER_PULLS,

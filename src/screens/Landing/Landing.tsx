@@ -44,7 +44,7 @@ const CARDS: NavCardDef[] = [
     to: '/settings',
     icon: 'settings',
     title: 'Settings',
-    description: 'Discord channel IDs for craft-order, loot, and raid-signup posts.',
+    description: 'Discord channel IDs for loot and raid-signup posts.',
   },
 ];
 

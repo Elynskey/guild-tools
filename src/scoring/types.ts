@@ -2,6 +2,14 @@ export type Role = 'tank' | 'healer' | 'dps';
 export type Window = 'rolled' | 'night';
 export type Band = 'green' | 'yellow' | 'red' | 'ineligible';
 
+/** Per-slot breakdown behind gearCompletion -- what's actually empty, not just the rounded %. Null when the source data doesn't carry it (sample mode). */
+export interface GearDetail {
+  /** Display names of enchantable slots (Back, Chest, Wrist, Legs, Feet, rings, weapons) with no enchant applied. */
+  missingEnchants: string[];
+  emptySockets: number;
+  totalSockets: number;
+}
+
 /** One death event's primary cause — the top-damage ability in Warcraft Logs' per-death breakdown, joined to the boss it happened on. */
 export interface DeathCause {
   boss: string;
@@ -21,6 +29,8 @@ export interface Raider {
   perf: number;
   /** % of gem/enchant slots correct vs the monthly reference table. */
   gearCompletion: number;
+  /** What's behind gearCompletion -- which slots lack an enchant, how many sockets are empty. Null when unavailable. */
+  gearDetail: GearDetail | null;
   /** Slope of parse percentile across the tier, in points. Can be negative. */
   parseTrend: number;
   /** Tier-to-date raw death count (kill pulls only — same scope as perf/gear). */

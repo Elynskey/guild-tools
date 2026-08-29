@@ -13,9 +13,9 @@ function storePath() {
   return path.join(resolveDataDir(), 'settings.json');
 }
 
-const DEFAULTS = { craftOrdersChannelId: '', raidSignupsChannelId: '', lootLogChannelId: '' };
+const DEFAULTS = { raidSignupsChannelId: '', lootLogChannelId: '' };
 
-/** @returns {{craftOrdersChannelId: string, raidSignupsChannelId: string, lootLogChannelId: string}} */
+/** @returns {{raidSignupsChannelId: string, lootLogChannelId: string}} */
 function load() {
   try {
     return { ...DEFAULTS, ...JSON.parse(fs.readFileSync(storePath(), 'utf8')) };

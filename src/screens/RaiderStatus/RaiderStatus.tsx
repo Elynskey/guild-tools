@@ -76,7 +76,7 @@ export function RaiderStatus() {
             </p>
             {rs.groups.map((group) => (
               <RoleSection key={group.key} group={group}>
-                <RosterTable rows={group.rows} />
+                <RosterTable rows={group.rows} toggleGearRow={rs.toggleGearRow} />
               </RoleSection>
             ))}
 

@@ -5,10 +5,11 @@ export const ROSTER_GRID_TEMPLATE = 'minmax(180px,1fr) minmax(220px,340px)';
 
 interface RosterTableProps {
   rows: DisplayRaider[];
+  toggleGearRow: (name: string) => void;
 }
 
 /** Who's on the team -- identity, class/spec, gear completion. No score/band; see LedgerTable for that. */
-export function RosterTable({ rows }: RosterTableProps) {
+export function RosterTable({ rows, toggleGearRow }: RosterTableProps) {
   return (
     <div className="crd-card" style={{ padding: 0, overflow: 'hidden' }}>
       <div
@@ -26,7 +27,7 @@ export function RosterTable({ rows }: RosterTableProps) {
         <div className="crd-eyebrow">Gear</div>
       </div>
       {rows.map((r) => (
-        <RosterRow key={r.name} raider={r} />
+        <RosterRow key={r.name} raider={r} onToggleGear={() => toggleGearRow(r.name)} />
       ))}
     </div>
   );

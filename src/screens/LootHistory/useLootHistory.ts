@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { annotateWithTrades, groupLootByNight, needWinCount } from '../../raid/lootLogic';
 import type { LootNight } from '../../raid/lootLogic';
 import { sampleLootRecords, sampleLootTrades } from '../../data/sampleLoot';
-import type { LootRecordPatch, ManualLootRecordInput } from '../../electron';
+import { getRoster } from '../../data/rosterSource';
+import type { BossLootTable, LootRecordPatch, ManualLootRecordInput } from '../../electron';
 
 type LogStatus = 'ok' | 'not_configured' | 'addon_not_installed';
 
@@ -18,6 +19,8 @@ export function useLootHistory() {
   const [refreshing, setRefreshing] = useState(false);
   const [itemIcons, setItemIcons] = useState<Record<number, string | null>>({});
   const [saving, setSaving] = useState(false);
+  const [bossLootTable, setBossLootTable] = useState<BossLootTable | null>(null);
+  const [classByName, setClassByName] = useState<Record<string, string>>({});
 
   const load = useCallback((): Promise<void> => {
     if (!electron) {
@@ -62,6 +65,30 @@ export function useLootHistory() {
     electron.getItemIconUrls(missing).then((result) => setItemIcons((prev) => ({ ...prev, ...result })));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [electron, nights]);
+
+  // Loot table + roster class lookup for the smarter "Add loot entry" form (character
+  // -> class -> boss -> class-eligible items -> auto slot). Fetched once, not per dialog
+  // open -- the loot table barely changes mid-tier and the roster is already cached by
+  // getRoster()'s own pipeline. Both are optional: a null bossLootTable (no Electron, no
+  // proxy, or a failed live fetch with nothing cached) just means the dialog falls back
+  // to plain text fields, same graceful-degradation pattern as everywhere else here.
+  useEffect(() => {
+    if (electron) electron.getBossLootTable().then(setBossLootTable);
+    getRoster().then((result) => {
+      setClassByName(Object.fromEntries(result.raiders.map((r) => [r.name, r.class])));
+    });
+  }, [electron]);
+
+  // Icons for every item in the loot table, not just ones already won -- the item
+  // dropdown needs to show an icon for an item that hasn't dropped yet.
+  useEffect(() => {
+    if (!electron || !bossLootTable) return;
+    const ids = Object.keys(bossLootTable.items).map(Number);
+    const missing = ids.filter((id) => !(id in itemIcons));
+    if (missing.length === 0) return;
+    electron.getItemIconUrls(missing).then((result) => setItemIcons((prev) => ({ ...prev, ...result })));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [electron, bossLootTable]);
 
   const selectedNight = nights.find((n) => n.key === selectedNightKey) ?? nights[0] ?? null;
 
@@ -168,6 +195,8 @@ export function useLootHistory() {
     refreshing,
     empty: nights.length === 0,
     itemIcons,
+    bossLootTable,
+    classByName,
     addRecord,
     updateRecord,
     removeRecord,
