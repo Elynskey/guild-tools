@@ -30,6 +30,15 @@
 -- parenthesized roll type + value, then "Won:") and checking the roll-type word in
 -- Lua rather than baking "Need" into the pattern itself -- still a real risk if this
 -- exact wording shifts again, but at least now grounded in something actually seen.
+--
+-- Second, independent capture path: Blizzard's own structured Loot History API
+-- (C_LootHistory) -- the same data source their own Loot History UI panel reads from,
+-- confirmed against live Blizzard FrameXML source. Enum.EncounterLootDropRollState.
+-- NeedMainSpec/NeedOffSpec identify a genuine Need win directly as typed data, no
+-- chat wording to get wrong -- meaningfully more robust than text-matching alone.
+-- Kept ALONGSIDE the chat parser, not instead of it, as redundancy against either
+-- one having a gap; recordNeedWin's own local dedup keeps the two paths from
+-- double-counting the same real win on this client.
 
 local ADDON_NAME = ...
 
@@ -99,18 +108,64 @@ local function slotLabel(itemLink)
   return _G[itemEquipLoc] or "Other"
 end
 
-local function recordNeedWin(winnerName, itemLink)
+local function recordNeedWin(winnerName, itemLink, bossOverride)
   if not GuildToolsLootDB.enabled or not winnerName or not itemLink then return end
   local itemId = itemIdFromLink(itemLink)
   if isExcludedFromNeedTracking(itemId) then return end
+
+  -- Local dedup: the chat-text parser and C_LootHistory can both fire for the same
+  -- real win on this same client, moments apart -- without this, that inserts two
+  -- near-identical records a few seconds apart, which the proxy's exact-time dedup
+  -- (itemId+winner+time) wouldn't catch, since the two captures rarely land in the
+  -- exact same second.
+  local now = time()
+  for _, r in ipairs(GuildToolsLootDB.records) do
+    if r.itemId == itemId and r.winner == winnerName and math.abs(r.time - now) <= 10 then
+      return
+    end
+  end
+
   table.insert(GuildToolsLootDB.records, {
     itemId = itemId,
     itemLink = itemLink,
     winner = winnerName,
-    boss = currentBoss,
+    boss = bossOverride or currentBoss,
     slot = slotLabel(itemLink),
-    time = time(),
+    time = now,
   })
+end
+
+-- Handles LOOT_HISTORY_UPDATE_DROP: looks up the drop's full resolved state and, if
+-- the winner's roll was a genuine Need (main-spec or off-spec), records it. Silently
+-- no-ops for anything not yet resolved (dropInfo.winner nil), an all-passed drop, or
+-- a non-Need winning roll (Transmog/Greed) -- those aren't errors, just not this
+-- addon's concern.
+local function handleLootHistoryDrop(encounterID, lootListID)
+  local dropInfo = C_LootHistory.GetSortedInfoForDrop(encounterID, lootListID)
+  if not dropInfo or not dropInfo.winner or not dropInfo.rollInfos then return end
+
+  local winningRoll = nil
+  for _, roll in ipairs(dropInfo.rollInfos) do
+    if roll.isWinner then
+      winningRoll = roll
+      break
+    end
+  end
+  if not winningRoll then return end
+  if winningRoll.state ~= Enum.EncounterLootDropRollState.NeedMainSpec
+    and winningRoll.state ~= Enum.EncounterLootDropRollState.NeedOffSpec then
+    return
+  end
+
+  -- Resolved from the event's own encounterID, not the closure-tracked currentBoss --
+  -- loot can resolve a few seconds after ENCOUNTER_END already cleared it.
+  local bossName = currentBoss
+  if EJ_GetEncounterInfo then
+    local name = EJ_GetEncounterInfo(encounterID)
+    if name then bossName = name end
+  end
+
+  recordNeedWin(dropInfo.winner.playerName, dropInfo.itemHyperlink, bossName)
 end
 
 -- Asks once per raid lockout, not on every loading screen within it (a raid with
@@ -147,6 +202,7 @@ frame:RegisterEvent("ENCOUNTER_START")
 frame:RegisterEvent("ENCOUNTER_END")
 frame:RegisterEvent("START_LOOT_ROLL")
 frame:RegisterEvent("CHAT_MSG_LOOT")
+frame:RegisterEvent("LOOT_HISTORY_UPDATE_DROP")
 frame:RegisterEvent("TRADE_SHOW")
 frame:RegisterEvent("TRADE_ACCEPT_UPDATE")
 frame:RegisterEvent("TRADE_CLOSED")
@@ -194,6 +250,12 @@ frame:SetScript("OnEvent", function(_, event, ...)
     if winner and rollType and rollType:lower():find("need") then
       local link = extractItemLink(message)
       if link then recordNeedWin(winner, link) end
+    end
+
+  elseif event == "LOOT_HISTORY_UPDATE_DROP" then
+    local encounterID, lootListID = ...
+    if C_LootHistory and C_LootHistory.GetSortedInfoForDrop then
+      handleLootHistoryDrop(encounterID, lootListID)
     end
 
   elseif event == "TRADE_SHOW" then
