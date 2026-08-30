@@ -120,6 +120,10 @@ export interface AuthState {
 export interface GuildToolsSettings {
   raidSignupsChannelId: string;
   lootLogChannelId: string;
+  gates: { rio: number; ilvl: number };
+  minDps: number;
+  /** Boss names excluded from the DPS check this tier -- deaths/healer/tank percentile/pulls are unaffected. */
+  excludedBossesFromDps: string[];
 }
 
 export type RaidRole = 'tank' | 'healer' | 'dps';

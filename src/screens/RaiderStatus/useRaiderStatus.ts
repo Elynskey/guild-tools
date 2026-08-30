@@ -4,7 +4,7 @@ import { getNightSnapshot, getRoster } from '../../data/rosterSource';
 import { listRaidNights } from '../../raid/pullsSource';
 import { ROLE_SECTIONS, rosterSummary, scoreRaider, sortBestFirst, sortWorstFirst } from '../../scoring/scoring';
 import { buildDeathMechanicsReport } from '../../scoring/deathMechanics';
-import type { Band, Raider, Role, ScoredRaider, Window } from '../../scoring/types';
+import type { Band, Gates, Raider, Role, ScoredRaider, Window } from '../../scoring/types';
 import type { NightSnapshotEntry, RaidNight, RealmMismatch } from '../../electron';
 import { TILE_COLOR } from './bandVisuals';
 
@@ -88,6 +88,17 @@ export function useRaiderStatus() {
   const [nightSnapshot, setNightSnapshot] = useState<Record<string, NightSnapshotEntry> | null>(null);
   const [loadingNightSnapshot, setLoadingNightSnapshot] = useState(false);
 
+  // rio/ilvl gates used to be a hardcoded client constant (config.gates) -- now
+  // GM-editable from Settings. green/yellow band thresholds aren't part of that (not
+  // asked for), so those still come from config.gates; only rio/ilvl override.
+  // Falls back to config.gates.rio/ilvl outside Electron (sample mode) or before the
+  // real fetch resolves.
+  const [gates, setGates] = useState<Gates>(config.gates);
+  useEffect(() => {
+    if (!window.electronAPI) return;
+    window.electronAPI.getSettings().then((s) => setGates({ ...config.gates, rio: s.gates.rio, ilvl: s.gates.ilvl }));
+  }, []);
+
   useEffect(() => {
     listRaidNights().then(setNights).catch(() => {});
   }, []);
@@ -156,8 +167,8 @@ export function useRaiderStatus() {
   }, [roster, win, nightSnapshot]);
 
   const all = useMemo<ScoredRaider[]>(
-    () => (rosterForWindow ? rosterForWindow.map((r) => scoreRaider(r, win, config.gates)) : []),
-    [rosterForWindow, win],
+    () => (rosterForWindow ? rosterForWindow.map((r) => scoreRaider(r, win, gates)) : []),
+    [rosterForWindow, win, gates],
   );
 
   const summary = useMemo(() => rosterSummary(all, win), [all, win]);
@@ -263,7 +274,7 @@ export function useRaiderStatus() {
     freshness: meta ? freshnessCopy(meta.fetchedAt, meta.source) : '',
     progressionFraction: `${heroicKilled}/${config.tier.totalBosses}`,
     dataSource: meta?.source ?? 'sample',
-    rioGateText: `${config.gates.rio}`,
-    ilvlGateText: `${config.gates.ilvl}`,
+    rioGateText: `${gates.rio}`,
+    ilvlGateText: `${gates.ilvl}`,
   };
 }

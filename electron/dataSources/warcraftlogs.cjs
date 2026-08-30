@@ -31,11 +31,21 @@
 // for a non-cutting-edge guild regardless of how the guild's own healers/tanks are
 // actually doing relative to each other -- this was the root cause of healer/tank
 // percentiles reading low across the board. DPS perf is %-of-the-guild's-own-minimum-
-// DPS (MIN_DPS_REQUIREMENT env var), same "never a global WCL parse" policy, just via
-// a flat threshold instead of a percentile.
+// DPS, same "never a global WCL parse" policy, just via a flat threshold instead of a
+// percentile -- that minimum is settingsStore's minDps (GM-editable from Settings),
+// falling back to the MIN_DPS_REQUIREMENT env var only while minDps is unset (0), so
+// an existing deploy keeps working until someone actually sets a real value.
+//
+// A boss can be excluded from the DPS check specifically (settingsStore's
+// excludedBossesFromDps, keyed by exact fight name -- WCL's own encounterID does NOT
+// match Blizzard's Journal encounter IDs used elsewhere in this app, confirmed live
+// by comparing a real fight's encounterID [3420] against Sszorak's real Journal
+// encounter ID [2871], so name is the only reliable join key here) -- deaths,
+// healer/tank percentile, and pull counts are unaffected either way, only DPS is.
 
 const { getClientCredentialsToken } = require('./oauth.cjs');
 const { BOSS_MECHANICS } = require('./mechanicReference.cjs');
+const settingsStore = require('./settingsStore.cjs');
 
 const TOKEN_URL = 'https://www.warcraftlogs.com/oauth/token';
 const GRAPHQL_URL = 'https://www.warcraftlogs.com/api/v2/client';
@@ -287,10 +297,16 @@ function extractActualIdentity(ranking) {
  * `ranking` (the report's last kill only, same scope WCL's own rankPercent used) --
  * a raider entirely absent from that one ranking sample gets no percentile, same
  * pre-existing limitation this replaces rather than a new one.
+ *
+ * `excludedBossNames` (a Set of exact fight names) drops those bosses' kills from the
+ * DPS table fetch ONLY -- healing/damage-taken/deaths/pullCount/rankings all still use
+ * every kill in the report, so excluding a boss from the DPS check never touches
+ * healer/tank percentile or death tracking.
  */
-async function fetchReportAggregate(code) {
+async function fetchReportAggregate(code, excludedBossNames = new Set()) {
   const fights = await fetchFights(code);
   const killFightIds = fights.filter((f) => f.kill).map((f) => f.id);
+  const dpsFightIds = fights.filter((f) => f.kill && !excludedBossNames.has(f.name)).map((f) => f.id);
   const heroicKillEncounterIds = fights.filter((f) => f.kill && f.difficulty === HEROIC_DIFFICULTY).map((f) => f.encounterID);
   const fightNameById = new Map(fights.map((f) => [f.id, f.name]));
 
@@ -299,7 +315,7 @@ async function fetchReportAggregate(code) {
   }
 
   const [damageEntries, healingEntries, damageTakenEntries, deathEntries, ranking, actorServers] = await Promise.all([
-    fetchTable(code, killFightIds, 'DamageDone'),
+    fetchTable(code, dpsFightIds, 'DamageDone'),
     fetchTable(code, killFightIds, 'Healing'),
     fetchTable(code, killFightIds, 'DamageTaken'),
     fetchTable(code, killFightIds, 'Deaths'),
@@ -431,15 +447,17 @@ function computeSeasonPercentiles(aggregates, metricKey, role, roleOf, higherIsB
  * @returns {Promise<{ performance: Record<string, { role: 'tank'|'healer'|'dps', class: string|null, spec: string|null, perf: number, parseTrend: number, deaths: number, pulls: number, deathCauses: {boss:string,ability:string}[], nightParse: number, nightDeaths: number, nightPulls: number, nightDeathCauses: {boss:string,ability:string}[] }>, heroicBossesKilled: number, observedRealms: Record<string, string[]> }>}
  */
 async function fetchWarcraftLogs(guild, tierZoneName, roleByName) {
-  const minDps = Number(process.env.MIN_DPS_REQUIREMENT ?? 0);
-  if (!minDps) throw new Error('MIN_DPS_REQUIREMENT is not set in .env');
+  const settings = settingsStore.load();
+  const minDps = settings.minDps; // settingsStore.load() already resolves the .env fallback
+  if (!minDps) throw new Error('No DPS minimum configured -- set one in Settings, or MIN_DPS_REQUIREMENT in .env as a fallback.');
+  const excludedBossNames = new Set(settings.excludedBossesFromDps ?? []);
 
   const allReports = await fetchGuildReports(guild, 30);
   const tierReports = allReports.filter((r) => r.zone?.name === tierZoneName).sort((a, b) => a.startTime - b.startTime); // oldest -> newest
 
   if (tierReports.length === 0) throw new Error(`No Warcraft Logs reports found for zone "${tierZoneName}"`);
 
-  const aggregates = await Promise.all(tierReports.map((r) => fetchReportAggregate(r.code)));
+  const aggregates = await Promise.all(tierReports.map((r) => fetchReportAggregate(r.code, excludedBossNames)));
 
   const perfSnapshot = (name, agg) => perfSnapshotFor(name, agg, roleByName, minDps);
 
@@ -667,9 +685,11 @@ async function fetchPullBreakdown(code, roleByName) {
  * @returns {Promise<Record<string, { nightParse: number, nightDeaths: number, nightPulls: number, nightDeathCauses: {boss:string,ability:string}[] }>>}
  */
 async function fetchNightSnapshot(code, roleByName) {
-  const minDps = Number(process.env.MIN_DPS_REQUIREMENT ?? 0);
-  if (!minDps) throw new Error('MIN_DPS_REQUIREMENT is not set in .env');
-  const agg = await fetchReportAggregate(code);
+  const settings = settingsStore.load();
+  const minDps = settings.minDps; // settingsStore.load() already resolves the .env fallback
+  if (!minDps) throw new Error('No DPS minimum configured -- set one in Settings, or MIN_DPS_REQUIREMENT in .env as a fallback.');
+  const excludedBossNames = new Set(settings.excludedBossesFromDps ?? []);
+  const agg = await fetchReportAggregate(code, excludedBossNames);
   return nightFieldsFromAggregate(agg, roleByName, minDps);
 }
 

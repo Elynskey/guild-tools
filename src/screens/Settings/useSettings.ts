@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
+import { config } from '../../config';
 import type { GuildToolsSettings } from '../../electron';
 
-const EMPTY: GuildToolsSettings = { raidSignupsChannelId: '', lootLogChannelId: '' };
+const EMPTY: GuildToolsSettings = { raidSignupsChannelId: '', lootLogChannelId: '', gates: { ...config.gates }, minDps: 0, excludedBossesFromDps: [] };
 
 // Officer-wide, server-persisted via the API proxy when configured (see
 // electron/dataSources/fetchSettings.cjs) -- there's no meaningful browser-preview

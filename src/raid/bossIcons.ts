@@ -23,6 +23,9 @@ const BOSS_CREATURE_DISPLAY_ID: Record<string, number> = {
   'Nymrissa Wavecaller': 137687,
 };
 
+/** This tier's boss names, in the fixed order above -- reused wherever the app needs the full roster of bosses rather than just an icon (e.g. Settings' DPS-exclusion checklist). */
+export const TIER_BOSS_NAMES: string[] = Object.keys(BOSS_CREATURE_DISPLAY_ID);
+
 /** Boss portrait URL (Blizzard's public render CDN), or null for a boss not in this tier's reference. */
 export function bossIconUrl(bossName: string): string | null {
   const id = BOSS_CREATURE_DISPLAY_ID[bossName];

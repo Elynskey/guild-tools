@@ -4,6 +4,9 @@ import { Crest } from '../../design-system/Crest';
 import { Input } from '../../design-system/Input';
 import { Button } from '../../design-system/Button';
 import { Toast } from '../../design-system/Toast';
+import { Icon } from '../../design-system/Icon';
+import { BossIcon } from '../../raid/BossIcon';
+import { TIER_BOSS_NAMES } from '../../raid/bossIcons';
 import { useSettings } from './useSettings';
 
 export function Settings() {
@@ -29,8 +32,26 @@ export function Settings() {
     });
   };
 
-  const field = (key: keyof typeof draft, value: string) => {
+  const field = (key: 'raidSignupsChannelId' | 'lootLogChannelId', value: string) => {
     setDraft({ ...draft, [key]: value });
+    setDirty(true);
+  };
+
+  const setGateField = (key: 'rio' | 'ilvl', value: string) => {
+    const num = Number(value);
+    setDraft({ ...draft, gates: { ...draft.gates, [key]: Number.isFinite(num) ? num : draft.gates[key] } });
+    setDirty(true);
+  };
+
+  const setMinDps = (value: string) => {
+    const num = Number(value);
+    setDraft({ ...draft, minDps: Number.isFinite(num) ? num : draft.minDps });
+    setDirty(true);
+  };
+
+  const toggleBossExclusion = (boss: string) => {
+    const excluded = draft.excludedBossesFromDps.includes(boss) ? draft.excludedBossesFromDps.filter((b) => b !== boss) : [...draft.excludedBossesFromDps, boss];
+    setDraft({ ...draft, excludedBossesFromDps: excluded });
     setDirty(true);
   };
 
@@ -84,6 +105,82 @@ export function Settings() {
               value={draft.lootLogChannelId}
               onChange={(e) => field('lootLogChannelId', e.target.value)}
             />
+
+            <Button onClick={submit} disabled={saving || !dirty} iconLeft="check">
+              {saving ? 'Saving…' : 'Save'}
+            </Button>
+
+            {!dirty && savedAt !== null && <Toast tone="success" title="Saved" />}
+          </div>
+        )}
+
+        {available && !loading && (
+          <div className="crd-card" style={{ padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: 18, marginTop: 20 }}>
+            <div>
+              <div className="crd-eyebrow" style={{ color: 'var(--text-gold)', marginBottom: 4 }}>
+                Raid info
+              </div>
+              <p style={{ margin: 0, fontSize: 'var(--text-body-s)', lineHeight: 1.6, color: 'var(--text-muted)' }}>
+                This tier's minimum requirements -- used to gate the roster and score DPS on Raider Status. Update these here
+                instead of needing a code change and a new release every time they move.
+              </p>
+            </div>
+
+            <Input label="Raider.IO gate" type="number" value={String(draft.gates.rio)} onChange={(e) => setGateField('rio', e.target.value)} />
+            <Input label="Item level gate" type="number" value={String(draft.gates.ilvl)} onChange={(e) => setGateField('ilvl', e.target.value)} />
+            <Input label="Minimum DPS" type="number" value={String(draft.minDps)} onChange={(e) => setMinDps(e.target.value)} hint="Damage/time-alive a DPS raider needs to clear 100% on the DPS check." />
+
+            <Button onClick={submit} disabled={saving || !dirty} iconLeft="check">
+              {saving ? 'Saving…' : 'Save'}
+            </Button>
+
+            {!dirty && savedAt !== null && <Toast tone="success" title="Saved" />}
+          </div>
+        )}
+
+        {available && !loading && (
+          <div className="crd-card" style={{ padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: 14, marginTop: 20 }}>
+            <div>
+              <div className="crd-eyebrow" style={{ color: 'var(--text-gold)', marginBottom: 4 }}>
+                DPS check exclusions
+              </div>
+              <p style={{ margin: 0, fontSize: 'var(--text-body-s)', lineHeight: 1.6, color: 'var(--text-muted)' }}>
+                Uncheck a boss to drop its kills from the DPS check tier-wide -- for a fight where raw damage isn't a fair
+                measure. Deaths, gear, and healer/tank percentile are unaffected either way.
+              </p>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {TIER_BOSS_NAMES.map((boss) => {
+                const included = !draft.excludedBossesFromDps.includes(boss);
+                return (
+                  // Same crd-choice/crd-choice__box classes Checkbox.tsx itself renders --
+                  // built by hand here instead of using that component directly since it
+                  // only supports a plain string label, not the boss icon alongside it.
+                  <span
+                    key={boss}
+                    className="crd-choice"
+                    role="checkbox"
+                    aria-checked={included}
+                    tabIndex={0}
+                    onClick={() => toggleBossExclusion(boss)}
+                    onKeyDown={(e) => {
+                      if (e.key === ' ' || e.key === 'Enter') {
+                        e.preventDefault();
+                        toggleBossExclusion(boss);
+                      }
+                    }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0' }}
+                  >
+                    <span className="crd-choice__box crd-choice__box--check" data-checked={included}>
+                      {included && <Icon name="check" size={13} />}
+                    </span>
+                    <BossIcon boss={boss} size={20} />
+                    {boss}
+                  </span>
+                );
+              })}
+            </div>
 
             <Button onClick={submit} disabled={saving || !dirty} iconLeft="check">
               {saving ? 'Saving…' : 'Save'}
