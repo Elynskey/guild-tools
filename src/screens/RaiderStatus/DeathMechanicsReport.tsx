@@ -1,6 +1,18 @@
 import { Icon } from '../../design-system/Icon';
+import { BossIcon } from '../../raid/BossIcon';
 import { REPEAT_MECHANIC_THRESHOLD, findRepeatOffenders, type DeathMechanicEntry } from '../../scoring/deathMechanics';
 import type { Window } from '../../scoring/types';
+
+/** Entries already sort boss-then-deaths (see buildDeathMechanicsReport) -- this just splits that flat list into per-boss runs so each boss gets one header instead of repeating its name on every row. */
+function groupByBoss(entries: DeathMechanicEntry[]): { boss: string; entries: DeathMechanicEntry[] }[] {
+  const groups: { boss: string; entries: DeathMechanicEntry[] }[] = [];
+  for (const entry of entries) {
+    const last = groups[groups.length - 1];
+    if (last && last.boss === entry.boss) last.entries.push(entry);
+    else groups.push({ boss: entry.boss, entries: [entry] });
+  }
+  return groups;
+}
 
 interface DeathMechanicsReportProps {
   entries: DeathMechanicEntry[];
@@ -57,28 +69,35 @@ export function DeathMechanicsReport({ entries, window }: DeathMechanicsReportPr
       {entries.length === 0 ? (
         <div style={{ padding: '24px 18px', textAlign: 'center', color: 'var(--status-success)', fontSize: 'var(--text-body-s)' }}>No deaths logged {scopeLabel}.</div>
       ) : (
-        entries.map((e) => (
-          <div key={`${e.boss}::${e.ability}`} style={{ display: 'grid', gridTemplateColumns: '1fr 90px', gap: 14, padding: '10px 18px', borderBottom: '1px solid var(--border-hairline)', alignItems: 'baseline' }}>
-            <div>
-              <span style={{ fontFamily: 'var(--font-display)', fontWeight: 600, letterSpacing: '.03em', fontSize: 'var(--text-title-s)', color: 'var(--text-strong)' }}>{e.ability}</span>
-              <span style={{ fontSize: 'var(--text-body-s)', color: 'var(--text-muted)' }}> — {e.boss}</span>
-              <div style={{ marginTop: 3, display: 'flex', flexWrap: 'wrap', gap: '0 5px', fontSize: 'var(--text-micro)' }}>
-                {e.byRaider.map((b, i) => {
-                  const flagged = b.count >= REPEAT_MECHANIC_THRESHOLD;
-                  return (
-                    <span key={b.name} style={{ color: flagged ? 'var(--accent-ember)' : 'var(--text-faint)', fontWeight: flagged ? 700 : 400 }}>
-                      {flagged && <Icon name="alert-triangle" size={10} style={{ verticalAlign: -1, marginRight: 2 }} />}
-                      {b.name}
-                      {b.count > 1 ? ` x${b.count}` : ''}
-                      {i < e.byRaider.length - 1 ? ',' : ''}
-                    </span>
-                  );
-                })}
+        groupByBoss(entries).map((group) => (
+          <div key={group.boss}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 18px', background: 'var(--surface-sunken)', borderBottom: '1px solid var(--border-hairline)' }}>
+              <BossIcon boss={group.boss} size={20} />
+              <span style={{ fontFamily: 'var(--font-display)', fontWeight: 600, letterSpacing: '.03em', fontSize: 'var(--text-body-s)', color: 'var(--text-strong)' }}>{group.boss}</span>
+            </div>
+            {group.entries.map((e) => (
+              <div key={`${e.boss}::${e.ability}`} style={{ display: 'grid', gridTemplateColumns: '1fr 90px', gap: 14, padding: '10px 18px', borderBottom: '1px solid var(--border-hairline)', alignItems: 'baseline' }}>
+                <div>
+                  <span style={{ fontFamily: 'var(--font-display)', fontWeight: 600, letterSpacing: '.03em', fontSize: 'var(--text-title-s)', color: 'var(--text-strong)' }}>{e.ability}</span>
+                  <div style={{ marginTop: 3, display: 'flex', flexWrap: 'wrap', gap: '0 5px', fontSize: 'var(--text-micro)' }}>
+                    {e.byRaider.map((b, i) => {
+                      const flagged = b.count >= REPEAT_MECHANIC_THRESHOLD;
+                      return (
+                        <span key={b.name} style={{ color: flagged ? 'var(--accent-ember)' : 'var(--text-faint)', fontWeight: flagged ? 700 : 400 }}>
+                          {flagged && <Icon name="alert-triangle" size={10} style={{ verticalAlign: -1, marginRight: 2 }} />}
+                          {b.name}
+                          {b.count > 1 ? ` x${b.count}` : ''}
+                          {i < e.byRaider.length - 1 ? ',' : ''}
+                        </span>
+                      );
+                    })}
+                  </div>
+                </div>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-title-s)', color: 'var(--status-danger)', textAlign: 'right' }}>
+                  {e.totalDeaths} death{e.totalDeaths === 1 ? '' : 's'}
+                </div>
               </div>
-            </div>
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-title-s)', color: 'var(--status-danger)', textAlign: 'right' }}>
-              {e.totalDeaths} death{e.totalDeaths === 1 ? '' : 's'}
-            </div>
+            ))}
           </div>
         ))
       )}

@@ -38,7 +38,9 @@ export function buildDeathMechanicsReport(rows: ScoredRaider[]): DeathMechanicEn
 
   const list = [...map.values()];
   for (const entry of list) entry.byRaider.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
-  list.sort((a, b) => b.totalDeaths - a.totalDeaths || a.boss.localeCompare(b.boss));
+  // Grouped by boss first (so everything killing the raid on one fight reads together),
+  // worst mechanic within that boss still first.
+  list.sort((a, b) => a.boss.localeCompare(b.boss) || b.totalDeaths - a.totalDeaths);
   return list;
 }
 

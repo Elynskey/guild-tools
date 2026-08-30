@@ -28,3 +28,43 @@ export function bossIconUrl(bossName: string): string | null {
   const id = BOSS_CREATURE_DISPLAY_ID[bossName];
   return id ? `https://render.worldofwarcraft.com/us/npcs/zoom/creature-display-${id}.jpg` : null;
 }
+
+export interface BossIconCrop {
+  /** CSS background-size -- how much larger than its frame the image renders before being clipped. Higher = tighter zoom. */
+  scale: number;
+  /** CSS background-position -- which part of the (now-oversized) image stays visible. */
+  position: string;
+  /** CSS brightness() filter multiplier, for a render that's inherently very dark (not a crop problem -- no framing fixes a dark source image). Omit for no change (1). */
+  brighten?: number;
+}
+
+// Every "zoom" render is a 600x600 square, but what's actually IN that square varies a
+// lot per creature (confirmed by downloading and eyeballing all 9 for this tier) -- most
+// have the head in the top ~15-20%, which the default crop (zoom in, anchor to the top)
+// handles well. Three don't fit that pattern and get their own override:
+//   - Ula'tek: a wide wingspan creature sitting vertically CENTERED in the frame (~35-70%
+//     down) -- a top-anchored crop would show empty background and miss the creature
+//     entirely.
+//   - The Coiled Altar: the render itself is tiny (occupies maybe 15% of the square) and
+//     centered around roughly (48%, 65%), not (50%, 50%) -- needs a much more aggressive
+//     zoom than every other boss this tier, AND a position biased toward that specific
+//     spot, to actually be visible at icon size.
+//   - The Lost Explorers: not a framing problem at all -- the render itself is just very
+//     dark (a deliberate mood-lit shot), so brightened rather than cropped differently.
+//
+// This is implemented as CSS background-image/background-size/background-position, not
+// <img> object-fit/object-position -- object-fit only crops when the source and target
+// aspect ratios actually differ, and forcing width/height to equal percentages (to zoom
+// a square image within a square frame) makes them match by construction, silently
+// making object-position a no-op regardless of its value. background-size handles a
+// square-into-square zoom correctly.
+const CROP_OVERRIDES: Record<string, BossIconCrop> = {
+  "Ula'tek": { scale: 130, position: '50% 50%' },
+  'The Coiled Altar': { scale: 600, position: '48% 65%' },
+  'The Lost Explorers': { scale: 165, position: '50% 0%', brighten: 2.2 },
+};
+const DEFAULT_CROP: BossIconCrop = { scale: 165, position: '50% 0%' };
+
+export function bossIconCrop(bossName: string): BossIconCrop {
+  return CROP_OVERRIDES[bossName] ?? DEFAULT_CROP;
+}

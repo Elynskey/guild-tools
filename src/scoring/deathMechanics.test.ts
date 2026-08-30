@@ -58,17 +58,33 @@ describe('buildDeathMechanicsReport', () => {
     expect(report[0]).toMatchObject({ boss: 'Sszorak', ability: 'Venomous Detonation', totalDeaths: 2 });
   });
 
-  it('sorts entries by total deaths descending', () => {
+  it('sorts entries by boss alphabetically, regardless of death count', () => {
     const rows = [
-      scoredRaider('A', [{ boss: 'BossOne', ability: 'X' }]),
+      scoredRaider('A', [{ boss: 'Zorbo', ability: 'X' }]),
       scoredRaider('B', [
-        { boss: 'BossTwo', ability: 'Y' },
-        { boss: 'BossTwo', ability: 'Y' },
+        { boss: 'Aldric', ability: 'Y' },
+        { boss: 'Aldric', ability: 'Y' },
       ]),
     ];
     const report = buildDeathMechanicsReport(rows);
-    expect(report[0].boss).toBe('BossTwo');
+    // Aldric sorts first alphabetically even though Zorbo's entry has fewer deaths --
+    // boss is the primary sort key now, not total deaths.
+    expect(report[0].boss).toBe('Aldric');
+    expect(report[1].boss).toBe('Zorbo');
+  });
+
+  it('within the same boss, sorts by total deaths descending', () => {
+    const rows = [
+      scoredRaider('A', [{ boss: 'Boss', ability: 'Low' }]),
+      scoredRaider('B', [
+        { boss: 'Boss', ability: 'High' },
+        { boss: 'Boss', ability: 'High' },
+      ]),
+    ];
+    const report = buildDeathMechanicsReport(rows);
+    expect(report[0].ability).toBe('High');
     expect(report[0].totalDeaths).toBe(2);
+    expect(report[1].ability).toBe('Low');
   });
 
   it('sorts each entry\'s byRaider list by count descending', () => {
