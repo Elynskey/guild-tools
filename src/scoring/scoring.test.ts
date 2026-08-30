@@ -18,6 +18,7 @@ const baseDps: Raider = {
   perf: 100,
   gearCompletion: 90,
   gearDetail: null,
+  portraitUrl: null,
   parseTrend: 0,
   deaths: 0,
   pulls: 20,

@@ -55,6 +55,10 @@ const raider = (
   perf,
   gearCompletion,
   gearDetail: synthesizeGearDetail(name, gearCompletion),
+  // No Blizzard fetch behind fabricated raiders, so no real avatar to show -- RosterRow
+  // falls back to the generic spec icon, same as it does for a real character whose
+  // profile is hidden or whose portrait fetch failed.
+  portraitUrl: null,
   parseTrend,
   deaths,
   pulls: TIER_PULLS,

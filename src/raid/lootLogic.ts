@@ -114,6 +114,57 @@ export function itemLabel(link: string): string {
   return match ? match[1] : link;
 }
 
+export interface SeasonLootItem {
+  itemLink: string;
+  boss: string | null;
+  slot: string | null;
+  time: number;
+  /** Set if this item was later traded away -- still counts toward totalWon, just not needWinCount (see needWinCount's own doc comment). */
+  tradedTo: string | null;
+}
+
+export interface SeasonLootRow {
+  name: string;
+  /** Current Need-win count, same rule as needWinCount -- excludes anything traded away. What the guild's cap actually judges. */
+  needWinCount: number;
+  /** Every item this raider was the original Need-roll winner of, this tier, regardless of whether they kept it -- the fuller picture behind needWinCount. */
+  totalWon: number;
+  /** Newest first. */
+  items: SeasonLootItem[];
+  /** Most recent win's timestamp, or null if they haven't won anything this tier -- what "who hasn't won anything in a while" sorts on. */
+  lastWonAt: number | null;
+}
+
+/**
+ * Season-wide "who's won what" -- one row per raider, seeded from the full roster so
+ * someone with zero wins still shows up (the whole point of a report meant to surface
+ * who's behind), plus anyone who's won something but isn't on the current roster
+ * snapshot (an alt, a since-departed member -- their history doesn't just disappear).
+ * Pure function over the full season's entries, same as everything else in this file;
+ * the "season" scope comes from the caller passing every entry (not one night's).
+ */
+export function buildSeasonLootReport(entries: LootEntry[], rosterNames: string[]): SeasonLootRow[] {
+  const byName = new Map<string, LootEntry[]>();
+  for (const name of rosterNames) byName.set(name, []);
+  for (const e of entries) {
+    if (e.standaloneTrade) continue; // no real winner to attribute -- e.winner is just the trade's `from`, not a Need roll
+    const list = byName.get(e.winner) ?? [];
+    list.push(e);
+    byName.set(e.winner, list);
+  }
+
+  return [...byName.entries()].map(([name, won]) => {
+    const sorted = [...won].sort((a, b) => b.time - a.time);
+    return {
+      name,
+      needWinCount: needWinCount(entries, name),
+      totalWon: won.length,
+      items: sorted.map((e) => ({ itemLink: e.itemLink, boss: e.boss, slot: e.slot, time: e.time, tradedTo: e.tradedTo })),
+      lastWonAt: sorted[0]?.time ?? null,
+    };
+  });
+}
+
 const NO_BOSS_LABEL = 'No boss recorded';
 
 /**

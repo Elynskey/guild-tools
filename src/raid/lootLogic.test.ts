@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { annotateWithTrades, filterByRaider, formatNightForDiscord, groupLootByNight, needWinCount, type RawLootRecord, type RawTradeRecord } from './lootLogic';
+import { annotateWithTrades, buildSeasonLootReport, filterByRaider, formatNightForDiscord, groupLootByNight, needWinCount, type RawLootRecord, type RawTradeRecord } from './lootLogic';
 
 function record(overrides: Partial<RawLootRecord> & Pick<RawLootRecord, 'time'>): RawLootRecord {
   return { itemId: 1, itemLink: '[Item]', winner: 'Grimsyl', boss: 'Vashnik the Malignant', ...overrides };
@@ -163,5 +163,50 @@ describe('formatNightForDiscord', () => {
 
   it('returns one message per boss, none empty, for an empty night', () => {
     expect(formatNightForDiscord([])).toEqual([]);
+  });
+});
+
+describe('buildSeasonLootReport', () => {
+  it('includes a roster member with zero wins', () => {
+    const rows = buildSeasonLootReport([], ['Grimsyl']);
+    expect(rows).toEqual([{ name: 'Grimsyl', needWinCount: 0, totalWon: 0, items: [], lastWonAt: null }]);
+  });
+
+  it('counts every win toward totalWon but excludes a traded-away item from needWinCount', () => {
+    const entries = annotateWithTrades(
+      [
+        record({ time: 1000, itemId: 1, itemLink: '[Sword]', winner: 'Grimsyl' }),
+        record({ time: 2000, itemId: 2, itemLink: '[Shield]', winner: 'Grimsyl' }),
+      ],
+      [{ itemId: 1, itemLink: '[Sword]', from: 'Grimsyl', to: 'Zalanto', time: 1100 }],
+    );
+    const [row] = buildSeasonLootReport(entries, ['Grimsyl']);
+    expect(row.totalWon).toBe(2); // both wins count, regardless of the trade
+    expect(row.needWinCount).toBe(1); // only the kept item counts against the cap
+    expect(row.items).toHaveLength(2);
+    expect(row.items[0].itemLink).toBe('[Shield]'); // newest first
+  });
+
+  it('includes someone with wins even if they are not on the current roster list', () => {
+    const entries = annotateWithTrades([record({ time: 1000, winner: 'FormerMember' })], []);
+    const rows = buildSeasonLootReport(entries, ['Grimsyl']);
+    expect(rows.map((r) => r.name)).toContain('FormerMember');
+  });
+
+  it('does not attribute a standalone trade to a winner', () => {
+    const entries = annotateWithTrades([], [{ itemId: 1, itemLink: '[Ring]', from: 'Harima', to: 'Thornwick', time: 1000 }]);
+    const rows = buildSeasonLootReport(entries, ['Harima']);
+    const harima = rows.find((r) => r.name === 'Harima')!;
+    expect(harima.totalWon).toBe(0);
+    expect(harima.items).toHaveLength(0);
+  });
+
+  it('sets lastWonAt to the most recent win', () => {
+    const entries = annotateWithTrades(
+      [record({ time: 1000, itemId: 1 }), record({ time: 5000, itemId: 2 })],
+      [],
+    );
+    const [row] = buildSeasonLootReport(entries, ['Grimsyl']);
+    expect(row.lastWonAt).toBe(5000);
   });
 });

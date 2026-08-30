@@ -13,6 +13,10 @@ export function RosterRow({ raider: r, onToggleGear }: RosterRowProps) {
   const gearValue = `${r.gearCompletion}%`;
   const gearColor = r.gearCompletion >= 95 ? 'var(--status-success)' : r.gearCompletion >= 80 ? 'var(--status-warning)' : 'var(--status-danger)';
   const detail = r.gearDetail;
+  // Real character avatar when Blizzard has one (a real face portrait, round-cropped
+  // to match); falls back to the generic spec icon (square, matches its own glyph
+  // style) when there's no portrait, same as sample-mode raiders always have.
+  const avatarSrc = r.portraitUrl ?? r.icon;
 
   return (
     <div style={{ borderTop: '1px solid var(--border-hairline)' }}>
@@ -23,14 +27,22 @@ export function RosterRow({ raider: r, onToggleGear }: RosterRowProps) {
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
           <img
-            src={r.icon}
+            src={avatarSrc}
             alt={`${r.spec} ${r.class}`}
             title={`${r.spec} ${r.class}`}
             onError={(e) => {
               e.currentTarget.onerror = null;
               e.currentTarget.src = specIconFallback;
             }}
-            style={{ flex: 'none', width: 26, height: 26, border: '1px solid var(--border-hairline)', borderRadius: 2, boxShadow: 'var(--shadow-1)' }}
+            style={{
+              flex: 'none',
+              width: 26,
+              height: 26,
+              border: '1px solid var(--border-hairline)',
+              borderRadius: r.portraitUrl ? '50%' : 2,
+              objectFit: 'cover',
+              boxShadow: 'var(--shadow-1)',
+            }}
           />
           <div style={{ minWidth: 0 }}>
             <div style={{ fontFamily: 'var(--font-display)', fontSize: 'var(--text-title-s)', fontWeight: 600, letterSpacing: '.04em', color: 'var(--text-strong)' }}>

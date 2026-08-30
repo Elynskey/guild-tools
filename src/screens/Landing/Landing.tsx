@@ -35,6 +35,12 @@ const CARDS: NavCardDef[] = [
     description: 'Who won what on Need rolls, which boss it dropped from, and where it ended up if it got traded.',
   },
   {
+    to: '/loot-report',
+    icon: 'bar-chart-3',
+    title: 'Season Loot Report',
+    description: 'Every Need win this tier, per raider -- who\'s behind, who\'s kept what, and when they last won something.',
+  },
+  {
     to: '/raid-signups',
     icon: 'users',
     title: 'Raid Signups',

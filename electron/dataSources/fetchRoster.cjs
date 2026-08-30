@@ -2,6 +2,7 @@ const { fetchRaiderIO } = require('./raiderio.cjs');
 const { fetchWarcraftLogs } = require('./warcraftlogs.cjs');
 const { fetchWowauditRoster } = require('./wowaudit.cjs');
 const { fetchGearCompletion } = require('./bnet.cjs');
+const { fetchCharacterPortraits } = require('./characterPortraits.cjs');
 const { mergeSources } = require('./merge.cjs');
 const { findRealmMismatches } = require('./realmCheck.cjs');
 const proxyClient = require('./proxyClient.cjs');
@@ -85,13 +86,14 @@ async function fetchRoster() {
     }
     const roleByName = Object.fromEntries(wowauditRoster.filter((m) => !collidingNames.has(m.name)).map((m) => [m.name, m.role]));
 
-    const [rio, gearCompletion, wcl] = await Promise.all([
+    const [rio, gearCompletion, portraits, wcl] = await Promise.all([
       fetchRaiderIO(guild, characters),
       fetchGearCompletion(guild, characters),
+      fetchCharacterPortraits(guild, characters),
       fetchWarcraftLogs(guild, process.env.TIER_ZONE_NAME, roleByName),
     ]);
 
-    const raiders = mergeSources({ wowauditRoster, rio, gearCompletion, wcl: wcl.performance });
+    const raiders = mergeSources({ wowauditRoster, rio, gearCompletion, portraits, wcl: wcl.performance });
     const realmMismatches = findRealmMismatches(wowauditRoster, wcl.observedRealms);
     if (realmMismatches.length > 0) {
       console.warn('[roster] Realm mismatch(es) between wowaudit and Warcraft Logs combat log data:', realmMismatches);

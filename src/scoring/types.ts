@@ -31,6 +31,8 @@ export interface Raider {
   gearCompletion: number;
   /** What's behind gearCompletion -- which slots lack an enchant, how many sockets are empty. Null when unavailable. */
   gearDetail: GearDetail | null;
+  /** Real character avatar (Blizzard's Character Media API "avatar" asset -- a real pre-cropped face portrait, not a rendered shot). Null when unavailable (hidden profile, API hiccup, sample mode). */
+  portraitUrl: string | null;
   /** Slope of parse percentile across the tier, in points. Can be negative. */
   parseTrend: number;
   /** Tier-to-date raw death count (kill pulls only — same scope as perf/gear). */

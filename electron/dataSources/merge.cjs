@@ -1,10 +1,10 @@
 // Merges wowaudit (roster membership) + Raider.IO (score/ilvl) + Blizzard (gear
-// completion) + Warcraft Logs (perf/deaths/trend) into the app's Raider[] shape
-// (see src/scoring/types.ts).
+// completion + character portrait) + Warcraft Logs (perf/deaths/trend) into the app's
+// Raider[] shape (see src/scoring/types.ts).
 
 const { charKey } = require('./raiderio.cjs');
 
-function mergeSources({ wowauditRoster, rio, gearCompletion, wcl }) {
+function mergeSources({ wowauditRoster, rio, gearCompletion, portraits, wcl }) {
   // rio is a list, keyed for lookup by charKey(name, realm) -- NOT bare name, since
   // two different real people can share a character name on different realms (the
   // "Dunbarke" incident). gearCompletion already comes in as a Record of
@@ -58,6 +58,7 @@ function mergeSources({ wowauditRoster, rio, gearCompletion, wcl }) {
         ilvlHighestThisSeason: rioData.ilvlHighestThisSeason,
         gearCompletion: gearCompletion[key]?.score ?? 0,
         gearDetail: gearCompletion[key] ?? null,
+        portraitUrl: portraits?.[key] ?? null,
         perf: wclData.perf,
         parseTrend: wclData.parseTrend,
         deaths: wclData.deaths,
