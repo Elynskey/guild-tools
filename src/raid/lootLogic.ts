@@ -107,3 +107,38 @@ export function filterByRaider(entries: LootEntry[], name: string): LootEntry[] 
 export function needWinCount(entries: LootEntry[], name: string): number {
   return entries.filter((e) => e.winner === name && !e.standaloneTrade && !e.tradedTo).length;
 }
+
+/** Real item links are the |Hitem:...|h[Name]|h|r escape sequence -- pulls just the bracketed display name back out; sample/manual entries already store plain "[Name]" text, so this handles both the same way. */
+export function itemLabel(link: string): string {
+  const match = link.match(/\[(.+)\]/);
+  return match ? match[1] : link;
+}
+
+const NO_BOSS_LABEL = 'No boss recorded';
+
+/**
+ * One Discord message per boss for an officer's manual "Post to Discord" -- winner +
+ * item (+ slot, + where it ended up if traded), headed by the boss name. Entries with
+ * no boss (an old capture from before boss attribution was fixed, or a standalone
+ * trade -- see annotateWithTrades, which never gives those a boss) are grouped under
+ * one shared heading instead of being silently dropped from the post.
+ */
+export function formatNightForDiscord(entries: LootEntry[]): string[] {
+  const byBoss = new Map<string, LootEntry[]>();
+  for (const e of entries) {
+    const key = e.boss ?? NO_BOSS_LABEL;
+    const list = byBoss.get(key) ?? [];
+    list.push(e);
+    byBoss.set(key, list);
+  }
+
+  const formatLine = (e: LootEntry): string => {
+    const item = itemLabel(e.itemLink);
+    if (e.standaloneTrade) return `🔄 ${e.winner}'s ${item} → traded to ${e.tradedTo}`;
+    const slot = e.slot ? ` (${e.slot})` : '';
+    const trade = e.tradedTo ? ` → traded to ${e.tradedTo}` : '';
+    return `🎲 ${e.winner} won ${item}${slot}${trade}`;
+  };
+
+  return [...byBoss.entries()].map(([boss, bossEntries]) => `**${boss}**\n${bossEntries.map(formatLine).join('\n')}`);
+}

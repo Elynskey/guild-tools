@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { annotateWithTrades, filterByRaider, groupLootByNight, needWinCount, type RawLootRecord, type RawTradeRecord } from './lootLogic';
+import { annotateWithTrades, filterByRaider, formatNightForDiscord, groupLootByNight, needWinCount, type RawLootRecord, type RawTradeRecord } from './lootLogic';
 
 function record(overrides: Partial<RawLootRecord> & Pick<RawLootRecord, 'time'>): RawLootRecord {
   return { itemId: 1, itemLink: '[Item]', winner: 'Grimsyl', boss: 'Vashnik the Malignant', ...overrides };
@@ -122,5 +122,46 @@ describe('needWinCount', () => {
     const entries = annotateWithTrades([], [{ itemId: 1, itemLink: '[Item]', from: 'Grimsyl', to: 'Zalanto', time: 1000 }]);
     expect(needWinCount(entries, 'Zalanto')).toBe(0);
     expect(needWinCount(entries, 'Grimsyl')).toBe(0);
+  });
+});
+
+describe('formatNightForDiscord', () => {
+  it('groups entries into one message per boss', () => {
+    const entries = annotateWithTrades(
+      [
+        record({ time: 1000, itemId: 1, itemLink: '[Sword]', winner: 'Grimsyl', boss: 'Vashnik the Malignant', slot: 'Main Hand' }),
+        record({ time: 1100, itemId: 2, itemLink: '[Shield]', winner: 'Thornwick', boss: 'Sszorak', slot: 'Off Hand' }),
+        record({ time: 1200, itemId: 3, itemLink: '[Helm]', winner: 'Zalanto', boss: 'Vashnik the Malignant', slot: 'Head' }),
+      ],
+      [],
+    );
+    const messages = formatNightForDiscord(entries);
+    expect(messages).toHaveLength(2);
+    const vashnikMsg = messages.find((m) => m.startsWith('**Vashnik the Malignant**'))!;
+    expect(vashnikMsg).toContain('Grimsyl won Sword (Main Hand)');
+    expect(vashnikMsg).toContain('Zalanto won Helm (Head)');
+    expect(messages.find((m) => m.startsWith('**Sszorak**'))).toContain('Thornwick won Shield (Off Hand)');
+  });
+
+  it('notes where a traded item ended up', () => {
+    const entries = annotateWithTrades(
+      [record({ time: 1000, itemId: 1, itemLink: '[Ring]', winner: 'Grimsyl', boss: 'Sszorak' })],
+      [{ itemId: 1, itemLink: '[Ring]', from: 'Grimsyl', to: 'Zalanto', time: 1100 }],
+    );
+    const [message] = formatNightForDiscord(entries);
+    expect(message).toContain('Grimsyl won Ring');
+    expect(message).toContain('traded to Zalanto');
+  });
+
+  it('groups a standalone trade under the no-boss heading', () => {
+    const entries = annotateWithTrades([], [{ itemId: 1, itemLink: '[Ring]', from: 'Harima', to: 'Thornwick', time: 1000 }]);
+    const [message] = formatNightForDiscord(entries);
+    expect(message).toContain('No boss recorded');
+    expect(message).toContain("Harima's Ring");
+    expect(message).toContain('traded to Thornwick');
+  });
+
+  it('returns one message per boss, none empty, for an empty night', () => {
+    expect(formatNightForDiscord([])).toEqual([]);
   });
 });

@@ -6,6 +6,7 @@ import { IconSelect } from '../../design-system/IconSelect';
 import { BossIcon } from '../../raid/BossIcon';
 import { classCanEquip } from '../../raid/classArmor';
 import type { BossLootTable } from '../../electron';
+import { itemLabel } from '../../raid/lootLogic';
 import type { LootEntry } from '../../raid/lootLogic';
 
 interface LootRecordDialogProps {
@@ -20,11 +21,6 @@ interface LootRecordDialogProps {
   /** Character name -> class, from the live roster -- drives item eligibility filtering. */
   classByName?: Record<string, string>;
   itemIcons?: Record<number, string | null>;
-}
-
-function itemLabel(link: string): string {
-  const match = link.match(/\[(.+)\]/);
-  return match ? match[1] : link;
 }
 
 function itemIconImg(url: string | null | undefined) {
@@ -68,7 +64,7 @@ function SmartAddFields({
   const matchedClass = lookupClass(winner, classByName);
 
   const bossOptions = useMemo(
-    () => bossLootTable.bosses.map((b) => ({ value: b.name, label: b.name, icon: <BossIcon boss={b.name} size={18} /> })),
+    () => bossLootTable.bosses.map((b) => ({ value: b.name, label: b.name, icon: <BossIcon boss={b.name} size={28} /> })),
     [bossLootTable],
   );
 

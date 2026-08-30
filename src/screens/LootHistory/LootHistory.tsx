@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { LootHistoryHeader } from './LootHistoryHeader';
 import { LootLogTable } from './LootLogTable';
 import { LootRecordDialog } from './LootRecordDialog';
+import { PostToDiscordDialog } from './PostToDiscordDialog';
 import { Button } from '../../design-system/Button';
 import { useLootHistory } from './useLootHistory';
 import type { LootEntry } from '../../raid/lootLogic';
@@ -39,6 +40,7 @@ export function LootHistory() {
   const lh = useLootHistory();
   const [editing, setEditing] = useState<LootEntry | null>(null);
   const [adding, setAdding] = useState(false);
+  const [postingOpen, setPostingOpen] = useState(false);
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--surface-page)', fontFamily: 'var(--font-ui)', color: 'var(--text-body)', paddingBottom: 80 }}>
@@ -116,6 +118,11 @@ export function LootHistory() {
               )}
               <div style={{ flex: 1 }} />
               {lh.available && (
+                <Button variant="secondary" size="sm" iconLeft="send" onClick={() => setPostingOpen(true)}>
+                  Post to Discord
+                </Button>
+              )}
+              {lh.available && (
                 <Button variant="secondary" size="sm" iconLeft="plus" onClick={() => setAdding(true)}>
                   Add entry
                 </Button>
@@ -156,6 +163,20 @@ export function LootHistory() {
                   }
                 : undefined
           }
+        />
+      )}
+
+      {postingOpen && (
+        <PostToDiscordDialog
+          messages={lh.nightMessagesForDiscord}
+          posting={lh.posting}
+          error={lh.postError}
+          onClose={() => setPostingOpen(false)}
+          onConfirm={() => {
+            lh.postNightToDiscord().then((ok) => {
+              if (ok) setPostingOpen(false);
+            });
+          }}
         />
       )}
     </div>

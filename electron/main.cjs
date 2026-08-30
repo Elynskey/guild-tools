@@ -30,6 +30,7 @@ const { getWowPathConfig, setWowPath, installAddon } = require('./dataSources/lo
 const { fetchLootLog, addManualLootRecord, updateLootRecord, removeLootRecord, removeLootTrade } = require('./dataSources/fetchLootLog.cjs');
 const { getItemIconUrls } = require('./dataSources/fetchItemIcons.cjs');
 const { fetchBossLootTable } = require('./dataSources/fetchBossLootTable.cjs');
+const { postLootNightToDiscord } = require('./dataSources/postLootNight.cjs');
 const { getSettings, saveSettings } = require('./dataSources/fetchSettings.cjs');
 const {
   listRaidSignups,
@@ -124,6 +125,7 @@ ipcMain.handle('lootLog:remove', async (_event, id) => removeLootRecord(id));
 ipcMain.handle('lootLog:removeTrade', async (_event, id) => removeLootTrade(id));
 ipcMain.handle('itemIcons:get', async (_event, itemIds) => getItemIconUrls(itemIds));
 ipcMain.handle('bossLootTable:get', async () => fetchBossLootTable());
+ipcMain.handle('lootLog:postNightToDiscord', async (_event, messages) => postLootNightToDiscord(messages));
 ipcMain.handle('lootLog:getWowPath', async () => getWowPathConfig());
 ipcMain.handle('lootLog:setWowPath', async (_event, wowPath) => {
   setWowPath(wowPath);

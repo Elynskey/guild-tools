@@ -174,6 +174,7 @@ export interface ElectronAPI {
   removeLootTrade: (id: string) => Promise<RawTradeRecord[]>;
   getItemIconUrls: (itemIds: number[]) => Promise<Record<number, string | null>>;
   getBossLootTable: () => Promise<BossLootTable | null>;
+  postLootNightToDiscord: (messages: string[]) => Promise<{ posted: number }>;
   getWowPathConfig: () => Promise<{ configured: string | null; resolved: string | null; valid: boolean }>;
   setWowPath: (wowPath: string) => Promise<{ configured: string | null; resolved: string | null; valid: boolean }>;
   pickWowFolder: () => Promise<string | null>;

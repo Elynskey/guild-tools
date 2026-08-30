@@ -1,19 +1,13 @@
 import { Icon } from '../../design-system/Icon';
 import { IconButton } from '../../design-system/IconButton';
 import { BossIcon } from '../../raid/BossIcon';
+import { itemLabel } from '../../raid/lootLogic';
 import type { LootEntry } from '../../raid/lootLogic';
 
 interface LootLogTableProps {
   entries: LootEntry[];
   itemIcons?: Record<number, string | null>;
   onEdit?: (entry: LootEntry) => void;
-}
-
-function itemLabel(link: string): string {
-  // Real item links are the |Hitem:...|h[Name]|h|r escape sequence -- pull just the
-  // bracketed display name back out; sample data already stores plain "[Name]" text.
-  const match = link.match(/\[(.+)\]/);
-  return match ? match[1] : link;
 }
 
 function formatTime(unixSeconds: number): string {
@@ -52,14 +46,14 @@ export function LootLogTable({ entries, itemIcons, onEdit }: LootLogTableProps) 
               gridTemplateColumns: GRID_TEMPLATE,
               gap: 12,
               alignItems: 'center',
-              padding: '10px 20px',
+              padding: '12px 20px',
               borderTop: '1px solid var(--border-hairline)',
               opacity: e.standaloneTrade ? 0.75 : 1,
             }}
           >
             <div style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-body-s)', color: 'var(--text-faint)' }}>{formatTime(e.time)}</div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 'var(--text-body-s)', color: 'var(--text-muted)' }}>
-              {e.boss && <BossIcon boss={e.boss} size={18} />}
+              {e.boss && <BossIcon boss={e.boss} size={28} />}
               {e.boss ?? '—'}
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 'var(--text-body-s)', color: 'var(--text-strong)', fontWeight: 600 }}>

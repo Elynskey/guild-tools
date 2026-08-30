@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { annotateWithTrades, groupLootByNight, needWinCount } from '../../raid/lootLogic';
+import { annotateWithTrades, formatNightForDiscord, groupLootByNight, needWinCount } from '../../raid/lootLogic';
 import type { LootNight } from '../../raid/lootLogic';
 import { sampleLootRecords, sampleLootTrades } from '../../data/sampleLoot';
 import { getRoster } from '../../data/rosterSource';
@@ -177,6 +177,31 @@ export function useLootHistory() {
     [electron, load],
   );
 
+  const [posting, setPosting] = useState(false);
+  const [postError, setPostError] = useState<string | null>(null);
+
+  // The selected night's entries, one Discord message per boss (see
+  // formatNightForDiscord) -- computed eagerly so the confirm dialog can show exactly
+  // what's about to be posted before the officer commits to it.
+  const nightMessagesForDiscord = useMemo(() => (selectedNight ? formatNightForDiscord(selectedNight.entries) : []), [selectedNight]);
+
+  // Resolves true on success (the caller can close the confirm dialog), false on
+  // failure (postError is set for the dialog to show inline -- keep it open so the
+  // officer can see what went wrong and retry rather than losing the message list).
+  const postNightToDiscord = useCallback((): Promise<boolean> => {
+    if (!electron || nightMessagesForDiscord.length === 0) return Promise.resolve(false);
+    setPosting(true);
+    setPostError(null);
+    return electron
+      .postLootNightToDiscord(nightMessagesForDiscord)
+      .then(() => true)
+      .catch((err: Error) => {
+        setPostError(err.message);
+        return false;
+      })
+      .finally(() => setPosting(false));
+  }, [electron, nightMessagesForDiscord]);
+
   return {
     status,
     nights,
@@ -203,5 +228,9 @@ export function useLootHistory() {
     removeTrade,
     saving,
     available: !!electron,
+    nightMessagesForDiscord,
+    postNightToDiscord,
+    posting,
+    postError,
   };
 }

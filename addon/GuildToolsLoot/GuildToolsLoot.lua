@@ -446,7 +446,11 @@ SlashCmdList["GUILDTOOLSLOOT"] = function(msg)
       -- line there was no way to tell "didn't run" from "ran and crashed").
       announce("Scanning now…")
       local added = scanLootHistory()
-      announce(added > 0 and (added .. " new Need win" .. (added == 1 and "" or "s") .. " pulled in from Loot History.") or "Loot History checked -- nothing new to add.")
+      -- The reload nudge only applies when there's actually something new: SavedVariables
+      -- only flush to disk on /reload or logout, and that's the only way Guild Tools (the
+      -- app) can pick up a scan's results -- confirmed live 2026-08-29 as the cause of
+      -- "scanned, but the app never updated" (officer never reloaded after scanning).
+      announce(added > 0 and (added .. " new Need win" .. (added == 1 and "" or "s") .. " pulled in from Loot History. Scan complete. Please /reload to update Guild Tools.") or "Loot History checked -- nothing new to add.")
     end
   else
     announce((GuildToolsLootDB.enabled and "currently logging Need wins." or "currently NOT logging.") .. " /gtloot on|off to change, /gtloot scan to pull in anything Loot History has that wasn't caught live.")

@@ -196,6 +196,10 @@ async function syncLootRecords(records, trades) {
   return proxyFetchJson('/loot-records/sync', { method: 'POST', body: JSON.stringify({ records, trades }) });
 }
 
+async function postLootNightToDiscord(messages) {
+  return proxyFetchJson('/loot-records/post-night', { method: 'POST', body: JSON.stringify({ messages }) });
+}
+
 module.exports = {
   isAvailable,
   fetchRoster,
@@ -214,6 +218,7 @@ module.exports = {
   removeCraftRequest,
   getSharedLootRecords,
   syncLootRecords,
+  postLootNightToDiscord,
   getSettings,
   saveSettings,
   listRaidSignups,
