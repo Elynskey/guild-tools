@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import './RaiderStatus.css';
 import { SiteHeader } from './SiteHeader';
 import { StatusRibbon } from './StatusRibbon';
@@ -9,10 +10,12 @@ import { ScoreKey } from './ScoreKey';
 import { EmptyState } from './EmptyState';
 import { KillsStrip } from './KillsStrip';
 import { RealmMismatchBanner } from './RealmMismatchBanner';
+import { DpsCheckDialog } from './DpsCheckDialog';
 import { useRaiderStatus } from './useRaiderStatus';
 
 export function RaiderStatus() {
   const rs = useRaiderStatus();
+  const [showDpsCheckSettings, setShowDpsCheckSettings] = useState(false);
 
   if (rs.loadError) {
     return (
@@ -61,6 +64,7 @@ export function RaiderStatus() {
           setQuery={rs.setQuery}
           sortWorst={rs.sortWorst}
           setSortWorst={rs.setSortWorst}
+          onOpenDpsCheckSettings={() => setShowDpsCheckSettings(true)}
         />
 
         {!rs.empty && (
@@ -96,6 +100,10 @@ export function RaiderStatus() {
 
         <KillsStrip progressionFraction={rs.progressionFraction} />
       </div>
+
+      {showDpsCheckSettings && (
+        <DpsCheckDialog onClose={() => setShowDpsCheckSettings(false)} onSaved={rs.refresh} />
+      )}
     </div>
   );
 }

@@ -27,11 +27,11 @@ export function useSettings() {
   }, [electron]);
 
   const save = useCallback(
-    (next: GuildToolsSettings) => {
+    (next: GuildToolsSettings): Promise<void> => {
       setSettings(next);
-      if (!electron) return;
+      if (!electron) return Promise.resolve();
       setSaving(true);
-      void electron
+      return electron
         .saveSettings(next)
         .then((saved) => {
           setSettings(saved);
