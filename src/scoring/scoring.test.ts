@@ -19,6 +19,7 @@ const baseDps: Raider = {
   gearCompletion: 90,
   gearDetail: null,
   portraitUrl: null,
+  mythicPlusRuns: [],
   parseTrend: 0,
   deaths: 0,
   pulls: 20,

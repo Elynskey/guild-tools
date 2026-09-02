@@ -16,6 +16,20 @@ export interface DeathCause {
   ability: string;
 }
 
+/** One completed Mythic+ run, from Raider.IO's mythic_plus_recent_runs (confirmed live -- newest first, capped at 10). */
+export interface MythicPlusRun {
+  dungeon: string;
+  level: number;
+  /** ISO timestamp. */
+  completedAt: string;
+  score: number;
+  /** 0-3 -- how many keystone upgrade chests this run earned (timed how far under par). */
+  upgrades: number;
+  iconUrl: string;
+  /** Raider.IO's own page for this specific run. */
+  url: string;
+}
+
 export interface Raider {
   name: string;
   role: Role;
@@ -25,6 +39,8 @@ export interface Raider {
   rioHighestThisSeason: number;
   ilvlEquipped: number;
   ilvlHighestThisSeason: number;
+  /** Newest first, capped at 10 -- see MythicPlusRun. */
+  mythicPlusRuns: MythicPlusRun[];
   /** DPS: % of the guild's minimum DPS while alive. Healers/tanks: HPS/survivability percentile 0-100, pooled across the season so far (see warcraftlogs.cjs). */
   perf: number;
   /** % of gem/enchant slots correct vs the monthly reference table. */

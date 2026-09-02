@@ -5,6 +5,7 @@ import { Professions } from './screens/Professions/Professions';
 import { PullFeedback } from './screens/PullFeedback/PullFeedback';
 import { LootHistory } from './screens/LootHistory/LootHistory';
 import { SeasonLootReport } from './screens/SeasonLootReport/SeasonLootReport';
+import { MythicPlus } from './screens/MythicPlus/MythicPlus';
 import { Settings } from './screens/Settings/Settings';
 import { RaidSignups } from './screens/RaidSignups/RaidSignups';
 import { UpdateBanner } from './shared/UpdateBanner';
@@ -34,6 +35,7 @@ export function App() {
         <Route path="/pull-feedback" element={<PullFeedback />} />
         <Route path="/loot-history" element={<LootHistory />} />
         <Route path="/loot-report" element={<SeasonLootReport />} />
+        <Route path="/mythic-plus" element={<MythicPlus />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/raid-signups" element={<RaidSignups />} />
       </Routes>

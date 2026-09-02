@@ -56,6 +56,7 @@ function mergeSources({ wowauditRoster, rio, gearCompletion, portraits, wcl }) {
         rioHighestThisSeason: rioData.rioHighestThisSeason,
         ilvlEquipped: rioData.ilvlEquipped,
         ilvlHighestThisSeason: rioData.ilvlHighestThisSeason,
+        mythicPlusRuns: rioData.mythicPlusRuns ?? [],
         gearCompletion: gearCompletion[key]?.score ?? 0,
         gearDetail: gearCompletion[key] ?? null,
         portraitUrl: portraits?.[key] ?? null,

@@ -39,10 +39,27 @@ const ROLE_MAP = { TANK: 'tank', HEALING: 'healer', DPS: 'dps' };
 // guilds can have members whose characters live on a different (linked) realm. wowaudit's
 // roster carries each character's real realm; using the guild's realm for everyone 404s/400s
 // for anyone not actually on it (confirmed live — e.g. a member found on "Argent Dawn").
+// Real shape confirmed live against this guild's own roster: an array of run objects,
+// newest first, capped at the 10 most recent -- {dungeon, short_name, mythic_level,
+// completed_at, score, num_keystone_upgrades, icon_url, url, ...}. Trimmed down to just
+// what the app actually shows; the full payload also carries affixes/background_image_
+// url/spec/role per run, none of which this feature needs.
+function mapRun(run) {
+  return {
+    dungeon: run.dungeon,
+    level: run.mythic_level,
+    completedAt: run.completed_at,
+    score: run.score,
+    upgrades: run.num_keystone_upgrades,
+    iconUrl: run.icon_url,
+    url: run.url,
+  };
+}
+
 async function fetchCharacterProfile(region, realm, name) {
   const url =
     `${BASE}/characters/profile?region=${region}&realm=${slugifyRealm(realm)}&name=${encodeURIComponent(name)}` +
-    `&fields=${encodeURIComponent('mythic_plus_scores_by_season:current,gear')}`;
+    `&fields=${encodeURIComponent('mythic_plus_scores_by_season:current,gear,mythic_plus_recent_runs')}`;
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Raider.IO character fetch failed for ${name}-${realm}: ${res.status} ${res.statusText}`);
   const data = await res.json();
@@ -55,13 +72,14 @@ async function fetchCharacterProfile(region, realm, name) {
     role: ROLE_MAP[data.active_spec_role] ?? 'dps',
     rioCurrent: data.mythic_plus_scores_by_season?.[0]?.scores?.all ?? 0,
     ilvlEquipped: data.gear?.item_level_equipped ?? 0,
+    mythicPlusRuns: (data.mythic_plus_recent_runs ?? []).map(mapRun),
   };
 }
 
 /**
  * @param {{ name: string, realm: string, region: string }} guild — guild.region is used for every character; guild.realm is only the default/fallback
  * @param {Array<{ name: string, realm?: string }>} characters — the raid team's roster (from wowaudit), NOT the full guild
- * @returns {Promise<Array<{ key, name, realm, class, spec, role, rioCurrent, rioHighestThisSeason, ilvlEquipped, ilvlHighestThisSeason }>>} keyed by charKey(name, realm) via the `key` field -- see the comment on charKey for why bare name isn't safe to join on
+ * @returns {Promise<Array<{ key, name, realm, class, spec, role, rioCurrent, rioHighestThisSeason, ilvlEquipped, ilvlHighestThisSeason, mythicPlusRuns }>>} keyed by charKey(name, realm) via the `key` field -- see the comment on charKey for why bare name isn't safe to join on
  */
 async function fetchRaiderIO(guild, characters) {
   const withScores = await Promise.all(characters.map((c) => fetchCharacterProfile(guild.region, c.realm || guild.realm, c.name)));

@@ -16,6 +16,7 @@ function scoredRaider(name: string, deathCausesInWindow: { boss: string; ability
     gearCompletion: 90,
     gearDetail: null,
     portraitUrl: null,
+    mythicPlusRuns: [],
     parseTrend: 0,
     deaths: deathCausesInWindow.length,
     pulls: 20,

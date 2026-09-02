@@ -1,4 +1,4 @@
-import type { DeathCause, GearDetail, Raider } from '../scoring/types';
+import type { DeathCause, GearDetail, MythicPlusRun, Raider } from '../scoring/types';
 
 /**
  * Sample roster — fabricated data for the prototype. Real officer names from the
@@ -28,6 +28,34 @@ function synthesizeGearDetail(name: string, gearCompletion: number): GearDetail 
   return { missingEnchants, emptySockets: gap > 25 ? 1 : 0, totalSockets: 2 };
 }
 
+// Same "no real Blizzard/Raider.IO fetch behind a fabricated raider" reasoning as
+// synthesizeGearDetail -- a believable, stable-per-name run history so the M+ Keys
+// screen has something to show in browser-preview mode. Dungeon names are real
+// (confirmed live against this tier's actual Raider.IO data), the runs themselves
+// are invented. iconUrl/url are left blank -- there's no real per-run asset behind
+// fabricated data, and the UI only renders those when non-empty.
+const SAMPLE_DUNGEONS = ['Ruby Life Pools', "Kings' Rest", 'The Blinding Vale', 'Operation: Mechagon', 'Priory of the Sacred Flame'];
+
+function synthesizeMythicPlusRuns(name: string, rioCurrent: number): MythicPlusRun[] {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) % 997;
+  const baseLevel = Math.max(2, Math.round(rioCurrent / 130));
+  const runCount = 3 + (hash % 4);
+  const nowMs = Date.now();
+  return Array.from({ length: runCount }, (_, i) => {
+    const level = Math.max(2, baseLevel + ((hash + i * 3) % 5) - 2);
+    return {
+      dungeon: SAMPLE_DUNGEONS[(hash + i) % SAMPLE_DUNGEONS.length],
+      level,
+      completedAt: new Date(nowMs - i * 2 * 24 * 60 * 60 * 1000).toISOString(),
+      score: Math.round(level * 28 + (hash % 20)),
+      upgrades: (hash + i) % 4,
+      iconUrl: '',
+      url: '',
+    };
+  });
+}
+
 const raider = (
   name: string,
   role: Raider['role'],
@@ -52,6 +80,7 @@ const raider = (
   rioHighestThisSeason,
   ilvlEquipped,
   ilvlHighestThisSeason,
+  mythicPlusRuns: synthesizeMythicPlusRuns(name, rioCurrent),
   perf,
   gearCompletion,
   gearDetail: synthesizeGearDetail(name, gearCompletion),

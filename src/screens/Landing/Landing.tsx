@@ -41,6 +41,12 @@ const CARDS: NavCardDef[] = [
     description: 'Every Need win this tier, per raider -- who\'s behind, who\'s kept what, and when they last won something.',
   },
   {
+    to: '/mythic-plus',
+    icon: 'key-round',
+    title: 'M+ Keys',
+    description: 'Raider.IO score and recent Mythic+ runs, per raider.',
+  },
+  {
     to: '/raid-signups',
     icon: 'users',
     title: 'Raid Signups',
