@@ -79,6 +79,17 @@ export function RaiderDetailPanel({ raider: r, rioGateText, ilvlGateText }: Raid
           <span style={{ color: 'var(--text-gold)' }}>Next step. </span>
           {r.feedback.action}
         </p>
+        {r.role === 'healer' && r.perfRaw != null && (
+          <div style={{ marginTop: 2, fontSize: 'var(--text-body-s)', color: 'var(--text-muted)' }}>
+            HPS: <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-body)' }}>{r.perfRaw.toLocaleString('en-US')}</span>
+            {r.perfRawAvg != null && (
+              <>
+                {' '}
+                — guild average <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-body)' }}>{Math.round(r.perfRawAvg).toLocaleString('en-US')}</span>
+              </>
+            )}
+          </div>
+        )}
         {r.pullsInWindow > 0 && (
           <div style={{ marginTop: 2, fontSize: 'var(--text-body-s)', color: 'var(--text-muted)' }}>
             Died on {Math.round(r.deathRate * 100)}% of pulls — guild average {Math.round(r.deathRateAvg * 100)}%

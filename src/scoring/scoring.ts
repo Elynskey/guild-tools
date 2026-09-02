@@ -147,11 +147,7 @@ export interface DeathRateStats {
 
 const EMPTY_STATS: DeathRateStats = { mean: 0, stdDev: 0 };
 
-/** Population mean/std-dev of a set of 0-1 rates. Exported for reuse anywhere a raw
- * rate needs the same "how far from the guild's average" framing — see
- * deathMechanics.ts's buildDeathRateComparison, which pools the same shape of data
- * (tier-to-date deaths/pulls) into a roster-wide ranked list instead of a per-raider
- * band cap. */
+/** Population mean/std-dev of a set of 0-1 rates. */
 export function computeStats(values: number[]): DeathRateStats {
   if (values.length === 0) return EMPTY_STATS;
   const mean = values.reduce((a, v) => a + v, 0) / values.length;
