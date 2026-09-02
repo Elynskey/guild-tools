@@ -43,6 +43,8 @@ export interface Raider {
   mythicPlusRuns: MythicPlusRun[];
   /** DPS: % of the guild's minimum DPS while alive. Healers/tanks: HPS/survivability percentile 0-100, pooled across the season so far (see warcraftlogs.cjs). */
   perf: number;
+  /** Raw metric behind perf -- dps: raw damage/s from the same report perf uses; healer: season-average healing/s; tank: season-average damage taken/s (lower is better -- less damage taken is more survivable). Null when unavailable (sample mode falls back to a synthesized value; a real fetch can still be null for a brand-new raider with too little logged history). */
+  perfRaw: number | null;
   /** % of gem/enchant slots correct vs the monthly reference table. */
   gearCompletion: number;
   /** What's behind gearCompletion -- which slots lack an enchant, how many sockets are empty. Null when unavailable. */
@@ -130,8 +132,14 @@ export interface ScoredRaider extends Raider {
   pullsInWindow: number;
   /** Death causes for whichever window is active — night uses nightDeathCauses, rolled uses deathCauses. */
   deathCausesInWindow: DeathCause[];
-  /** deathsInWindow / pullsInWindow, 0-1 (0 if pullsInWindow is 0). What the death cap actually judges. */
+  /** deathsInWindow / pullsInWindow, 0-1 (0 if pullsInWindow is 0). */
   deathRate: number;
+  /** Std devs deathRate sits from the roster's own average this window -- what the death cap actually judges now (see DEATH_RATE_YELLOW_SIGMA/RED_SIGMA). 0 when there's no peer comparison (see scoreRaider's deathStats default). Positive = dying more than the guild average. */
+  deathRateZ: number;
+  /** Roster average deathRate this window (0-1), for display alongside deathRate -- "are you dying more or less than everyone else." */
+  deathRateAvg: number;
+  /** Average perfRaw among scored raiders in the same role, for display alongside perfRaw -- "average HPS/DTPS/DPS this tier." Null when no role peer has a perfRaw value. */
+  perfRawAvg: number | null;
   icon: string;
   subline: string;
   feedback: Feedback;

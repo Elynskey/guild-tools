@@ -63,7 +63,15 @@ function computeGearDetail(equipmentData) {
 
   for (const item of items) {
     const slotType = item.slot?.type;
-    if (ENCHANTABLE_SLOTS.has(slotType)) {
+    // Shields occupy OFF_HAND like a caster's off-hand frill does, but Blizzard
+    // removed shield enchants entirely -- confirmed via item_class/item_subclass
+    // ("Armor" / "Shield", id 4/6) on a real equipped shield. A real off-hand item
+    // (frill/tome) is item_class "Item Enhancement" or similar, not Shield, and
+    // still takes an off-hand enchant, so this excludes shields specifically
+    // rather than dropping OFF_HAND for everyone (which would hide a real gap for
+    // casters who ARE missing their off-hand enchant).
+    const isShield = item.item_subclass?.name === 'Shield';
+    if (ENCHANTABLE_SLOTS.has(slotType) && !isShield) {
       enchantableCount++;
       if (item.enchantments?.length) enchantedCount++;
       else missingEnchants.push(item.slot?.name ?? slotType);

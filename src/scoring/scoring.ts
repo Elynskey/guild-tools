@@ -129,15 +129,52 @@ export function weightedScore(r: Raider, window: Window = 'rolled'): ScoreParts 
  *
  * Judged as a RATE (deaths / pulls), not a raw count — a raw count
  * conflates "died 3 times in 60 pulls" with "died 3 times in 10 pulls",
- * which aren't the same raider. Officer-adjustable thresholds, same as
- * MIN_DPS_REQUIREMENT.
+ * which aren't the same raider. Relative to the guild's OWN death rate
+ * this window, not a fixed percentage: a flat "30% of pulls" cutoff
+ * meant the same number capped a raid where everyone dies constantly
+ * (mechanic-heavy tier) the same as one where nobody does. Judged in
+ * standard deviations from the roster's own mean instead, so the
+ * question is always "are you dying more than your guildmates," not
+ * "are you above some number picked months ago."
  * ------------------------------------------------------------------ */
-export const DEATH_RATE_RED_THRESHOLD = 0.3; // died on >30% of pulls -> Red, regardless of score
-export const DEATH_RATE_YELLOW_THRESHOLD = 0.15; // died on >15% of pulls -> caps Green to Yellow only
+export const DEATH_RATE_YELLOW_SIGMA = 1; // more than 1 std dev above the guild's average death rate -> caps Green to Yellow only
+export const DEATH_RATE_RED_SIGMA = 2; // more than 2 std devs above average -> Red, regardless of score
 
-export function applyDeathCap(band: Band, deathRate: number): Band {
-  if (deathRate > DEATH_RATE_RED_THRESHOLD) return 'red';
-  if (deathRate > DEATH_RATE_YELLOW_THRESHOLD && band === 'green') return 'yellow';
+export interface DeathRateStats {
+  mean: number;
+  stdDev: number;
+}
+
+const EMPTY_STATS: DeathRateStats = { mean: 0, stdDev: 0 };
+
+/** Population mean/std-dev of a set of 0-1 rates. Exported for reuse anywhere a raw
+ * rate needs the same "how far from the guild's average" framing — see
+ * deathMechanics.ts's buildDeathRateComparison, which pools the same shape of data
+ * (tier-to-date deaths/pulls) into a roster-wide ranked list instead of a per-raider
+ * band cap. */
+export function computeStats(values: number[]): DeathRateStats {
+  if (values.length === 0) return EMPTY_STATS;
+  const mean = values.reduce((a, v) => a + v, 0) / values.length;
+  const variance = values.reduce((a, v) => a + (v - mean) ** 2, 0) / values.length;
+  return { mean, stdDev: Math.sqrt(variance) };
+}
+
+const windowPulls = (r: Raider, window: Window): number => (window === 'night' ? r.nightPulls : r.pulls);
+const windowDeaths = (r: Raider, window: Window): number => (window === 'night' ? r.nightDeaths : r.deaths);
+
+/** Roster-wide death-rate mean/std-dev for one window — computed once per roster
+ * fetch (see scoreRoster), not per raider, so every raider is compared against the
+ * same distribution. Raiders with no pulls this window are excluded (no rate to
+ * pool, same reasoning as warcraftlogs.cjs's percentile computations). */
+export function computeDeathRateStats(roster: Raider[], window: Window): DeathRateStats {
+  return computeStats(roster.filter((r) => windowPulls(r, window) > 0).map((r) => windowDeaths(r, window) / windowPulls(r, window)));
+}
+
+const deathRateZ = (deathRate: number, stats: DeathRateStats): number => (stats.stdDev > 0 ? (deathRate - stats.mean) / stats.stdDev : 0);
+
+export function applyDeathCap(band: Band, deathRateZScore: number): Band {
+  if (deathRateZScore > DEATH_RATE_RED_SIGMA) return 'red';
+  if (deathRateZScore > DEATH_RATE_YELLOW_SIGMA && band === 'green') return 'yellow';
   return band;
 }
 
@@ -146,11 +183,16 @@ interface FeedbackDerived {
   deathsInWindow: number;
   pullsInWindow: number;
   deathRate: number;
+  deathRateZ: number;
+  deathRateAvg: number;
   deathCausesInWindow: DeathCause[];
   perf: number;
+  perfRawAvg: number | null;
   gates: GateEvaluation;
   scores: ScoreParts;
 }
+
+const fmtNum = (n: number): string => Math.round(n).toLocaleString('en-US');
 
 /* ------------------------------------------------------------------ *
  * Feedback.
@@ -172,9 +214,10 @@ interface FeedbackDerived {
 export function generateFeedback(r: Raider, window: Window, gates: Gates, derived: FeedbackDerived): Feedback {
   const { rioBest, ilvlBest, rioFail, ilvlFail, ineligible } = derived.gates;
   const { perfScore, gearScore, trendScore, score } = derived.scores;
-  const { band, deathsInWindow, pullsInWindow, deathRate, deathCausesInWindow, perf } = derived;
+  const { band, deathsInWindow, pullsInWindow, deathRate, deathRateZ, deathRateAvg, deathCausesInWindow, perf, perfRawAvg } = derived;
   const deathPct = Math.round(deathRate * 100);
-  const deathText = `${deathsInWindow} death${deathsInWindow === 1 ? '' : 's'} on ${pullsInWindow} pull${pullsInWindow === 1 ? '' : 's'} (${deathPct}%)`;
+  const deathAvgPct = Math.round(deathRateAvg * 100);
+  const deathText = `${deathsInWindow} death${deathsInWindow === 1 ? '' : 's'} on ${pullsInWindow} pull${pullsInWindow === 1 ? '' : 's'} (${deathPct}%, guild average ${deathAvgPct}%)`;
   // The specific mechanic that most recently killed them, when Warcraft Logs has it --
   // "review that mechanic" beats a generic "watch a log with an officer" suggestion.
   const topCause = deathCausesInWindow[0];
@@ -184,12 +227,20 @@ export function generateFeedback(r: Raider, window: Window, gates: Gates, derive
   const pick = <T,>(arr: T[]): T => arr[h % arr.length];
 
   const missing = r.gearCompletion >= 100 ? 0 : Math.max(1, Math.round((100 - r.gearCompletion) / GEAR_SLOT_DIVISOR));
+  // Raw metric behind perf, parenthesized onto the description so an officer sees
+  // WHY the percentile/%-of-minimum is what it is, not just the abstracted number
+  // -- e.g. "HPS percentile at 72nd (41,300 HPS, guild average 36,800)". Omitted
+  // entirely when perfRaw is unavailable (sample mode default, or too little
+  // logged history yet) rather than showing a hole in the sentence.
+  const perfUnit = r.role === 'dps' ? 'DPS' : r.role === 'healer' ? 'HPS' : 'damage taken/s';
+  const perfRawText =
+    r.perfRaw == null ? '' : ` (${fmtNum(r.perfRaw)} ${perfUnit}${perfRawAvg != null ? `, guild average ${fmtNum(perfRawAvg)}` : ''})`;
   const perfText =
     r.role === 'dps'
-      ? `damage at ${perf}% of the guild's DPS minimum`
+      ? `damage at ${perf}% of the guild's DPS minimum${perfRawText}`
       : r.role === 'healer'
-        ? `HPS percentile at ${ordinal(perf)}`
-        : `survivability percentile at ${ordinal(perf)}`;
+        ? `HPS percentile at ${ordinal(perf)}${perfRawText}`
+        : `survivability percentile at ${ordinal(perf)}${perfRawText}`;
   const gearText =
     missing === 0 ? "every gem and enchant in place against this month’s reference table" : `${missing} slot${missing > 1 ? 's' : ''} still missing a gem or enchant`;
   const trendText =
@@ -225,7 +276,7 @@ export function generateFeedback(r: Raider, window: Window, gates: Gates, derive
     trend: night ? 'Last night' : 'Trend',
   };
   const dimensionValue: Record<ScoreDimension, string> = {
-    perf: r.role === 'dps' ? `${perf}% of minimum` : `${ordinal(perf)} percentile`,
+    perf: `${r.role === 'dps' ? `${perf}% of minimum` : `${ordinal(perf)} percentile`}${r.perfRaw != null ? ` · ${fmtNum(r.perfRaw)}` : ''}`,
     gear: `${r.gearCompletion}%`,
     trend:
       r.role === 'dps'
@@ -295,18 +346,18 @@ export function generateFeedback(r: Raider, window: Window, gates: Gates, derive
     weakest: weak.k,
     breakdown,
     status:
-      deathRate > DEATH_RATE_RED_THRESHOLD
+      deathRateZ > DEATH_RATE_RED_SIGMA
         ? `${bandWord}. ${deathText}${causeText ? ` -- most recently ${causeText}` : ''} set the band; the score was ${score}/100.`
-        : deathRate > DEATH_RATE_YELLOW_THRESHOLD
+        : deathRateZ > DEATH_RATE_YELLOW_SIGMA
           ? `${bandWord}. ${deathText}${causeText ? ` -- most recently ${causeText}` : ''} holds it here -- the score was ${score}/100.`
           : `${bandWord}. ${score}/100, both gates clear.`,
     working: second.s >= 78 ? `${up(strong.t)}. ${up(second.t)}.` : `${up(strong.t)}.`,
     attention:
-      deathRate > DEATH_RATE_RED_THRESHOLD
+      deathRateZ > DEATH_RATE_RED_SIGMA
         ? `${deathText}${causeText ? ` -- most recently ${causeText}` : ''}. Under that, ${gapText.charAt(0).toLowerCase() + gapText.slice(1)}`
         : gapText,
     action:
-      deathRate > DEATH_RATE_RED_THRESHOLD
+      deathRateZ > DEATH_RATE_RED_SIGMA
         ? causeText
           ? pick([`${causeText} -- review that mechanic with an officer before Saturday.`, `Walk ${topCause!.boss} back and isolate ${topCause!.ability}. One rep, this week.`])
           : pick([`Survivability only this week. The damage is already there.`, `One mechanic, one pull, with an officer before Saturday. Nothing else.`])
@@ -318,23 +369,52 @@ export function generateFeedback(r: Raider, window: Window, gates: Gates, derive
   };
 }
 
-/** Full evaluation for one raider in one window. */
-export function scoreRaider(raider: Raider, window: Window = 'rolled', gates: Gates = DEFAULT_GATES): ScoredRaider {
+/**
+ * Full evaluation for one raider in one window.
+ *
+ * `deathStats` is the roster's own death-rate mean/std-dev for this window (see
+ * computeDeathRateStats) — the death cap is relative to it, not a fixed threshold.
+ * `perfRawAvg` is the average perfRaw among this raider's role peers (see
+ * scoreRoster), for the feedback text's "guild average" comparison. Both default
+ * to no comparison data so a single raider can still be scored in isolation
+ * (tests, a one-off check); real roster-wide scoring should go through scoreRoster
+ * below, which computes both once and passes them to every raider.
+ */
+export function scoreRaider(
+  raider: Raider,
+  window: Window = 'rolled',
+  gates: Gates = DEFAULT_GATES,
+  deathStats: DeathRateStats = EMPTY_STATS,
+  perfRawAvg: number | null = null,
+): ScoredRaider {
   const g = evaluateGates(raider, gates);
   const perf = raider.perf;
   const night = window === 'night';
   const deathsInWindow = night ? raider.nightDeaths : raider.deaths;
   const pullsInWindow = night ? raider.nightPulls : raider.pulls;
   const deathRate = pullsInWindow > 0 ? deathsInWindow / pullsInWindow : 0;
+  const deathRateZScore = deathRateZ(deathRate, deathStats);
   const deathCausesInWindow = night ? raider.nightDeathCauses : raider.deathCauses;
   const scores = weightedScore(raider, window);
 
   const scoreBand: Band = scores.score >= gates.green ? 'green' : scores.score >= gates.yellow ? 'yellow' : 'red';
-  let band = applyDeathCap(scoreBand, deathRate);
+  let band = applyDeathCap(scoreBand, deathRateZScore);
   const deathCapped = band !== scoreBand; // did the death rate actually hold the band down, not just "any deaths at all"
   if (g.ineligible) band = 'ineligible';
 
-  const derived: FeedbackDerived = { band, deathsInWindow, pullsInWindow, deathRate, deathCausesInWindow, perf, gates: g, scores };
+  const derived: FeedbackDerived = {
+    band,
+    deathsInWindow,
+    pullsInWindow,
+    deathRate,
+    deathRateZ: deathRateZScore,
+    deathRateAvg: deathStats.mean,
+    deathCausesInWindow,
+    perf,
+    perfRawAvg,
+    gates: g,
+    scores,
+  };
   const feedback = generateFeedback(raider, window, gates, derived);
 
   return {
@@ -355,11 +435,29 @@ export function scoreRaider(raider: Raider, window: Window = 'rolled', gates: Ga
     deathsInWindow,
     pullsInWindow,
     deathRate,
+    deathRateZ: deathRateZScore,
+    deathRateAvg: deathStats.mean,
+    perfRawAvg,
     deathCausesInWindow,
     icon: specIcon(raider.spec, raider.class),
     subline: `${raider.spec} ${raider.class} · ${raider.role === 'dps' ? 'DPS' : up(raider.role)} · ilvl ${g.ilvlBest} · RIO ${g.rioBest}`,
     feedback,
   };
+}
+
+/** Scores a whole roster for one window, computing the death-rate comparison and
+ * each role's average perfRaw once — the entry point real app code should use
+ * (Raider Status). Calling scoreRaider directly per-raider without this would
+ * compare each raider only against themselves, silently disabling the death cap
+ * and losing the "guild average" context in their feedback text. */
+export function scoreRoster(roster: Raider[], window: Window = 'rolled', gates: Gates = DEFAULT_GATES): ScoredRaider[] {
+  const deathStats = computeDeathRateStats(roster, window);
+  const perfRawAvgByRole = new Map<Raider['role'], number | null>();
+  for (const role of ['tank', 'healer', 'dps'] as const) {
+    const values = roster.filter((r) => r.role === role && r.perfRaw != null).map((r) => r.perfRaw as number);
+    perfRawAvgByRole.set(role, values.length > 0 ? values.reduce((a, v) => a + v, 0) / values.length : null);
+  }
+  return roster.map((raider) => scoreRaider(raider, window, gates, deathStats, perfRawAvgByRole.get(raider.role) ?? null));
 }
 
 /** Sorting used by the "Needs support first" switch (ON by default). */

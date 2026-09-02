@@ -1,6 +1,7 @@
 import { PullFeedbackHeader } from './PullFeedbackHeader';
 import { MechanicsSummary } from './MechanicsSummary';
 import { DeathMechanicsReport } from './DeathMechanicsReport';
+import { DeathRateComparison } from './DeathRateComparison';
 import { PullLog } from './PullLog';
 import { usePullFeedback } from './usePullFeedback';
 
@@ -38,6 +39,7 @@ export function PullFeedback() {
               {pf.totalPulls} pull{pf.totalPulls === 1 ? '' : 's'} · {pf.kills} kill{pf.kills === 1 ? '' : 's'}
               {pf.refreshing && ' · loading…'}
             </div>
+            <DeathRateComparison rows={pf.deathRateComparison} />
             <DeathMechanicsReport entries={pf.deathMechanics} />
             <MechanicsSummary groups={pf.mechanicsNeedingWork} />
             <PullLog groups={pf.bossGroups} />

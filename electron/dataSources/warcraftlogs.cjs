@@ -404,6 +404,15 @@ function nightFieldsFromAggregate(agg, roleByName, minDps) {
  * distribution itself is built from many more than 2 data points, and it directly
  * rewards "collects more data": more raid nights logged this tier -> a more
  * reliable read on what's actually normal variance for this role in this raid.
+ *
+ * @returns {{ percentile: Map<string, number>, raw: Map<string, number> }} `raw` is
+ *   each raider's own season-average throughput (the number the percentile is
+ *   computed FROM) -- surfaced so the app can show "42,300 HPS (72nd percentile)"
+ *   instead of the percentile alone, and so it can average `raw` across a role for
+ *   an "average HPS this tier" comparison (equal weight per raider, unlike `mean`
+ *   above which weights raiders with more logged nights more heavily -- that
+ *   weighting is right for the percentile's reference distribution, wrong for a
+ *   plain "what does the average healer put out" number).
  */
 function computeSeasonPercentiles(aggregates, metricKey, role, roleOf, higherIsBetter) {
   const samples = [];
@@ -417,34 +426,36 @@ function computeSeasonPercentiles(aggregates, metricKey, role, roleOf, higherIsB
     }
   }
 
-  const result = new Map();
-  if (samples.length === 0) return result;
+  const percentile = new Map();
+  const raw = new Map();
+  for (const [name, { total, count }] of perRaider) raw.set(name, total / count);
+  if (samples.length === 0) return { percentile, raw };
   if (perRaider.size === 1) {
-    result.set([...perRaider.keys()][0], 100); // nothing to compare against
-    return result;
+    percentile.set([...perRaider.keys()][0], 100); // nothing to compare against
+    return { percentile, raw };
   }
 
   const mean = samples.reduce((a, v) => a + v, 0) / samples.length;
   const variance = samples.reduce((a, v) => a + (v - mean) ** 2, 0) / samples.length;
   const stddev = Math.sqrt(variance);
 
-  for (const [name, { total, count }] of perRaider) {
-    const avg = total / count;
+  for (const [name, avg] of raw) {
     if (stddev === 0) {
-      result.set(name, 50); // no spread in the data at all -- nobody is above or below
+      percentile.set(name, 50); // no spread in the data at all -- nobody is above or below
       continue;
     }
     const z = ((avg - mean) / stddev) * (higherIsBetter ? 1 : -1);
-    result.set(name, Math.round(normalCdf(z) * 100));
+    percentile.set(name, Math.round(normalCdf(z) * 100));
   }
-  return result;
+  return { percentile, raw };
 }
 
 /**
  * @param {{ name: string, realm: string, region: string }} guild
  * @param {string} tierZoneName — only reports in this raid tier count (config.tier.name)
  * @param {Record<string,'tank'|'healer'|'dps'>} roleByName — from wowaudit, since WCL doesn't know raid role assignment
- * @returns {Promise<{ performance: Record<string, { role: 'tank'|'healer'|'dps', class: string|null, spec: string|null, perf: number, parseTrend: number, deaths: number, pulls: number, deathCauses: {boss:string,ability:string}[], nightParse: number, nightDeaths: number, nightPulls: number, nightDeathCauses: {boss:string,ability:string}[] }>, heroicBossesKilled: number, observedRealms: Record<string, string[]> }>}
+ * @returns {Promise<{ performance: Record<string, { role: 'tank'|'healer'|'dps', class: string|null, spec: string|null, perf: number, perfRaw: number|null, parseTrend: number, deaths: number, pulls: number, deathCauses: {boss:string,ability:string}[], nightParse: number, nightDeaths: number, nightPulls: number, nightDeathCauses: {boss:string,ability:string}[] }>, heroicBossesKilled: number, observedRealms: Record<string, string[]> }>}
+ *   perfRaw is the raw metric behind perf -- dps: damage/s from the same report perf uses; healer: season-average healing/s; tank: season-average damage taken/s (lower is better). Null when unavailable.
  */
 async function fetchWarcraftLogs(guild, tierZoneName, roleByName) {
   const settings = settingsStore.load();
@@ -483,8 +494,8 @@ async function fetchWarcraftLogs(guild, tierZoneName, roleByName) {
   // compare against. DPS is unaffected -- it stays %-of-the-guild's-minimum, a
   // flat threshold rather than a ranking, so it has no "peer pool" to grow.
   const roleOfResolved = (name) => resolvedIdentity[name]?.role ?? roleByName[name];
-  const seasonHealerPercent = computeSeasonPercentiles(aggregates, 'hps', 'healer', roleOfResolved, true);
-  const seasonTankPercent = computeSeasonPercentiles(aggregates, 'damageTaken', 'tank', roleOfResolved, false);
+  const { percentile: seasonHealerPercent, raw: seasonHealerRaw } = computeSeasonPercentiles(aggregates, 'hps', 'healer', roleOfResolved, true);
+  const { percentile: seasonTankPercent, raw: seasonTankRaw } = computeSeasonPercentiles(aggregates, 'damageTaken', 'tank', roleOfResolved, false);
 
   const names = Object.keys(roleByName);
   const result = {};
@@ -493,6 +504,18 @@ async function fetchWarcraftLogs(guild, tierZoneName, roleByName) {
     // Perf: latest report that has this player, tier-to-date.
     const seriesAll = aggregates.map((agg) => perfSnapshot(name, agg)).filter((v) => v != null);
     const seriesLast = seriesAll[seriesAll.length - 1] ?? null;
+    // Raw DPS from that SAME report, using the exact PER-REPORT role check
+    // perfSnapshotFor uses internally (agg.actualIdentity, not the tier-wide
+    // resolvedIdentity below) -- a raider who played an off-role one night has a
+    // seriesAll entry from a different branch (healerPercent/tankPercent, not
+    // %-of-minimum) that report, and this has to skip it the same way to stay
+    // index-aligned with seriesAll/seriesLast. This is the raw number %-of-minimum
+    // is computed from, not a season average, since DPS perf itself isn't
+    // season-pooled the way healer/tank percentile is.
+    const dpsRawSeriesAll = aggregates
+      .map((agg) => ((agg.actualIdentity.get(name)?.role ?? roleByName[name]) === MIN_DPS_ROLE ? agg.dps.get(name) : null))
+      .filter((v) => v != null);
+    const dpsRawLast = dpsRawSeriesAll[dpsRawSeriesAll.length - 1] ?? null;
     if (seriesLast == null) {
       // No logged raid history this tier yet (new recruit, long absence, etc) — skip
       // them rather than failing the whole roster fetch over one missing raider.
@@ -528,12 +551,19 @@ async function fetchWarcraftLogs(guild, tierZoneName, roleByName) {
     // primary role) so nobody silently loses a perf number.
     const role = roleOfResolved(name);
     const seasonPerf = role === 'healer' ? seasonHealerPercent.get(name) : role === 'tank' ? seasonTankPercent.get(name) : null;
+    // Raw metric behind perf, for display alongside the percentile/%-of-minimum --
+    // dpsRawLast can be a night behind seriesLast in the rare case their most
+    // recent appearance was an off-role night (see the comment above
+    // dpsRawSeriesAll); healer/tank use the same season pool perf itself draws
+    // from, so those two always agree in scope.
+    const perfRaw = role === MIN_DPS_ROLE ? dpsRawLast : role === 'healer' ? (seasonHealerRaw.get(name) ?? null) : role === 'tank' ? (seasonTankRaw.get(name) ?? null) : null;
 
     result[name] = {
       role,
       class: resolvedIdentity[name]?.class ?? null,
       spec: resolvedIdentity[name]?.spec ?? null,
       perf: seasonPerf ?? seriesLast,
+      perfRaw: perfRaw == null ? null : Math.round(perfRaw),
       parseTrend,
       deaths,
       pulls,

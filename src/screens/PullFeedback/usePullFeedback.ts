@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { getPullFeedback, listRaidNights } from '../../raid/pullsSource';
 import { groupMechanicsNeedingWorkByBoss, groupPullsByBoss } from '../../raid/pullLogic';
 import { getRoster } from '../../data/rosterSource';
-import { buildDeathMechanicsReport } from '../../scoring/deathMechanics';
+import { buildDeathMechanicsReport, buildDeathRateComparison } from '../../scoring/deathMechanics';
 import type { Pull, RaidNight } from '../../electron';
 import type { Raider } from '../../scoring/types';
 
@@ -37,6 +37,11 @@ export function usePullFeedback() {
     [roster],
   );
 
+  const deathRateComparison = useMemo(
+    () => buildDeathRateComparison(roster.map((r) => ({ name: r.name, deathsInWindow: r.deaths, pullsInWindow: r.pulls }))),
+    [roster],
+  );
+
   useEffect(() => {
     if (!selectedCode) return;
     setLoadingPulls(true);
@@ -59,6 +64,7 @@ export function usePullFeedback() {
     bossGroups,
     mechanicsNeedingWork,
     deathMechanics,
+    deathRateComparison,
     totalPulls: pulls?.length ?? 0,
     kills: pulls?.filter((p) => p.kill).length ?? 0,
     loading: loadingNights || (loadingPulls && pulls === null),

@@ -56,6 +56,22 @@ function synthesizeMythicPlusRuns(name: string, rioCurrent: number): MythicPlusR
   });
 }
 
+// Same "no real WCL fetch behind a fabricated raider" reasoning as synthesizeGearDetail
+// -- a believable raw number behind perf so the expanded feedback text ("41,300 HPS,
+// guild average 36,800") has something to show in browser-preview mode. Baselines are
+// invented, not read from any real season; dps inverts perf's own %-of-minimum against
+// a plausible minimum, healer/tank scale perf's 0-100 percentile onto a plausible
+// throughput range (tank inverted, since a HIGHER percentile means LESS damage taken).
+const SAMPLE_MIN_DPS = 180_000;
+const SAMPLE_HEALER_BASELINE_HPS = 34_000;
+const SAMPLE_TANK_BASELINE_DTPS = 42_000;
+
+function synthesizePerfRaw(role: Raider['role'], perf: number): number {
+  if (role === 'dps') return Math.round((perf / 100) * SAMPLE_MIN_DPS);
+  if (role === 'healer') return Math.round(SAMPLE_HEALER_BASELINE_HPS * (0.7 + (perf / 100) * 0.6));
+  return Math.round(SAMPLE_TANK_BASELINE_DTPS * (1.3 - (perf / 100) * 0.6));
+}
+
 const raider = (
   name: string,
   role: Raider['role'],
@@ -82,6 +98,7 @@ const raider = (
   ilvlHighestThisSeason,
   mythicPlusRuns: synthesizeMythicPlusRuns(name, rioCurrent),
   perf,
+  perfRaw: synthesizePerfRaw(role, perf),
   gearCompletion,
   gearDetail: synthesizeGearDetail(name, gearCompletion),
   // No Blizzard fetch behind fabricated raiders, so no real avatar to show -- RosterRow

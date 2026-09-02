@@ -1,3 +1,4 @@
+import { computeStats } from './scoring';
 import type { DeathCause } from './types';
 
 export interface DeathMechanicEntry {
@@ -43,6 +44,39 @@ export function buildDeathMechanicsReport(rows: DeathMechanicsSource[]): DeathMe
   // worst mechanic within that boss still first.
   list.sort((a, b) => a.boss.localeCompare(b.boss) || b.totalDeaths - a.totalDeaths);
   return list;
+}
+
+/** The only two fields buildDeathRateComparison needs -- same minimal-interface reasoning as DeathMechanicsSource, so a caller with the plain roster can build this without the scoring/gates/bands pipeline. */
+export interface DeathRateSource {
+  name: string;
+  deathsInWindow: number;
+  pullsInWindow: number;
+}
+
+export interface DeathRateComparisonRow {
+  name: string;
+  deathRate: number; // 0-1
+  pullsInWindow: number;
+  /** Std devs from the roster's own average this window -- same comparison scoring.ts's death cap uses, surfaced here as a ranked list across the whole roster instead of one raider's band. Positive = dying more than average. */
+  z: number;
+}
+
+/**
+ * "Are you dying more or less than everyone else" -- every raider's death rate this
+ * window, ranked against the roster's own average (see scoring.ts's
+ * computeDeathRateStats, which this shares its math with). Worst (most above
+ * average) first. Raiders with no pulls this window are omitted -- no rate to
+ * compare.
+ */
+export function buildDeathRateComparison(rows: DeathRateSource[]): DeathRateComparisonRow[] {
+  const withPulls = rows.filter((r) => r.pullsInWindow > 0);
+  const stats = computeStats(withPulls.map((r) => r.deathsInWindow / r.pullsInWindow));
+  return withPulls
+    .map((r) => {
+      const deathRate = r.deathsInWindow / r.pullsInWindow;
+      return { name: r.name, deathRate, pullsInWindow: r.pullsInWindow, z: stats.stdDev > 0 ? (deathRate - stats.mean) / stats.stdDev : 0 };
+    })
+    .sort((a, b) => b.z - a.z || b.deathRate - a.deathRate);
 }
 
 /** Died to the same mechanic this many times or more -- a pattern, not a one-off mistake. */

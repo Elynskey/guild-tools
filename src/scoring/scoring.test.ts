@@ -1,5 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_GATES, evaluateGates, applyDeathCap, weightedScore, scoreRaider, rosterSummary, sortWorstFirst, sortBestFirst } from './scoring';
+import {
+  DEFAULT_GATES,
+  DEATH_RATE_YELLOW_SIGMA,
+  DEATH_RATE_RED_SIGMA,
+  evaluateGates,
+  applyDeathCap,
+  computeStats,
+  weightedScore,
+  scoreRaider,
+  scoreRoster,
+  rosterSummary,
+  sortWorstFirst,
+  sortBestFirst,
+} from './scoring';
+import type { DeathRateStats } from './scoring';
 import type { Raider } from './types';
 
 // dps: perf is %-of-the-guild's-minimum-DPS (rescale formula applies).
@@ -16,6 +30,7 @@ const baseDps: Raider = {
   ilvlEquipped: 700,
   ilvlHighestThisSeason: 700,
   perf: 100,
+  perfRaw: null,
   gearCompletion: 90,
   gearDetail: null,
   portraitUrl: null,
@@ -98,32 +113,61 @@ describe('weightedScore', () => {
   });
 });
 
+// applyDeathCap's second argument is a z-score (std devs from the roster's own
+// average death rate this window, see computeDeathRateStats) since the cap is
+// relative to the guild, not a fixed percentage -- see scoring.ts's comment above
+// DEATH_RATE_YELLOW_SIGMA/DEATH_RATE_RED_SIGMA.
 describe('applyDeathCap', () => {
-  it('leaves band unchanged at a 0% death rate', () => {
+  it('leaves band unchanged at exactly the guild average (z = 0)', () => {
     expect(applyDeathCap('green', 0)).toBe('green');
     expect(applyDeathCap('yellow', 0)).toBe('yellow');
     expect(applyDeathCap('red', 0)).toBe('red');
   });
 
-  it('leaves band unchanged at a low death rate (a raw count alone is not enough)', () => {
-    // 2 deaths in 60 pulls (3.3%) would have forced Red under the old raw->=2 rule.
-    expect(applyDeathCap('green', 2 / 60)).toBe('green');
+  it('never caps for dying LESS than the guild average, however far below', () => {
+    expect(applyDeathCap('green', -3)).toBe('green');
   });
 
-  it('caps a rate just over the yellow threshold: only downgrades green to yellow, leaves yellow/red untouched', () => {
-    expect(applyDeathCap('green', 0.16)).toBe('yellow');
-    expect(applyDeathCap('yellow', 0.16)).toBe('yellow');
-    expect(applyDeathCap('red', 0.16)).toBe('red');
+  it('leaves band unchanged within 1 std dev above average', () => {
+    expect(applyDeathCap('green', 0.9)).toBe('green');
   });
 
-  it('leaves band unchanged exactly at the yellow threshold (boundary is exclusive)', () => {
-    expect(applyDeathCap('green', 0.15)).toBe('green');
+  it('caps a z-score just over the yellow sigma: only downgrades green to yellow, leaves yellow/red untouched', () => {
+    expect(applyDeathCap('green', 1.1)).toBe('yellow');
+    expect(applyDeathCap('yellow', 1.1)).toBe('yellow');
+    expect(applyDeathCap('red', 1.1)).toBe('red');
   });
 
-  it('forces red above the red threshold regardless of prior band', () => {
-    expect(applyDeathCap('green', 0.31)).toBe('red');
-    expect(applyDeathCap('yellow', 0.5)).toBe('red');
-    expect(applyDeathCap('red', 0.31)).toBe('red');
+  it('leaves band unchanged exactly at the yellow sigma (boundary is exclusive)', () => {
+    expect(applyDeathCap('green', DEATH_RATE_YELLOW_SIGMA)).toBe('green');
+  });
+
+  it('forces red above the red sigma regardless of prior band', () => {
+    expect(applyDeathCap('green', 2.1)).toBe('red');
+    expect(applyDeathCap('yellow', 5)).toBe('red');
+    expect(applyDeathCap('red', 2.1)).toBe('red');
+  });
+
+  it('leaves band unchanged exactly at the red sigma (boundary is exclusive)', () => {
+    expect(applyDeathCap('yellow', DEATH_RATE_RED_SIGMA)).toBe('yellow');
+  });
+});
+
+describe('computeStats', () => {
+  it('computes the population mean and standard deviation of a set of rates', () => {
+    const s = computeStats([0, 0.1, 0.2]);
+    expect(s.mean).toBeCloseTo(0.1, 5);
+    expect(s.stdDev).toBeCloseTo(0.0816, 3);
+  });
+
+  it('returns zeroed stats for an empty set -- nothing to compare against', () => {
+    expect(computeStats([])).toEqual({ mean: 0, stdDev: 0 });
+  });
+
+  it('a set with no spread has zero std dev', () => {
+    const s = computeStats([0.2, 0.2, 0.2]);
+    expect(s.mean).toBeCloseTo(0.2, 10);
+    expect(s.stdDev).toBeCloseTo(0, 10);
   });
 });
 
@@ -135,10 +179,21 @@ describe('scoreRaider', () => {
     expect(r.score).toBeNull();
   });
 
+  // scoreRaider's 4th arg is the roster's death-rate mean/std-dev for the window
+  // (see computeDeathRateStats) -- omitting it (as the ineligibility test above
+  // does) means no peer comparison, so the cap never triggers. These fixtures
+  // stand in for a guild where most people rarely die (mean 5%, std dev 3pts),
+  // making a 35% rate a clear outlier (z ~= 10, past DEATH_RATE_RED_SIGMA) and a
+  // 20% rate a lesser one (z = 1.5, between the yellow and red sigma) -- picked to
+  // reproduce the same "yellow zone" vs "red zone" narrative the old fixed
+  // 15%/30% thresholds tested, now expressed relative to a peer group.
+  const redZoneStats: DeathRateStats = { mean: 0.05, stdDev: 0.03 };
+  const yellowZoneStats: DeathRateStats = { mean: 0.05, stdDev: 0.1 };
+
   it('precedence is weighted score -> death cap -> gate ineligibility', () => {
-    // High score, 7 deaths on 20 pulls (35%, over the red threshold), but gates
-    // clear: death cap forces red, not ineligible.
-    const r = scoreRaider({ ...baseDps, perf: 120, gearCompletion: 100, parseTrend: 10, deaths: 7, pulls: 20 }, 'rolled', DEFAULT_GATES);
+    // High score, 7 deaths on 20 pulls (35%, a clear outlier against redZoneStats),
+    // but gates clear: death cap forces red, not ineligible.
+    const r = scoreRaider({ ...baseDps, perf: 120, gearCompletion: 100, parseTrend: 10, deaths: 7, pulls: 20 }, 'rolled', DEFAULT_GATES, redZoneStats);
     expect(r.band).toBe('red');
     expect(r.scored).toBe(true);
     expect(typeof r.score).toBe('number');
@@ -147,13 +202,13 @@ describe('scoreRaider', () => {
 
   it('death cap is window-scoped: night uses nightDeaths/nightPulls, rolled uses deaths/pulls', () => {
     const raider = { ...baseDps, perf: 120, gearCompletion: 100, deaths: 7, pulls: 20, nightDeaths: 0, nightPulls: 8 };
-    expect(scoreRaider(raider, 'rolled', DEFAULT_GATES).band).toBe('red'); // 7/20 = 35%
-    expect(scoreRaider(raider, 'night', DEFAULT_GATES).band).toBe('green'); // 0/8 = 0%, clean that night
+    expect(scoreRaider(raider, 'rolled', DEFAULT_GATES, redZoneStats).band).toBe('red'); // 7/20 = 35%, z ~= 10
+    expect(scoreRaider(raider, 'night', DEFAULT_GATES, redZoneStats).band).toBe('green'); // 0/8 = 0%, below average, no cap
   });
 
   it('deathCapped reflects whether the cap actually changed the band, not just "any deaths"', () => {
     // Already Red on score alone; a death rate in the yellow zone doesn't "cap" anything further.
-    const r = scoreRaider({ ...baseDps, perf: 80, gearCompletion: 20, parseTrend: -10, deaths: 4, pulls: 20 }, 'rolled', DEFAULT_GATES);
+    const r = scoreRaider({ ...baseDps, perf: 80, gearCompletion: 20, parseTrend: -10, deaths: 4, pulls: 20 }, 'rolled', DEFAULT_GATES, yellowZoneStats);
     expect(r.band).toBe('red');
     expect(r.deathCapped).toBe(false);
   });
@@ -163,6 +218,7 @@ describe('scoreRaider', () => {
       { ...baseDps, perf: 80, gearCompletion: 20, parseTrend: -10, deaths: 7, pulls: 20, deathCauses: [{ boss: 'Sszorak', ability: 'Venomous Detonation' }] },
       'rolled',
       DEFAULT_GATES,
+      redZoneStats,
     );
     expect(r.feedback.status).toContain('Venomous Detonation on Sszorak');
     expect(r.feedback.attention).toContain('Venomous Detonation on Sszorak');
@@ -173,7 +229,7 @@ describe('scoreRaider', () => {
   });
 
   it('death-cap feedback falls back to generic phrasing when no cause is on record', () => {
-    const r = scoreRaider({ ...baseDps, perf: 80, gearCompletion: 20, parseTrend: -10, deaths: 7, pulls: 20, deathCauses: [] }, 'rolled', DEFAULT_GATES);
+    const r = scoreRaider({ ...baseDps, perf: 80, gearCompletion: 20, parseTrend: -10, deaths: 7, pulls: 20, deathCauses: [] }, 'rolled', DEFAULT_GATES, redZoneStats);
     expect(r.feedback.status).not.toContain('most recently');
     expect(['Survivability only this week. The damage is already there.', 'One mechanic, one pull, with an officer before Saturday. Nothing else.']).toContain(r.feedback.action);
   });
@@ -194,12 +250,12 @@ describe('scoreRaider', () => {
       nightPulls: 8,
       nightDeathCauses: [],
     };
-    // Tier-to-date: 7/20 (35%) forces Red via the cap despite a green-worthy score.
-    const rolledResult = scoreRaider(raider, 'rolled', DEFAULT_GATES);
+    // Tier-to-date: 7/20 (35%, z ~= 10 against redZoneStats) forces Red via the cap despite a green-worthy score.
+    const rolledResult = scoreRaider(raider, 'rolled', DEFAULT_GATES, redZoneStats);
     expect(rolledResult.band).toBe('red');
     expect(rolledResult.feedback.action).toContain('Sszorak');
-    // Clean that night (0/8, no cap at all) -- the tier-wide cause must not leak into a green-band raider's feedback.
-    const nightResult = scoreRaider(raider, 'night', DEFAULT_GATES);
+    // Clean that night (0/8, below average, no cap at all) -- the tier-wide cause must not leak into a green-band raider's feedback.
+    const nightResult = scoreRaider(raider, 'night', DEFAULT_GATES, redZoneStats);
     expect(nightResult.band).toBe('green');
     expect(nightResult.feedback.action).not.toContain('Sszorak');
   });
@@ -217,6 +273,106 @@ describe('scoreRaider', () => {
     expect(dims).toEqual(['perf', 'trend', 'gear']);
     expect(r.feedback.breakdown[0].verdict).toBe('strong');
     expect(r.feedback.breakdown.find((b) => b.dimension === 'gear')?.verdict).toBe('weak');
+  });
+});
+
+// No peer death-rate comparison needed for these perfRaw-focused tests --
+// EMPTY_DEATH_STATS keeps the death cap a no-op so it can't interfere.
+const EMPTY_DEATH_STATS: DeathRateStats = { mean: 0, stdDev: 0 };
+
+describe('perfRaw context (why the percentile/trend is what it is)', () => {
+  it('folds the raw metric and role average into the perf dimension text and value when perfRaw is known', () => {
+    const healer = scoreRaider({ ...baseHealer, perf: 72, perfRaw: 41300 }, 'rolled', DEFAULT_GATES, EMPTY_DEATH_STATS, 36800);
+    const perfDim = healer.feedback.breakdown.find((b) => b.dimension === 'perf')!;
+    expect(perfDim.value).toContain('41,300');
+    expect(perfDim.text).toContain('41,300 HPS');
+    expect(perfDim.text).toContain('guild average 36,800');
+  });
+
+  it('omits the raw-metric parenthetical entirely when perfRaw is unavailable, rather than showing a hole', () => {
+    const healer = scoreRaider({ ...baseHealer, perf: 72, perfRaw: null }, 'rolled', DEFAULT_GATES);
+    const perfDim = healer.feedback.breakdown.find((b) => b.dimension === 'perf')!;
+    expect(perfDim.value).not.toContain('(');
+    expect(perfDim.text).not.toContain('guild average');
+  });
+
+  it('tank raw metric is labeled "damage taken/s", not DPS or HPS', () => {
+    const tank = scoreRaider({ ...baseTank, perf: 65, perfRaw: 38900 }, 'rolled', DEFAULT_GATES, EMPTY_DEATH_STATS, 40200);
+    const perfDim = tank.feedback.breakdown.find((b) => b.dimension === 'perf')!;
+    expect(perfDim.text).toContain('38,900 damage taken/s');
+  });
+
+  it('dps raw metric is labeled DPS and sits alongside the existing %-of-minimum framing', () => {
+    const dps = scoreRaider({ ...baseDps, perf: 114, perfRaw: 214500 }, 'rolled', DEFAULT_GATES, EMPTY_DEATH_STATS, 188000);
+    const perfDim = dps.feedback.breakdown.find((b) => b.dimension === 'perf')!;
+    expect(perfDim.text).toContain('114% of the guild');
+    expect(perfDim.text).toContain('214,500 DPS');
+    expect(perfDim.text).toContain('guild average 188,000');
+  });
+});
+
+describe('scoreRoster', () => {
+  it('computes perfRawAvg per role and feeds it to every raider of that role, excluding other roles and nulls', () => {
+    const roster: Raider[] = [
+      { ...baseHealer, name: 'H1', perfRaw: 30000 },
+      { ...baseHealer, name: 'H2', perfRaw: 40000 },
+      { ...baseHealer, name: 'H3', perfRaw: null }, // excluded from the average, still gets one back
+      { ...baseDps, name: 'D1', perfRaw: 200000 }, // different role -- must not leak into the healer average
+    ];
+    const scored = scoreRoster(roster, 'rolled', DEFAULT_GATES);
+    const byName = new Map(scored.map((r) => [r.name, r]));
+    expect(byName.get('H1')!.perfRawAvg).toBe(35000);
+    expect(byName.get('H2')!.perfRawAvg).toBe(35000);
+    expect(byName.get('H3')!.perfRawAvg).toBe(35000);
+    expect(byName.get('D1')!.perfRawAvg).toBe(200000);
+  });
+
+  it('perfRawAvg is null for a role where nobody has a perfRaw value', () => {
+    const roster: Raider[] = [{ ...baseTank, name: 'T1', perfRaw: null }];
+    const scored = scoreRoster(roster, 'rolled', DEFAULT_GATES);
+    expect(scored[0].perfRawAvg).toBeNull();
+  });
+
+  it('caps a raider dying well above the roster average, but not one dying below it -- "are you dying more or less than everyone else"', () => {
+    // 5 raiders at a steady 5% plus one outlier at 50% -- enough peers that the
+    // outlier doesn't itself drag the mean/std-dev up far enough to mask its own
+    // z-score (the same small-n distortion warcraftlogs.cjs's percentile math has
+    // to guard against; too few peers and the "outlier" barely reads as one).
+    const roster: Raider[] = [
+      { ...baseDps, name: 'Average1', perf: 115, gearCompletion: 100, parseTrend: 5, deaths: 1, pulls: 20 }, // 5%
+      { ...baseDps, name: 'Average2', perf: 115, gearCompletion: 100, parseTrend: 5, deaths: 1, pulls: 20 }, // 5%
+      { ...baseDps, name: 'Average3', perf: 115, gearCompletion: 100, parseTrend: 5, deaths: 1, pulls: 20 }, // 5%
+      { ...baseDps, name: 'Average4', perf: 115, gearCompletion: 100, parseTrend: 5, deaths: 1, pulls: 20 }, // 5%
+      { ...baseDps, name: 'Average5', perf: 115, gearCompletion: 100, parseTrend: 5, deaths: 1, pulls: 20 }, // 5%
+      { ...baseDps, name: 'Outlier', perf: 115, gearCompletion: 100, parseTrend: 5, deaths: 10, pulls: 20 }, // 50%, way above the rest
+    ];
+    const scored = scoreRoster(roster, 'rolled', DEFAULT_GATES);
+    const outlier = scored.find((r) => r.name === 'Outlier')!;
+    const average = scored.find((r) => r.name === 'Average1')!;
+    expect(outlier.deathRateZ).toBeGreaterThan(DEATH_RATE_RED_SIGMA);
+    expect(outlier.band).toBe('red');
+    expect(outlier.deathCapped).toBe(true);
+    expect(average.deathRateZ).toBeLessThan(0); // below the roster's own average
+    expect(average.deathCapped).toBe(false);
+    expect(average.band).toBe('green');
+  });
+
+  it('a roster with identical death rates has zero spread -- nobody is capped even if everyone dies constantly', () => {
+    const roster: Raider[] = [
+      { ...baseDps, name: 'A', perf: 115, gearCompletion: 100, parseTrend: 5, deaths: 10, pulls: 20 },
+      { ...baseDps, name: 'B', perf: 115, gearCompletion: 100, parseTrend: 5, deaths: 10, pulls: 20 },
+    ];
+    const scored = scoreRoster(roster, 'rolled', DEFAULT_GATES);
+    expect(scored.every((r) => r.deathRateZ === 0 && r.band === 'green')).toBe(true);
+  });
+
+  it('deathRateAvg on every scored raider matches the roster-wide average, for display alongside their own rate', () => {
+    const roster: Raider[] = [
+      { ...baseDps, name: 'A', deaths: 0, pulls: 20 }, // 0%
+      { ...baseDps, name: 'B', deaths: 4, pulls: 20 }, // 20%
+    ];
+    const scored = scoreRoster(roster, 'rolled', DEFAULT_GATES);
+    expect(scored.every((r) => r.deathRateAvg === 0.1)).toBe(true); // (0 + 0.2) / 2
   });
 });
 

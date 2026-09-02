@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { config, freshnessCopy } from '../../config';
 import { getNightSnapshot, getRoster } from '../../data/rosterSource';
 import { listRaidNights } from '../../raid/pullsSource';
-import { ROLE_SECTIONS, rosterSummary, scoreRaider, sortBestFirst, sortWorstFirst } from '../../scoring/scoring';
+import { ROLE_SECTIONS, rosterSummary, scoreRoster, sortBestFirst, sortWorstFirst } from '../../scoring/scoring';
 import type { Band, Gates, Raider, Role, ScoredRaider, Window } from '../../scoring/types';
 import type { NightSnapshotEntry, RaidNight, RealmMismatch } from '../../electron';
 import { TILE_COLOR } from './bandVisuals';
@@ -53,8 +53,8 @@ interface State {
 
 const TILE_DEFS: { key: Band; label: string; note: string }[] = [
   { key: 'green', label: 'Green', note: 'Gates clear, thresholds hit' },
-  { key: 'yellow', label: 'Yellow', note: 'Short somewhere, or a death rate over 15%' },
-  { key: 'red', label: 'Red', note: 'Below threshold, or a death rate over 30%' },
+  { key: 'yellow', label: 'Yellow', note: 'Short somewhere, or dying noticeably more than the guild average' },
+  { key: 'red', label: 'Red', note: 'Below threshold, or dying well above the guild average' },
   { key: 'ineligible', label: 'Ineligible', note: 'Failed a gate — not scored' },
 ];
 
@@ -165,10 +165,7 @@ export function useRaiderStatus() {
     return roster.map((r) => (nightSnapshot[r.name] ? { ...r, ...nightSnapshot[r.name] } : r));
   }, [roster, win, nightSnapshot]);
 
-  const all = useMemo<ScoredRaider[]>(
-    () => (rosterForWindow ? rosterForWindow.map((r) => scoreRaider(r, win, gates)) : []),
-    [rosterForWindow, win, gates],
-  );
+  const all = useMemo<ScoredRaider[]>(() => (rosterForWindow ? scoreRoster(rosterForWindow, win, gates) : []), [rosterForWindow, win, gates]);
 
   const summary = useMemo(() => rosterSummary(all, win), [all, win]);
 

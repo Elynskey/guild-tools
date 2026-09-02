@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildDeathMechanicsReport, findRepeatOffenders } from './deathMechanics';
+import { buildDeathMechanicsReport, buildDeathRateComparison, findRepeatOffenders } from './deathMechanics';
 import type { ScoredRaider } from './types';
 
 function scoredRaider(name: string, deathCausesInWindow: { boss: string; ability: string }[]): ScoredRaider {
@@ -13,6 +13,7 @@ function scoredRaider(name: string, deathCausesInWindow: { boss: string; ability
     ilvlEquipped: 700,
     ilvlHighestThisSeason: 700,
     perf: 100,
+    perfRaw: null,
     gearCompletion: 90,
     gearDetail: null,
     portraitUrl: null,
@@ -41,6 +42,9 @@ function scoredRaider(name: string, deathCausesInWindow: { boss: string; ability
     deathsInWindow: deathCausesInWindow.length,
     pullsInWindow: 20,
     deathRate: deathCausesInWindow.length / 20,
+    deathRateZ: 0,
+    deathRateAvg: 0,
+    perfRawAvg: null,
     deathCausesInWindow,
     icon: '',
     subline: '',
@@ -187,5 +191,38 @@ describe('findRepeatOffenders', () => {
     expect(findRepeatOffenders([])).toEqual([]);
     const rows = [scoredRaider('OnceEach', [{ boss: 'A', ability: 'X' }])];
     expect(findRepeatOffenders(buildDeathMechanicsReport(rows))).toEqual([]);
+  });
+});
+
+describe('buildDeathRateComparison', () => {
+  it('ranks worst (most above average) first', () => {
+    const rows = buildDeathRateComparison([
+      { name: 'Average1', deathsInWindow: 1, pullsInWindow: 20 }, // 5%
+      { name: 'Average2', deathsInWindow: 1, pullsInWindow: 20 }, // 5%
+      { name: 'Outlier', deathsInWindow: 10, pullsInWindow: 20 }, // 50%
+    ]);
+    expect(rows[0].name).toBe('Outlier');
+    expect(rows[0].z).toBeGreaterThan(rows[1].z);
+    expect(rows.map((r) => r.name).slice(1)).toEqual(['Average1', 'Average2']);
+  });
+
+  it('omits raiders with no pulls this window -- no rate to compare', () => {
+    const rows = buildDeathRateComparison([
+      { name: 'Present', deathsInWindow: 1, pullsInWindow: 20 },
+      { name: 'Absent', deathsInWindow: 0, pullsInWindow: 0 },
+    ]);
+    expect(rows.map((r) => r.name)).toEqual(['Present']);
+  });
+
+  it('identical rates across the board all land at z = 0', () => {
+    const rows = buildDeathRateComparison([
+      { name: 'A', deathsInWindow: 2, pullsInWindow: 20 },
+      { name: 'B', deathsInWindow: 2, pullsInWindow: 20 },
+    ]);
+    expect(rows.every((r) => r.z === 0)).toBe(true);
+  });
+
+  it('an empty input returns an empty list', () => {
+    expect(buildDeathRateComparison([])).toEqual([]);
   });
 });

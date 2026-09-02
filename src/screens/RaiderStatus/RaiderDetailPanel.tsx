@@ -79,6 +79,17 @@ export function RaiderDetailPanel({ raider: r, rioGateText, ilvlGateText }: Raid
           <span style={{ color: 'var(--text-gold)' }}>Next step. </span>
           {r.feedback.action}
         </p>
+        {r.pullsInWindow > 0 && (
+          <div style={{ marginTop: 2, fontSize: 'var(--text-body-s)', color: 'var(--text-muted)' }}>
+            Died on {Math.round(r.deathRate * 100)}% of pulls — guild average {Math.round(r.deathRateAvg * 100)}%
+            {Math.abs(r.deathRateZ) >= 0.05 && (
+              <span style={{ marginLeft: 6, fontFamily: 'var(--font-mono)', fontWeight: 700, color: r.deathRateZ > 0 ? 'var(--status-warning)' : 'var(--status-success)' }}>
+                ({r.deathRateZ > 0 ? '+' : ''}
+                {r.deathRateZ.toFixed(1)}σ {r.deathRateZ > 0 ? 'above' : 'below'} average)
+              </span>
+            )}
+          </div>
+        )}
         {deathLog.length > 0 && (
           <div style={{ marginTop: 2 }}>
             <div className="crd-eyebrow" style={{ marginBottom: 4 }}>
