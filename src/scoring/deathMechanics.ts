@@ -1,4 +1,4 @@
-import type { ScoredRaider } from './types';
+import type { DeathCause } from './types';
 
 export interface DeathMechanicEntry {
   boss: string;
@@ -7,19 +7,20 @@ export interface DeathMechanicEntry {
   byRaider: { name: string; count: number }[]; // sorted desc by count, tie-broken by name
 }
 
+/** The only two fields this actually needs -- deliberately narrower than ScoredRaider (which satisfies this structurally, no cast needed) so a caller with just the plain roster (Pull Feedback, no scoring/gates/bands pipeline) can build this too, not only Raider Status. */
+export interface DeathMechanicsSource {
+  name: string;
+  deathCausesInWindow: DeathCause[];
+}
+
 /**
- * Roster-wide "who is dying to what" — aggregates every raider's death causes in the
- * active window (deathCausesInWindow already resolves to tier-to-date or the most
- * recent raid night, matching whichever window scoreRaider() was called with), grouped
- * by boss + ability, sorted by frequency. Pure, same reasoning as scoring.ts/
- * directoryLogic.ts — a UI component just renders whatever this returns.
- *
- * Computed off the FULL roster (not whatever's currently visible after role/band/search
- * filters), same as rosterSummary() — this answers "what's actually killing the raid",
- * not "what's killing the raiders currently on screen". Ineligible raiders are included
- * too: a death is a fact about what happened in the raid, not about scoring eligibility.
+ * "Who is dying to what" across the FULL roster (not whatever's currently visible
+ * after role/band/search filters), grouped by boss + ability, sorted by frequency.
+ * Pure, same reasoning as scoring.ts/directoryLogic.ts — a UI component just renders
+ * whatever this returns. Ineligible raiders are included too: a death is a fact about
+ * what happened in the raid, not about scoring eligibility.
  */
-export function buildDeathMechanicsReport(rows: ScoredRaider[]): DeathMechanicEntry[] {
+export function buildDeathMechanicsReport(rows: DeathMechanicsSource[]): DeathMechanicEntry[] {
   const map = new Map<string, DeathMechanicEntry>();
   for (const r of rows) {
     for (const cause of r.deathCausesInWindow) {

@@ -1,7 +1,6 @@
 import { Icon } from '../../design-system/Icon';
 import { BossIcon } from '../../raid/BossIcon';
 import { REPEAT_MECHANIC_THRESHOLD, findRepeatOffenders, type DeathMechanicEntry } from '../../scoring/deathMechanics';
-import type { Window } from '../../scoring/types';
 
 /** Entries already sort boss-then-deaths (see buildDeathMechanicsReport) -- this just splits that flat list into per-boss runs so each boss gets one header instead of repeating its name on every row. */
 function groupByBoss(entries: DeathMechanicEntry[]): { boss: string; entries: DeathMechanicEntry[] }[] {
@@ -16,12 +15,18 @@ function groupByBoss(entries: DeathMechanicEntry[]): { boss: string; entries: De
 
 interface DeathMechanicsReportProps {
   entries: DeathMechanicEntry[];
-  window: Window;
 }
 
-/** Roster-wide "who is dying to what" -- every death this window, grouped by boss/ability, worst first. */
-export function DeathMechanicsReport({ entries, window }: DeathMechanicsReportProps) {
-  const scopeLabel = window === 'night' ? 'last raid night' : 'this tier';
+/**
+ * Roster-wide "who is dying to what" -- every death this TIER, grouped by boss/
+ * ability, worst first. Moved here from Raider Status: this is the one place on that
+ * screen looking across multiple raid nights at once (everything else there is either
+ * tier-to-date scoring or one selected night), and it caught a pattern -- the same
+ * raider missing the same mechanic on more than one raid night -- that the per-night
+ * mechanics section just above (MechanicsSummary, scoped to whichever single night is
+ * selected) can't see by construction.
+ */
+export function DeathMechanicsReport({ entries }: DeathMechanicsReportProps) {
   const offenders = findRepeatOffenders(entries);
 
   return (
@@ -37,7 +42,7 @@ export function DeathMechanicsReport({ entries, window }: DeathMechanicsReportPr
         }}
       >
         <span className="crd-eyebrow" style={{ color: 'var(--text-gold)' }}>
-          Death mechanics — {scopeLabel}
+          Death mechanics — this tier
         </span>
         <div style={{ flex: 1 }} />
         <span style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-micro)', color: 'var(--text-faint)' }}>
@@ -67,7 +72,7 @@ export function DeathMechanicsReport({ entries, window }: DeathMechanicsReportPr
       )}
 
       {entries.length === 0 ? (
-        <div style={{ padding: '24px 18px', textAlign: 'center', color: 'var(--status-success)', fontSize: 'var(--text-body-s)' }}>No deaths logged {scopeLabel}.</div>
+        <div style={{ padding: '24px 18px', textAlign: 'center', color: 'var(--status-success)', fontSize: 'var(--text-body-s)' }}>No deaths logged this tier.</div>
       ) : (
         groupByBoss(entries).map((group) => (
           <div key={group.boss}>

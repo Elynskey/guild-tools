@@ -8,7 +8,6 @@ import { LedgerTable } from './LedgerTable';
 import { ScoreKey } from './ScoreKey';
 import { EmptyState } from './EmptyState';
 import { KillsStrip } from './KillsStrip';
-import { DeathMechanicsReport } from './DeathMechanicsReport';
 import { RealmMismatchBanner } from './RealmMismatchBanner';
 import { useRaiderStatus } from './useRaiderStatus';
 
@@ -53,8 +52,6 @@ export function RaiderStatus() {
           onRefresh={rs.refresh}
           refreshing={rs.refreshing}
         />
-
-        <DeathMechanicsReport entries={rs.deathMechanics} window={rs.window} />
 
         <ControlBar
           roleTabs={rs.roleTabs}

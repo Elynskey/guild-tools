@@ -3,7 +3,6 @@ import { config, freshnessCopy } from '../../config';
 import { getNightSnapshot, getRoster } from '../../data/rosterSource';
 import { listRaidNights } from '../../raid/pullsSource';
 import { ROLE_SECTIONS, rosterSummary, scoreRaider, sortBestFirst, sortWorstFirst } from '../../scoring/scoring';
-import { buildDeathMechanicsReport } from '../../scoring/deathMechanics';
 import type { Band, Gates, Raider, Role, ScoredRaider, Window } from '../../scoring/types';
 import type { NightSnapshotEntry, RaidNight, RealmMismatch } from '../../electron';
 import { TILE_COLOR } from './bandVisuals';
@@ -172,7 +171,6 @@ export function useRaiderStatus() {
   );
 
   const summary = useMemo(() => rosterSummary(all, win), [all, win]);
-  const deathMechanics = useMemo(() => buildDeathMechanicsReport(all), [all]);
 
   const tiles = useMemo<Tile[]>(
     () =>
@@ -269,7 +267,6 @@ export function useRaiderStatus() {
     guildWell: summary.goingWell,
     guildStop: summary.stoppingUs,
     guildGate: summary.unscored,
-    deathMechanics,
     realmMismatches: meta?.realmMismatches ?? [],
     freshness: meta ? freshnessCopy(meta.fetchedAt, meta.source) : '',
     progressionFraction: `${heroicKilled}/${config.tier.totalBosses}`,

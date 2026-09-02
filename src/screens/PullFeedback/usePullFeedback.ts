@@ -1,12 +1,16 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { getPullFeedback, listRaidNights } from '../../raid/pullsSource';
 import { groupMechanicsNeedingWorkByBoss, groupPullsByBoss } from '../../raid/pullLogic';
+import { getRoster } from '../../data/rosterSource';
+import { buildDeathMechanicsReport } from '../../scoring/deathMechanics';
 import type { Pull, RaidNight } from '../../electron';
+import type { Raider } from '../../scoring/types';
 
 export function usePullFeedback() {
   const [nights, setNights] = useState<RaidNight[] | null>(null);
   const [selectedCode, setSelectedCode] = useState<string | null>(null);
   const [pulls, setPulls] = useState<Pull[] | null>(null);
+  const [roster, setRoster] = useState<Raider[]>([]);
   const [loadingNights, setLoadingNights] = useState(true);
   const [loadingPulls, setLoadingPulls] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -20,6 +24,18 @@ export function usePullFeedback() {
       .catch(() => setError('Could not load raid nights.'))
       .finally(() => setLoadingNights(false));
   }, []);
+
+  // Tier-wide, independent of which single raid night is selected below -- only
+  // needs the roster's own tier-to-date deathCauses field, not the full scoring/
+  // gates/bands pipeline Raider Status runs.
+  useEffect(() => {
+    getRoster().then((result) => setRoster(result.raiders));
+  }, []);
+
+  const deathMechanics = useMemo(
+    () => buildDeathMechanicsReport(roster.map((r) => ({ name: r.name, deathCausesInWindow: r.deathCauses }))),
+    [roster],
+  );
 
   useEffect(() => {
     if (!selectedCode) return;
@@ -42,6 +58,7 @@ export function usePullFeedback() {
     selectNight,
     bossGroups,
     mechanicsNeedingWork,
+    deathMechanics,
     totalPulls: pulls?.length ?? 0,
     kills: pulls?.filter((p) => p.kill).length ?? 0,
     loading: loadingNights || (loadingPulls && pulls === null),

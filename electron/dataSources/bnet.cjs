@@ -33,7 +33,11 @@ async function fetchCharacterEquipment(region, realm, name) {
 // removed from the game entirely in a past expansion; HEAD/SHOULDER/NECK enchants
 // still technically exist (reputation-gated) but are rare enough that counting
 // their absence as a gap would unfairly tank otherwise well-optimized characters.
-const ENCHANTABLE_SLOTS = new Set(['BACK', 'CHEST', 'WRIST', 'LEGS', 'FEET', 'FINGER_1', 'FINGER_2', 'MAIN_HAND', 'OFF_HAND']);
+// WRIST and BACK (cloak) enchants don't exist this season either (confirmed live
+// 2026-08-30 -- every single raider's gearDetail was flagging both as "missing",
+// which is exactly the "well-geared character somehow missing this slot" smell
+// that flagged WAIST/HANDS the same way) -- removed for the same reason.
+const ENCHANTABLE_SLOTS = new Set(['CHEST', 'LEGS', 'FEET', 'FINGER_1', 'FINGER_2', 'MAIN_HAND', 'OFF_HAND']);
 
 /**
  * Presence-only completion: % of enchantable slots that actually have an
