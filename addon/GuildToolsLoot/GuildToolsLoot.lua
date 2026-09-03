@@ -131,6 +131,27 @@ local function isExcludedFromNeedTracking(itemId)
   return false
 end
 
+-- Blizzard's raid difficulty IDs (Enum.RaidDifficultyID, stable since Legion's 7.0
+-- difficulty rework): 14 Normal, 15 Heroic, 16 Mythic, 17 LFR (Raid Finder). NOT the
+-- same numbering as Warcraft Logs' own difficulty field elsewhere in this app (WCL
+-- uses 3/4/5 for the same three progression difficulties) -- this addon reads
+-- Blizzard's raw client API directly, a separate namespace. Sourced from Blizzard's
+-- documented DifficultyID list, not a live client read -- same caveat as everywhere
+-- else in this file that can't be tested against a real client from here.
+local TRACKED_RAID_DIFFICULTIES = { [14] = true, [15] = true, [16] = true }
+
+-- Only Normal/Heroic/Mythic raid loot counts -- Raid Finder (and anything that isn't a
+-- raid at all) is excluded. Checked live at the moment of each win, not just at the
+-- PLAYER_ENTERING_WORLD popup below: GuildToolsLootDB.enabled can already be true from
+-- an earlier Normal/Heroic raid this session, and would otherwise keep capturing into
+-- an LFR run walked into afterward with no fresh prompt to decline.
+local function isTrackedRaidDifficulty()
+  local inInstance, instanceType = IsInInstance()
+  if not inInstance or instanceType ~= "raid" then return false end
+  local _, _, difficultyID = GetInstanceInfo()
+  return TRACKED_RAID_DIFFICULTIES[difficultyID] == true
+end
+
 -- itemEquipLoc is a token (e.g. "INVTYPE_HEAD"), not display text -- _G[token] resolves
 -- it to whatever the client's actual localized string is, same pattern
 -- patternFromGlobalString uses for chat-message matching. GetItemInfo can return nils on
@@ -150,6 +171,7 @@ end
 
 local function recordNeedWin(winnerName, itemLink, bossOverride)
   if not GuildToolsLootDB.enabled or not winnerName or not itemLink then return end
+  if not isTrackedRaidDifficulty() then return end
   local itemId = itemIdFromLink(itemLink)
   if isExcludedFromNeedTracking(itemId) then return end
 
@@ -333,8 +355,11 @@ frame:SetScript("OnEvent", function(_, event, ...)
     end
 
   elseif event == "PLAYER_ENTERING_WORLD" then
-    local inInstance, instanceType = IsInInstance()
-    if inInstance and instanceType == "raid" then
+    -- Never prompts for Raid Finder -- recordNeedWin's own isTrackedRaidDifficulty()
+    -- check would block it from logging anyway even if answered "Yes", but asking at
+    -- all for a difficulty that can never actually log invites exactly the confusion
+    -- that prompted this check in the first place.
+    if isTrackedRaidDifficulty() then
       local _, _, _, _, _, _, _, instanceID = GetInstanceInfo()
       if instanceID and instanceID ~= lastPromptedInstanceID then
         lastPromptedInstanceID = instanceID
