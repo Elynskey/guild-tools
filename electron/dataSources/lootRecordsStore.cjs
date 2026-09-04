@@ -31,9 +31,9 @@ function load() {
   let db;
   try {
     const parsed = JSON.parse(fs.readFileSync(storePath(), 'utf8'));
-    db = { records: parsed.records ?? [], trades: parsed.trades ?? [], removedKeys: parsed.removedKeys ?? [] };
+    db = { records: parsed.records ?? [], trades: parsed.trades ?? [], needLosses: parsed.needLosses ?? [], removedKeys: parsed.removedKeys ?? [] };
   } catch {
-    return { records: [], trades: [], removedKeys: [] };
+    return { records: [], trades: [], needLosses: [], removedKeys: [] };
   }
 
   let backfilled = false;
@@ -58,6 +58,7 @@ function load() {
 // item + winner within the same second, so that triple is a safe natural key.
 const recordKey = (r) => `${r.itemId}::${r.winner}::${r.time}`;
 const tradeKey = (t) => `${t.itemId}::${t.from}::${t.to}::${t.time}`;
+const needLossKey = (r) => `${r.itemId}::${r.name}::${r.time}`;
 
 /**
  * Merges newly-submitted records/trades into the shared store, deduped. Returns the full
@@ -70,14 +71,20 @@ const tradeKey = (t) => `${t.itemId}::${t.from}::${t.to}::${t.time}`;
  * it and will keep offering it up on every future sync from that same client (confirmed
  * live: deleting the Hexing Spiritrender trade only removed it from the shared store, and
  * the very next sync from the client that originally captured it silently re-added it).
+ *
+ * needLosses (Need rolls that did NOT win) merge the same way but have no id/removedKeys
+ * handling -- there's no edit/remove UI for them (see recordNeedLoss in the addon), so
+ * nothing can ever tombstone one.
  */
-function sync(newRecords, newTrades) {
+function sync(newRecords, newTrades, newNeedLosses) {
   const db = load();
   const recordKeys = new Set(db.records.map(recordKey));
   const tradeKeys = new Set(db.trades.map(tradeKey));
+  const needLossKeys = new Set(db.needLosses.map(needLossKey));
   const removed = new Set(db.removedKeys);
   const addedRecords = [];
   const addedTrades = [];
+  const addedNeedLosses = [];
 
   for (const r of newRecords ?? []) {
     const k = recordKey(r);
@@ -97,9 +104,17 @@ function sync(newRecords, newTrades) {
       addedTrades.push(withId);
     }
   }
+  for (const r of newNeedLosses ?? []) {
+    const k = needLossKey(r);
+    if (!needLossKeys.has(k)) {
+      db.needLosses.push(r);
+      needLossKeys.add(k);
+      addedNeedLosses.push(r);
+    }
+  }
 
   save(db);
-  return { records: db.records, trades: db.trades, addedRecords, addedTrades };
+  return { records: db.records, trades: db.trades, needLosses: db.needLosses, addedRecords, addedTrades, addedNeedLosses };
 }
 
 /** Officer-entered record -- no real itemLink available by hand, so the item name is stored as a plain "[Name]" string (the same bracketed shape LootLogTable's display parsing already expects; it just won't carry a real tooltip). */

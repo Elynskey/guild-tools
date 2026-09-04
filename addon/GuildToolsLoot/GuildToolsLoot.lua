@@ -70,6 +70,10 @@ local function ensureDB()
   -- picked up the most recent boss). Persisted, not just in-memory, so it survives a
   -- /reload mid-raid.
   GuildToolsLootDB.seenEncounters = GuildToolsLootDB.seenEncounters or {}
+  -- Need rolls that did NOT win -- see recordNeedLoss. Deliberately separate from
+  -- `records` (which stays wins-only, unchanged) rather than folding losses in with a
+  -- flag, so the well-tested win-tracking path can't regress from this addition.
+  GuildToolsLootDB.needLosses = GuildToolsLootDB.needLosses or {}
   -- Defaults ON, since most raid nights are current-tier progression -- toggle off with
   -- /gtloot for old-content farm runs, alt runs, or anything else that shouldn't count
   -- toward the loot history.
@@ -209,6 +213,38 @@ local function recordNeedWin(winnerName, itemLink, bossOverride)
   announce(winnerName .. "'s Need win captured: " .. itemLink)
 end
 
+-- Records a Need roll that did NOT win -- who's rolling and not winning, as opposed to
+-- who's simply not rolling (outgrown gear, off-spec drop, etc.), which stays invisible
+-- same as today. Deliberately silent (no chat announce, unlike recordNeedWin) -- this
+-- is officer-app-only, never posted anywhere raid-visible; calling out someone's bad
+-- roll live in raid chat would be a jerk move this addon shouldn't enable.
+local function recordNeedLoss(loserName, itemLink, bossOverride)
+  if not GuildToolsLootDB.enabled or not loserName or not itemLink then return end
+  if not isTrackedRaidDifficulty() then return end
+  local itemId = itemIdFromLink(itemLink)
+  if isExcludedFromNeedTracking(itemId) then return end
+
+  -- Same dedup rationale as recordNeedWin -- a rescan re-surfacing an older loss must
+  -- not re-insert it. 6-hour window matches recordNeedWin and this app's own
+  -- same-raid-night grouping threshold.
+  local now = time()
+  local DEDUP_WINDOW_SECONDS = 6 * 60 * 60
+  for _, r in ipairs(GuildToolsLootDB.needLosses) do
+    if r.itemId == itemId and r.name == loserName and math.abs(r.time - now) <= DEDUP_WINDOW_SECONDS then
+      return
+    end
+  end
+
+  table.insert(GuildToolsLootDB.needLosses, {
+    itemId = itemId,
+    itemLink = itemLink,
+    name = loserName,
+    boss = bossOverride or currentBoss,
+    slot = slotLabel(itemLink),
+    time = now,
+  })
+end
+
 -- Resolved once at load, not re-indexed per call. Guarded rather than assumed --
 -- sourced from research, not a live client read, and confirmed live 2026-08-28 that an
 -- unguarded index into this exact path crashes scanLootHistory() partway through (the
@@ -220,10 +256,16 @@ local NEED_MAIN_SPEC_STATE = Enum and Enum.EncounterLootDropRollState and Enum.E
 local NEED_OFF_SPEC_STATE = Enum and Enum.EncounterLootDropRollState and Enum.EncounterLootDropRollState.NeedOffSpec
 
 -- Handles LOOT_HISTORY_UPDATE_DROP: looks up the drop's full resolved state and, if
--- the winner's roll was a genuine Need (main-spec or off-spec), records it. Silently
--- no-ops for anything not yet resolved (dropInfo.winner nil), an all-passed drop, or
--- a non-Need winning roll (Transmog/Greed) -- those aren't errors, just not this
--- addon's concern.
+-- the winner's roll was a genuine Need (main-spec or off-spec), records it -- and, for
+-- everyone else on the SAME drop who also Need-rolled but didn't win, records a loss
+-- for each of them too (see recordNeedLoss). Silently no-ops for anything not yet
+-- resolved (dropInfo.winner nil), an all-passed drop, or a non-Need winning roll
+-- (Transmog/Greed) -- those aren't errors, just not this addon's concern.
+--
+-- rollInfos entry shape (playerName, state, isWinner, roll) confirmed against Warcraft
+-- Wiki's documented EncounterLootDropRollInfo, not yet against a live client -- same
+-- "unverified until next raid night" caveat as everything else in this file that reads
+-- undocumented-in-game Blizzard structures.
 local function handleLootHistoryDrop(encounterID, lootListID, bossNameHint)
   local dropInfo = C_LootHistory.GetSortedInfoForDrop(encounterID, lootListID)
   if not dropInfo or not dropInfo.winner or not dropInfo.rollInfos then return end
@@ -251,6 +293,12 @@ local function handleLootHistoryDrop(encounterID, lootListID, bossNameHint)
   end
 
   recordNeedWin(dropInfo.winner.playerName, dropInfo.itemHyperlink, bossName)
+
+  for _, roll in ipairs(dropInfo.rollInfos) do
+    if not roll.isWinner and (roll.state == NEED_MAIN_SPEC_STATE or roll.state == NEED_OFF_SPEC_STATE) then
+      recordNeedLoss(roll.playerName, dropInfo.itemHyperlink, bossName)
+    end
+  end
 end
 
 -- Backfill: re-walks EVERY encounter/drop C_LootHistory currently knows about (not

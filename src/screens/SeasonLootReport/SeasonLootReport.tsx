@@ -7,7 +7,7 @@ import { BossIcon } from '../../raid/BossIcon';
 import { itemLabel } from '../../raid/lootLogic';
 import { useSeasonLootReport, type SortKey } from './useSeasonLootReport';
 
-const GRID_TEMPLATE = '1fr 130px 130px 160px 24px';
+const GRID_TEMPLATE = '1fr 130px 130px 130px 160px 24px';
 
 function formatDate(unixSeconds: number): string {
   return new Date(unixSeconds * 1000).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
@@ -98,6 +98,7 @@ export function SeasonLootReport() {
               <SortHeader label="Raider" sortKey="name" active={lr.sortKey === 'name'} dir={lr.sortDir} onClick={lr.toggleSort} />
               <SortHeader label="Need wins" sortKey="needWinCount" active={lr.sortKey === 'needWinCount'} dir={lr.sortDir} onClick={lr.toggleSort} align="right" />
               <SortHeader label="Total won" sortKey="totalWon" active={lr.sortKey === 'totalWon'} dir={lr.sortDir} onClick={lr.toggleSort} align="right" />
+              <SortHeader label="Rolled, no win" sortKey="lossCount" active={lr.sortKey === 'lossCount'} dir={lr.sortDir} onClick={lr.toggleSort} align="right" />
               <SortHeader label="Last won" sortKey="lastWonAt" active={lr.sortKey === 'lastWonAt'} dir={lr.sortDir} onClick={lr.toggleSort} align="right" />
               <div />
             </div>
@@ -113,16 +114,23 @@ export function SeasonLootReport() {
                   >
                     <div style={{ fontFamily: 'var(--font-display)', fontWeight: 600, letterSpacing: '.03em', color: 'var(--text-strong)' }}>{r.name}</div>
                     <div
+                      title={r.maxNeedWinsInNight > 2 ? `Broke the 2-win cap on at least one raid night (${r.maxNeedWinsInNight} that night)` : undefined}
                       style={{
                         textAlign: 'right',
                         fontFamily: 'var(--font-mono)',
-                        color: r.needWinCount > 2 ? 'var(--status-danger)' : r.needWinCount === 0 ? 'var(--text-faint)' : 'var(--text-body)',
-                        fontWeight: r.needWinCount > 2 ? 700 : 400,
+                        color: r.maxNeedWinsInNight > 2 ? 'var(--status-danger)' : r.needWinCount === 0 ? 'var(--text-faint)' : 'var(--text-body)',
+                        fontWeight: r.maxNeedWinsInNight > 2 ? 700 : 400,
                       }}
                     >
                       {r.needWinCount}
                     </div>
                     <div style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>{r.totalWon}</div>
+                    <div
+                      title={r.lossCount > 0 ? `Rolled Need and didn't win ${r.lossCount} time${r.lossCount === 1 ? '' : 's'} this tier -- could be bad luck, could mean they've outgrown these drops` : "Hasn't lost a Need roll this tier"}
+                      style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', color: r.lossCount > 0 ? 'var(--text-gold)' : 'var(--text-faint)' }}
+                    >
+                      {r.lossCount}
+                    </div>
                     <div style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 'var(--text-body-s)', color: r.lastWonAt ? 'var(--text-muted)' : 'var(--text-faint)' }}>
                       {r.lastWonAt ? formatDate(r.lastWonAt) : 'never'}
                     </div>
@@ -149,6 +157,25 @@ export function SeasonLootReport() {
                               )}
                             </div>
                           ))}
+                        </div>
+                      )}
+
+                      {r.lostItems.length > 0 && (
+                        <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--border-hairline)' }}>
+                          <div className="crd-eyebrow" style={{ marginBottom: 8, color: 'var(--text-faint)' }}>
+                            Rolled and lost this tier
+                          </div>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                            {r.lostItems.map((item, i) => (
+                              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 'var(--text-body-s)' }}>
+                                {item.boss && <BossIcon boss={item.boss} size={20} />}
+                                <span style={{ color: 'var(--text-muted)' }}>{itemLabel(item.itemLink)}</span>
+                                {item.slot && <span style={{ color: 'var(--text-faint)' }}>({item.slot})</span>}
+                                <span style={{ color: 'var(--text-faint)' }}>— {item.boss ?? 'boss not recorded'}</span>
+                                <span style={{ color: 'var(--text-faint)', marginLeft: 'auto', fontFamily: 'var(--font-mono)' }}>{formatDate(item.time)}</span>
+                              </div>
+                            ))}
+                          </div>
                         </div>
                       )}
                     </div>

@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { annotateWithTrades, buildSeasonLootReport, type SeasonLootRow } from '../../raid/lootLogic';
-import { sampleLootRecords, sampleLootTrades } from '../../data/sampleLoot';
+import { sampleLootRecords, sampleLootTrades, sampleNeedLosses } from '../../data/sampleLoot';
 import { getRoster } from '../../data/rosterSource';
 
-export type SortKey = 'name' | 'needWinCount' | 'totalWon' | 'lastWonAt';
+export type SortKey = 'name' | 'needWinCount' | 'totalWon' | 'lossCount' | 'lastWonAt';
 
 // Reuses electron.getLootLog() as-is -- it already returns the FULL shared season's
 // records/trades (not scoped to one raid night; Loot History does its own client-side
@@ -22,12 +22,12 @@ export function useSeasonLootReport() {
   const load = useCallback((): Promise<void> => {
     setRefreshing(true);
     const rosterPromise = getRoster().then((r) => r.raiders.map((raider) => raider.name));
-    const lootPromise = electron ? electron.getLootLog() : Promise.resolve({ records: sampleLootRecords, trades: sampleLootTrades, status: 'ok' as const });
+    const lootPromise = electron ? electron.getLootLog() : Promise.resolve({ records: sampleLootRecords, trades: sampleLootTrades, needLosses: sampleNeedLosses, status: 'ok' as const });
 
     return Promise.all([rosterPromise, lootPromise])
-      .then(([rosterNames, { records, trades }]) => {
+      .then(([rosterNames, { records, trades, needLosses }]) => {
         const entries = annotateWithTrades(records, trades);
-        setRows(buildSeasonLootReport(entries, rosterNames));
+        setRows(buildSeasonLootReport(entries, rosterNames, needLosses));
       })
       .finally(() => {
         setLoading(false);

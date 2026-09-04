@@ -10,6 +10,16 @@ export interface RawLootRecord {
   time: number; // unix seconds
 }
 
+/** A Need roll that did NOT win -- see recordNeedLoss in the addon. Deliberately its own shape, not a LootEntry variant: there's no winner/trade lifecycle to it, just "who rolled Need on what and lost." */
+export interface RawNeedLossRecord {
+  itemId: number | null;
+  itemLink: string;
+  name: string;
+  boss: string | null;
+  slot?: string;
+  time: number; // unix seconds
+}
+
 export interface RawTradeRecord {
   /** Assigned server-side on first sync, same as RawLootRecord.id -- lets a standalone trade (no matching win record) be removed individually. Optional since very old already-synced trades may predate this. */
   id?: string;
@@ -125,7 +135,7 @@ export interface SeasonLootItem {
 
 export interface SeasonLootRow {
   name: string;
-  /** Current Need-win count, same rule as needWinCount -- excludes anything traded away. What the guild's cap actually judges. */
+  /** Season-wide Need-win total, same rule as needWinCount -- excludes anything traded away. Informational only; NOT what the guild's cap judges (the cap is per raid night -- see maxNeedWinsInNight), so this can legitimately exceed 2 without ever breaching it. */
   needWinCount: number;
   /** Every item this raider was the original Need-roll winner of, this tier, regardless of whether they kept it -- the fuller picture behind needWinCount. */
   totalWon: number;
@@ -133,6 +143,12 @@ export interface SeasonLootRow {
   items: SeasonLootItem[];
   /** Most recent win's timestamp, or null if they haven't won anything this tier -- what "who hasn't won anything in a while" sorts on. */
   lastWonAt: number | null;
+  /** Highest Need-win count this raider hit on any single raid night this tier -- what the guild's 2-win cap actually judges (see needWinCount in LootHistory, which is scoped the same way). */
+  maxNeedWinsInNight: number;
+  /** How many Need rolls this raider lost this tier -- rolling and not winning, as distinct from just not rolling (which stays invisible, same as always). */
+  lossCount: number;
+  /** Newest first. Reuses SeasonLootItem's shape; tradedTo is always null since a losing roll was never won. */
+  lostItems: SeasonLootItem[];
 }
 
 /**
@@ -143,7 +159,7 @@ export interface SeasonLootRow {
  * Pure function over the full season's entries, same as everything else in this file;
  * the "season" scope comes from the caller passing every entry (not one night's).
  */
-export function buildSeasonLootReport(entries: LootEntry[], rosterNames: string[]): SeasonLootRow[] {
+export function buildSeasonLootReport(entries: LootEntry[], rosterNames: string[], lossRecords: RawNeedLossRecord[] = []): SeasonLootRow[] {
   const byName = new Map<string, LootEntry[]>();
   for (const name of rosterNames) byName.set(name, []);
   for (const e of entries) {
@@ -153,14 +169,31 @@ export function buildSeasonLootReport(entries: LootEntry[], rosterNames: string[
     byName.set(e.winner, list);
   }
 
-  return [...byName.entries()].map(([name, won]) => {
+  const lossesByName = new Map<string, RawNeedLossRecord[]>();
+  for (const name of rosterNames) lossesByName.set(name, []);
+  for (const r of lossRecords) {
+    const list = lossesByName.get(r.name) ?? [];
+    list.push(r);
+    lossesByName.set(r.name, list);
+  }
+
+  const nights = groupLootByNight(entries);
+  const allNames = new Set([...byName.keys(), ...lossesByName.keys()]);
+
+  return [...allNames].map((name) => {
+    const won = byName.get(name) ?? [];
     const sorted = [...won].sort((a, b) => b.time - a.time);
+    const maxNeedWinsInNight = nights.reduce((max, night) => Math.max(max, needWinCount(night.entries, name)), 0);
+    const losses = [...(lossesByName.get(name) ?? [])].sort((a, b) => b.time - a.time);
     return {
       name,
       needWinCount: needWinCount(entries, name),
       totalWon: won.length,
       items: sorted.map((e) => ({ itemLink: e.itemLink, boss: e.boss, slot: e.slot, time: e.time, tradedTo: e.tradedTo })),
       lastWonAt: sorted[0]?.time ?? null,
+      maxNeedWinsInNight,
+      lossCount: losses.length,
+      lostItems: losses.map((r) => ({ itemLink: r.itemLink, boss: r.boss, slot: r.slot ?? null, time: r.time, tradedTo: null })),
     };
   });
 }

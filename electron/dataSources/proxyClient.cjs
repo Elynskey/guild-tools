@@ -192,8 +192,8 @@ async function getSharedLootRecords() {
   return proxyFetchJson('/loot-records');
 }
 
-async function syncLootRecords(records, trades) {
-  return proxyFetchJson('/loot-records/sync', { method: 'POST', body: JSON.stringify({ records, trades }) });
+async function syncLootRecords(records, trades, needLosses) {
+  return proxyFetchJson('/loot-records/sync', { method: 'POST', body: JSON.stringify({ records, trades, needLosses }) });
 }
 
 async function postLootNightToDiscord(messages) {

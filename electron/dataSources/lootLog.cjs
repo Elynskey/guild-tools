@@ -58,20 +58,20 @@ function findSavedVariablesFile(wowPath) {
 }
 
 /**
- * @returns {{ records: object[], trades: object[], status: 'ok' | 'not_configured' | 'addon_not_installed' }}
+ * @returns {{ records: object[], trades: object[], needLosses: object[], status: 'ok' | 'not_configured' | 'addon_not_installed' }}
  */
 function getLootRecords() {
   const wowPath = resolveWowPath();
-  if (!isRealWowPath(wowPath)) return { records: [], trades: [], status: 'not_configured' };
+  if (!isRealWowPath(wowPath)) return { records: [], trades: [], needLosses: [], status: 'not_configured' };
 
   const svFile = findSavedVariablesFile(wowPath);
-  if (!svFile) return { records: [], trades: [], status: 'addon_not_installed' };
+  if (!svFile) return { records: [], trades: [], needLosses: [], status: 'addon_not_installed' };
 
   const source = fs.readFileSync(svFile, 'utf8');
   const db = readLuaVariable(source, 'GuildToolsLootDB');
-  if (!db) return { records: [], trades: [], status: 'addon_not_installed' };
+  if (!db) return { records: [], trades: [], needLosses: [], status: 'addon_not_installed' };
 
-  return { records: db.records ?? [], trades: db.trades ?? [], status: 'ok' };
+  return { records: db.records ?? [], trades: db.trades ?? [], needLosses: db.needLosses ?? [], status: 'ok' };
 }
 
 function getWowPathConfig() {

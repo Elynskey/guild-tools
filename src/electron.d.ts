@@ -1,6 +1,6 @@
 import type { DeathCause, Raider } from './scoring/types';
 import type { CraftRequest, MemberProfessions, RecipeCatalogue } from './professions/types';
-import type { RawLootRecord, RawTradeRecord } from './raid/lootLogic';
+import type { RawLootRecord, RawNeedLossRecord, RawTradeRecord } from './raid/lootLogic';
 
 export interface ManualLootRecordInput {
   winner: string;
@@ -171,7 +171,7 @@ export interface ElectronAPI {
   addCraftRequest: (requester: string, profession: string, description: string) => Promise<CraftRequest[]>;
   fulfillCraftRequest: (id: string, fulfilledBy: string) => Promise<CraftRequest[]>;
   removeCraftRequest: (id: string) => Promise<CraftRequest[]>;
-  getLootLog: () => Promise<{ records: RawLootRecord[]; trades: RawTradeRecord[]; status: 'ok' | 'not_configured' | 'addon_not_installed' }>;
+  getLootLog: () => Promise<{ records: RawLootRecord[]; trades: RawTradeRecord[]; needLosses: RawNeedLossRecord[]; status: 'ok' | 'not_configured' | 'addon_not_installed' }>;
   addManualLootRecord: (record: ManualLootRecordInput) => Promise<RawLootRecord[]>;
   updateLootRecord: (id: string, patch: LootRecordPatch) => Promise<RawLootRecord[]>;
   removeLootRecord: (id: string) => Promise<RawLootRecord[]>;

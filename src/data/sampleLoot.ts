@@ -1,4 +1,4 @@
-import type { RawLootRecord, RawTradeRecord } from '../raid/lootLogic';
+import type { RawLootRecord, RawNeedLossRecord, RawTradeRecord } from '../raid/lootLogic';
 
 /** Fabricated Need-roll wins for browser/dev-preview mode -- matches the shape lootLog.cjs returns from a real GuildToolsLoot SavedVariables file. Nothing outside useLootHistory.ts should import this directly. */
 const NOW = Math.floor(Date.now() / 1000);
@@ -15,4 +15,10 @@ export const sampleLootRecords: RawLootRecord[] = [
 export const sampleLootTrades: RawTradeRecord[] = [
   // Grimsyl's Venomcarved Legguards were traded to Draventh -- Draventh's own win above shows the "no match" case separately.
   { itemId: 219871, itemLink: '[Venomcarved Legguards]', from: 'Grimsyl', to: 'Sylnara', time: NIGHT_AGO + 3_600 + 300 },
+];
+
+export const sampleNeedLosses: RawNeedLossRecord[] = [
+  { itemId: 219853, itemLink: '[Malignant Cuirass]', name: 'Anesidora', boss: 'Vashnik the Malignant', slot: 'Chest', time: NIGHT_AGO },
+  { itemId: 219902, itemLink: '[Twinfang Signet]', name: 'Devkra', boss: 'The Twin Fangs', slot: 'Finger', time: NOW - 60 * 60 },
+  { itemId: 219902, itemLink: '[Twinfang Signet]', name: 'Anesidora', boss: 'The Twin Fangs', slot: 'Finger', time: NOW - 60 * 60 },
 ];

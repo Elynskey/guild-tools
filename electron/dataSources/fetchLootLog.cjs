@@ -13,12 +13,12 @@ async function fetchLootLog() {
   if (!proxyClient.isAvailable()) return local;
 
   try {
-    if (local.records.length > 0 || local.trades.length > 0) {
-      await proxyClient.syncLootRecords(local.records, local.trades);
+    if (local.records.length > 0 || local.trades.length > 0 || local.needLosses.length > 0) {
+      await proxyClient.syncLootRecords(local.records, local.trades, local.needLosses);
     }
     const shared = await proxyClient.getSharedLootRecords();
     const status = shared.records.length > 0 || shared.trades.length > 0 || local.status === 'ok' ? 'ok' : local.status;
-    return { records: shared.records, trades: shared.trades, status };
+    return { records: shared.records, trades: shared.trades, needLosses: shared.needLosses ?? [], status };
   } catch (err) {
     console.error('[lootLog] Proxy sync failed, showing local-only data:', err);
     return local;

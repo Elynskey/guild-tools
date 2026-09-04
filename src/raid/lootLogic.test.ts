@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { annotateWithTrades, buildSeasonLootReport, filterByRaider, formatNightForDiscord, groupLootByNight, needWinCount, type RawLootRecord, type RawTradeRecord } from './lootLogic';
+import { annotateWithTrades, buildSeasonLootReport, filterByRaider, formatNightForDiscord, groupLootByNight, needWinCount, type RawLootRecord, type RawNeedLossRecord, type RawTradeRecord } from './lootLogic';
 
 function record(overrides: Partial<RawLootRecord> & Pick<RawLootRecord, 'time'>): RawLootRecord {
   return { itemId: 1, itemLink: '[Item]', winner: 'Grimsyl', boss: 'Vashnik the Malignant', ...overrides };
@@ -169,7 +169,7 @@ describe('formatNightForDiscord', () => {
 describe('buildSeasonLootReport', () => {
   it('includes a roster member with zero wins', () => {
     const rows = buildSeasonLootReport([], ['Grimsyl']);
-    expect(rows).toEqual([{ name: 'Grimsyl', needWinCount: 0, totalWon: 0, items: [], lastWonAt: null }]);
+    expect(rows).toEqual([{ name: 'Grimsyl', needWinCount: 0, totalWon: 0, items: [], lastWonAt: null, maxNeedWinsInNight: 0, lossCount: 0, lostItems: [] }]);
   });
 
   it('counts every win toward totalWon but excludes a traded-away item from needWinCount', () => {
@@ -199,6 +199,62 @@ describe('buildSeasonLootReport', () => {
     const harima = rows.find((r) => r.name === 'Harima')!;
     expect(harima.totalWon).toBe(0);
     expect(harima.items).toHaveLength(0);
+  });
+
+  it('does not flag maxNeedWinsInNight when a season total over 2 is spread across nights (never over the cap on any one night)', () => {
+    const sevenHours = 7 * 60 * 60;
+    const entries = annotateWithTrades(
+      [
+        record({ time: 1000, itemId: 1, itemLink: '[A]', winner: 'Ranikina' }),
+        record({ time: 2000, itemId: 2, itemLink: '[B]', winner: 'Ranikina' }),
+        record({ time: 1000 + sevenHours, itemId: 3, itemLink: '[C]', winner: 'Ranikina' }),
+      ],
+      [],
+    );
+    const [row] = buildSeasonLootReport(entries, ['Ranikina']);
+    expect(row.needWinCount).toBe(3); // season total, over 2 -- but not a cap breach
+    expect(row.maxNeedWinsInNight).toBe(2); // 2 on the first night, 1 on the second -- cap held both nights
+  });
+
+  it('flags maxNeedWinsInNight when a raider actually exceeds the cap on one night', () => {
+    const entries = annotateWithTrades(
+      [
+        record({ time: 1000, itemId: 1, itemLink: '[A]', winner: 'Grimsyl' }),
+        record({ time: 2000, itemId: 2, itemLink: '[B]', winner: 'Grimsyl' }),
+        record({ time: 3000, itemId: 3, itemLink: '[C]', winner: 'Grimsyl' }),
+      ],
+      [],
+    );
+    const [row] = buildSeasonLootReport(entries, ['Grimsyl']);
+    expect(row.maxNeedWinsInNight).toBe(3);
+  });
+
+  it('counts losing Need rolls independently of wins', () => {
+    const entries = annotateWithTrades([record({ time: 1000, itemId: 1, itemLink: '[Sword]', winner: 'Grimsyl' })], []);
+    const losses: RawNeedLossRecord[] = [
+      { itemId: 2, itemLink: '[Shield]', name: 'Grimsyl', boss: 'Sszorak', time: 2000 },
+      { itemId: 3, itemLink: '[Helm]', name: 'Grimsyl', boss: 'Sszorak', time: 3000 },
+    ];
+    const [row] = buildSeasonLootReport(entries, ['Grimsyl'], losses);
+    expect(row.totalWon).toBe(1);
+    expect(row.lossCount).toBe(2);
+    expect(row.lostItems).toHaveLength(2);
+    expect(row.lostItems[0].itemLink).toBe('[Helm]'); // newest first
+  });
+
+  it('gives a roster member with zero losses a lossCount of 0', () => {
+    const [row] = buildSeasonLootReport([], ['Grimsyl'], []);
+    expect(row.lossCount).toBe(0);
+    expect(row.lostItems).toEqual([]);
+  });
+
+  it('includes a raider who only ever lost rolls, never won', () => {
+    const losses: RawNeedLossRecord[] = [{ itemId: 1, itemLink: '[Ring]', name: 'Harima', boss: 'Sszorak', time: 1000 }];
+    const rows = buildSeasonLootReport([], ['Grimsyl'], losses);
+    const harima = rows.find((r) => r.name === 'Harima')!;
+    expect(harima).toBeTruthy();
+    expect(harima.totalWon).toBe(0);
+    expect(harima.lossCount).toBe(1);
   });
 
   it('sets lastWonAt to the most recent win', () => {
