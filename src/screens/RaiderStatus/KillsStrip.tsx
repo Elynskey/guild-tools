@@ -16,18 +16,20 @@ export function KillsStrip({ progressionFraction }: KillsStripProps) {
           {progressionFraction} {config.tier.progressionDifficulty}
         </span>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12 }}>
-        {config.kills.map((kill) => (
-          <figure key={kill.image} style={{ margin: 0 }}>
-            <img
-              src={kill.image}
-              alt={kill.alt}
-              style={{ display: 'block', width: '100%', height: 104, objectFit: 'cover', border: '1px solid var(--border-hairline)', borderRadius: 'var(--radius-sm)', boxShadow: 'var(--shadow-2)' }}
-            />
-            <figcaption style={{ marginTop: 6, fontSize: 'var(--text-micro)', color: 'var(--text-muted)' }}>{kill.caption}</figcaption>
-          </figure>
-        ))}
-      </div>
+      {config.kills.length > 0 && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12 }}>
+          {config.kills.map((kill) => (
+            <figure key={kill.image} style={{ margin: 0 }}>
+              <img
+                src={kill.image}
+                alt={kill.alt}
+                style={{ display: 'block', width: '100%', height: 104, objectFit: 'cover', border: '1px solid var(--border-hairline)', borderRadius: 'var(--radius-sm)', boxShadow: 'var(--shadow-2)' }}
+              />
+              <figcaption style={{ marginTop: 6, fontSize: 'var(--text-micro)', color: 'var(--text-muted)' }}>{kill.caption}</figcaption>
+            </figure>
+          ))}
+        </div>
+      )}
 
       <img
         src="./assets/site/footer-banner.png"

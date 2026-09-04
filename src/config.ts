@@ -19,11 +19,11 @@ export const config = {
     totalBosses: 8,
     sampleModeKilled: 3,
   },
-  kills: [
-    { image: './assets/site/kill-sentinels.png', alt: 'Sentinels defeated', caption: 'Sentinels · first Heroic kill' },
-    { image: './assets/site/kill-vashnik.png', alt: 'Vashnik defeated', caption: 'Vashnik · Saturday Heroic' },
-    { image: './assets/site/kill-rotmire.png', alt: 'Rotmire defeated', caption: 'Rotmire · two pulls, no deaths' },
-  ],
+  // No real kill screenshots for this tier yet -- the previous entries here were
+  // stale leftovers from an earlier tier (one didn't even match a current boss name).
+  // Drop in real ones per SEASON-UPDATE.md when they exist; KillsStrip hides the
+  // photo grid entirely while this stays empty.
+  kills: [] as { image: string; alt: string; caption: string }[],
 
   // --- Only when the expansion changes ---
   expansionLogo: './assets/site/midnight-logo.avif',
