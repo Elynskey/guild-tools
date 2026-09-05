@@ -144,13 +144,17 @@ export function LootHistory() {
             setEditing(null);
             setAdding(false);
           }}
-          onSave={(fields, keepOpen) => {
-            if (editing?.id) lh.updateRecord(editing.id, fields);
-            else lh.addRecord(fields);
-            if (!keepOpen) {
+          saveError={lh.saveError}
+          onSave={async (fields, keepOpen) => {
+            // updateRecord has no failure signal of its own (unlike addRecord's
+            // duplicate-win check) -- edits always proceed as before; only the add
+            // path can come back false and needs the dialog to stay open on the error.
+            const ok = editing?.id ? (lh.updateRecord(editing.id, fields), true) : await lh.addRecord(fields);
+            if (ok && !keepOpen) {
               setEditing(null);
               setAdding(false);
             }
+            return ok;
           }}
           onDelete={
             editing?.id

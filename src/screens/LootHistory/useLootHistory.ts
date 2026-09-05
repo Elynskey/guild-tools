@@ -129,13 +129,26 @@ export function useLootHistory() {
       .finally(() => setInstalling(false));
   }, [electron, load]);
 
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  // Resolves true on success, false on failure (e.g. manualAdd's duplicate-win check)
+  // -- the dialog uses this to decide whether it's safe to clear its fields/stay open
+  // for "Save & add another", same success-signaling pattern as postNightToDiscord below.
   const addRecord = useCallback(
-    (input: ManualLootRecordInput) => {
-      if (!electron) return;
+    (input: ManualLootRecordInput): Promise<boolean> => {
+      if (!electron) return Promise.resolve(false);
       setSaving(true);
-      electron
+      setSaveError(null);
+      return electron
         .addManualLootRecord(input)
-        .then(() => load())
+        .then(() => {
+          load();
+          return true;
+        })
+        .catch((err: Error) => {
+          setSaveError(err.message);
+          return false;
+        })
         .finally(() => setSaving(false));
     },
     [electron, load],
@@ -227,6 +240,7 @@ export function useLootHistory() {
     removeRecord,
     removeTrade,
     saving,
+    saveError,
     available: !!electron,
     nightMessagesForDiscord,
     postNightToDiscord,

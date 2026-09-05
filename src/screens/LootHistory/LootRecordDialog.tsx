@@ -13,10 +13,12 @@ interface LootRecordDialogProps {
   /** Present when editing an existing record; absent when adding a new one. */
   entry?: LootEntry;
   onClose: () => void;
-  /** keepOpen: true for "Save & add another" (dialog stays open for the next item on the same night) -- only ever true from the add flow, never from edit. */
-  onSave: (fields: { winner: string; itemName: string; boss: string; slot: string; time?: number; itemId?: number | null }, keepOpen: boolean) => void;
+  /** keepOpen: true for "Save & add another" (dialog stays open for the next item on the same night) -- only ever true from the add flow, never from edit. Resolves false on failure (e.g. a duplicate-win rejection) so the dialog knows to stay open and show saveError instead of clearing its fields as if it had succeeded. */
+  onSave: (fields: { winner: string; itemName: string; boss: string; slot: string; time?: number; itemId?: number | null }, keepOpen: boolean) => Promise<boolean>;
   onDelete?: () => void;
   saving: boolean;
+  /** Set when the most recent save attempt failed (e.g. manualAdd's duplicate-win check) -- cleared automatically on the next attempt. */
+  saveError?: string | null;
   /** Null when unavailable (no Electron, no proxy, or a failed live fetch with nothing cached) -- the add flow falls back to plain text fields in that case. */
   bossLootTable?: BossLootTable | null;
   /** Character name -> class, from the live roster -- drives item eligibility filtering. */
@@ -50,6 +52,10 @@ function lookupClass(name: string, classByName: Record<string, string>): string 
   const lower = trimmed.toLowerCase();
   const match = Object.entries(classByName).find(([n]) => n.toLowerCase() === lower);
   return match?.[1] ?? null;
+}
+
+function buildBossOptions(bossLootTable: BossLootTable) {
+  return bossLootTable.bosses.map((b) => ({ value: b.name, label: b.name, icon: <BossIcon boss={b.name} size={28} /> }));
 }
 
 /** Finds the item ID in this tier's loot table matching an existing entry's boss+item name, so editing can pre-select the same smart-picker fields instead of starting blank. Null if the entry's boss isn't in this tier's table, or its item name doesn't match any of that boss's drops (old data, a different tier, or something the addon captured that isn't in the Journal) -- the caller falls back to plain text fields in that case rather than risk silently discarding it. */
@@ -91,10 +97,7 @@ function SmartAddFields({
 
   const matchedClass = lookupClass(winner, classByName);
 
-  const bossOptions = useMemo(
-    () => bossLootTable.bosses.map((b) => ({ value: b.name, label: b.name, icon: <BossIcon boss={b.name} size={28} /> })),
-    [bossLootTable],
-  );
+  const bossOptions = useMemo(() => buildBossOptions(bossLootTable), [bossLootTable]);
 
   const itemOptions = useMemo(() => {
     if (!boss) return [];
@@ -155,7 +158,7 @@ function SmartAddFields({
 }
 
 /** Manual correction tool -- for whatever neither the addon's chat parser nor its C_LootHistory capture caught (or caught wrong). */
-export function LootRecordDialog({ entry, onClose, onSave, onDelete, saving, bossLootTable, classByName = {}, itemIcons = {} }: LootRecordDialogProps) {
+export function LootRecordDialog({ entry, onClose, onSave, onDelete, saving, bossLootTable, classByName = {}, itemIcons = {}, saveError }: LootRecordDialogProps) {
   const [winner, setWinner] = useState(entry?.winner ?? '');
   const [itemName, setItemName] = useState(entry ? itemLabel(entry.itemLink) : '');
   const [boss, setBoss] = useState(entry?.boss ?? '');
@@ -205,10 +208,15 @@ export function LootRecordDialog({ entry, onClose, onSave, onDelete, saving, bos
   const useSmartAdd = !!bossLootTable && (!entry || matchedItemId != null);
   const canSave = !!winner.trim() && !!itemName.trim() && !saving;
 
-  const commit = (keepOpen: boolean) => {
-    onSave({ winner: winner.trim(), itemName: itemName.trim(), boss: boss.trim(), slot: slot.trim(), time: entry ? undefined : time, itemId }, keepOpen);
-    if (keepOpen) {
-      setJustAdded(`${itemName.trim()} logged for ${winner.trim()}.`);
+  const commit = async (keepOpen: boolean) => {
+    const wasAdded = itemName.trim();
+    const wasWinner = winner.trim();
+    const ok = await onSave({ winner: wasWinner, itemName: wasAdded, boss: boss.trim(), slot: slot.trim(), time: entry ? undefined : time, itemId }, keepOpen);
+    // A rejected save (e.g. a duplicate-win check) must NOT clear the fields as if it
+    // had gone through -- that would just discard what the officer typed with no way
+    // to retry it. Only reset for "add another" once the save actually succeeded.
+    if (ok && keepOpen) {
+      setJustAdded(`${wasAdded} logged for ${wasWinner}.`);
       setWinner('');
       setItemName('');
       setBoss('');
@@ -255,7 +263,8 @@ export function LootRecordDialog({ entry, onClose, onSave, onDelete, saving, bos
             hint="Set this once when logging a past night -- it stays put for every item you add below, so they all land in the same night."
           />
         )}
-        {justAdded && (
+        {saveError && <p style={{ margin: 0, fontSize: 'var(--text-body-s)', color: 'var(--status-danger)' }}>{saveError}</p>}
+        {justAdded && !saveError && (
           <p style={{ margin: 0, fontSize: 'var(--text-body-s)', color: 'var(--status-success)' }}>{justAdded} Add the next item, or Save &amp; close when done.</p>
         )}
         {useSmartAdd ? (
@@ -279,7 +288,14 @@ export function LootRecordDialog({ entry, onClose, onSave, onDelete, saving, bos
           <>
             <Input label="Winner" placeholder="Character name" value={winner} onChange={(e) => setWinner(e.target.value)} autoFocus />
             <Input label="Item" placeholder="Item name" value={itemName} onChange={(e) => setItemName(e.target.value)} />
-            <Input label="Boss" placeholder="Optional" value={boss} onChange={(e) => setBoss(e.target.value)} />
+            {/* The item didn't match this tier's loot table (see useSmartAdd), but the boss
+                itself still might -- picking from the real list beats free-typing it, and
+                doesn't risk discarding anything since Item/Slot stay free text regardless. */}
+            {bossLootTable ? (
+              <IconSelect label="Boss" placeholder="Select a boss" options={buildBossOptions(bossLootTable)} value={boss || null} onChange={(v) => setBoss(v)} />
+            ) : (
+              <Input label="Boss" placeholder="Optional" value={boss} onChange={(e) => setBoss(e.target.value)} />
+            )}
             <Input label="Slot" placeholder="Optional -- e.g. Head, Trinket" value={slot} onChange={(e) => setSlot(e.target.value)} />
           </>
         )}

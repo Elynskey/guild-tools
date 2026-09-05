@@ -117,10 +117,36 @@ function sync(newRecords, newTrades, newNeedLosses) {
   return { records: db.records, trades: db.trades, needLosses: db.needLosses, addedRecords, addedTrades, addedNeedLosses };
 }
 
+// Real item links are the |Hitem:...|h[Name]|h|r escape sequence -- same extraction
+// LootLogTable/formatLootAnnouncement use, duplicated here rather than shared since
+// this file has no access to the renderer's lootLogic.ts.
+function extractItemName(itemLink) {
+  const match = typeof itemLink === 'string' && itemLink.match(/\[(.+)\]/);
+  return match ? match[1] : itemLink;
+}
+
+// Confirmed live 2026-09-05: an officer manually logged a win the addon had ALREADY
+// captured (unaware it had synced), producing a second record for the same win --
+// itemId null (no icon) since manualAdd never has a real item link to draw one from,
+// alongside the addon's own correctly-iconed copy. Same 6-hour window as the addon's
+// own recordNeedWin dedup / this app's same-raid-night grouping (groupLootByNight) --
+// generous enough to catch "this was already logged earlier tonight" without
+// flagging a genuinely new win of the same item on a later night.
+const DUPLICATE_WINDOW_SECONDS = 6 * 60 * 60;
+
 /** Officer-entered record -- no real itemLink available by hand, so the item name is stored as a plain "[Name]" string (the same bracketed shape LootLogTable's display parsing already expects; it just won't carry a real tooltip). itemId, when the app's smart picker supplied one (a real item from this tier's loot table), is kept so getItemIconUrls can still resolve a real icon -- free-text entries just get null, same as before. */
 function manualAdd({ winner, itemName, boss, slot, time: recordTime, itemId }) {
   if (!winner || !itemName) throw new Error('winner and itemName are both required.');
   const db = load();
+  const time = recordTime ?? Math.floor(Date.now() / 1000);
+
+  const duplicate = db.records.find(
+    (r) => r.winner.toLowerCase() === winner.toLowerCase() && extractItemName(r.itemLink)?.toLowerCase() === itemName.toLowerCase() && Math.abs(r.time - time) <= DUPLICATE_WINDOW_SECONDS,
+  );
+  if (duplicate) {
+    throw new Error(`${winner} already has a logged win for "${itemName}" around this time -- check Loot History before adding it again.`);
+  }
+
   const record = {
     id: crypto.randomUUID(),
     itemId: itemId ?? null,
@@ -128,7 +154,7 @@ function manualAdd({ winner, itemName, boss, slot, time: recordTime, itemId }) {
     winner,
     boss: boss || null,
     slot: slot || 'Other',
-    time: recordTime ?? Math.floor(Date.now() / 1000),
+    time,
   };
   db.records.push(record);
   save(db);
