@@ -231,12 +231,19 @@ export function generateFeedback(r: Raider, window: Window, gates: Gates, derive
   const perfUnit = r.role === 'dps' ? 'DPS' : r.role === 'healer' ? 'HPS' : 'damage taken/s';
   const perfRawText =
     r.perfRaw == null ? '' : ` (${fmtNum(r.perfRaw)} ${perfUnit}${perfRawAvg != null ? `, guild average ${fmtNum(perfRawAvg)}` : ''})`;
+  // Perf is deliberately season-pooled tier-to-date (see weightedScore's doc comment)
+  // even when window is 'night' -- one night is too noisy to judge alone, so this is
+  // always the steadier season average. In night mode that sits right next to
+  // trendText's own "tonight's ..." sentence (see below), which IS this specific
+  // night -- without a qualifier here, a raider whose season average happens to be
+  // close to (or, early in a tier, nearly identical to) their one logged night reads
+  // as the exact same stat shown twice, not two different timeframes that coincide.
   const perfText =
     r.role === 'dps'
-      ? `damage at ${perf}% of the guild's DPS minimum${perfRawText}`
+      ? `${night ? 'tier-to-date ' : ''}damage at ${perf}% of the guild's DPS minimum${perfRawText}`
       : r.role === 'healer'
-        ? `HPS percentile at ${ordinal(perf)}${perfRawText}`
-        : `survivability percentile at ${ordinal(perf)}${perfRawText}`;
+        ? `${night ? 'tier-to-date ' : ''}HPS percentile at ${ordinal(perf)}${perfRawText}`
+        : `${night ? 'tier-to-date ' : ''}survivability percentile at ${ordinal(perf)}${perfRawText}`;
   const gearText =
     missing === 0 ? "every gem and enchant in place against this month’s reference table" : `${missing} slot${missing > 1 ? 's' : ''} still missing a gem or enchant`;
   const trendText =
@@ -267,7 +274,7 @@ export function generateFeedback(r: Raider, window: Window, gates: Gates, derive
   // Full per-metric breakdown for the "See overall performance" detail view — every
   // dimension, not just strongest/weakest, so an officer can see the whole picture.
   const dimensionLabel: Record<ScoreDimension, string> = {
-    perf: r.role === 'dps' ? 'Damage' : r.role === 'healer' ? 'Healing' : 'Survivability',
+    perf: `${r.role === 'dps' ? 'Damage' : r.role === 'healer' ? 'Healing' : 'Survivability'}${night ? ' (season)' : ''}`,
     gear: 'Gear',
     trend: night ? 'Last night' : 'Trend',
   };
