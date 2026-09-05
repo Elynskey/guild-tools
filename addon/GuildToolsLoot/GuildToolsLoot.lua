@@ -87,6 +87,11 @@ local function announce(msg)
 end
 
 local currentBoss = nil
+-- Mirrors currentBoss's "don't clear on ENCOUNTER_END" lifecycle (see that ENCOUNTER_END
+-- handler's own comment) -- loot resolves after the kill, so this needs to still be the
+-- just-killed encounter's ID when a win/loss actually gets recorded. Used by
+-- isTrackedEncounter for the chat-text capture path, which has no encounterID of its own.
+local currentEncounterID = nil
 
 -- rollID -> { link = itemLink, name = itemName }, populated on START_LOOT_ROLL, read
 -- when that roll's outcome is announced in chat, then cleared.
@@ -156,6 +161,22 @@ local function isTrackedRaidDifficulty()
   return TRACKED_RAID_DIFFICULTIES[difficultyID] == true
 end
 
+-- One deliberate exception to raid-only tracking: Nymrissa Wavecaller's Lair -- a
+-- bonus/superboss fought through a Delve, which reports instanceType "scenario" to
+-- IsInInstance(), not "raid", so isTrackedRaidDifficulty() alone would always exclude
+-- it. encounterID 3379 confirmed against this guild's own real Warcraft Logs report
+-- (hPLmXKyz4Vn3tZHr, 2026-09-05) rather than guessed -- the same numeric ID both WCL
+-- and this addon's own ENCOUNTER_START event key off, more robust than matching the
+-- display name as a string. Deliberately narrow: ordinary Delves (any other scenario)
+-- stay excluded entirely, on purpose -- only this specific Lair counts.
+local TRACKED_LAIR_ENCOUNTER_IDS = { [3379] = true }
+
+local function isTrackedEncounter(encounterID)
+  if isTrackedRaidDifficulty() then return true end
+  local inInstance, instanceType = IsInInstance()
+  return inInstance and instanceType == "scenario" and TRACKED_LAIR_ENCOUNTER_IDS[encounterID] == true
+end
+
 -- itemEquipLoc is a token (e.g. "INVTYPE_HEAD"), not display text -- _G[token] resolves
 -- it to whatever the client's actual localized string is, same pattern
 -- patternFromGlobalString uses for chat-message matching. GetItemInfo can return nils on
@@ -173,9 +194,9 @@ local function slotLabel(itemLink)
   return resolved
 end
 
-local function recordNeedWin(winnerName, itemLink, bossOverride)
+local function recordNeedWin(winnerName, itemLink, bossOverride, encounterIDOverride)
   if not GuildToolsLootDB.enabled or not winnerName or not itemLink then return end
-  if not isTrackedRaidDifficulty() then return end
+  if not isTrackedEncounter(encounterIDOverride or currentEncounterID) then return end
   local itemId = itemIdFromLink(itemLink)
   if isExcludedFromNeedTracking(itemId) then return end
 
@@ -218,9 +239,9 @@ end
 -- same as today. Deliberately silent (no chat announce, unlike recordNeedWin) -- this
 -- is officer-app-only, never posted anywhere raid-visible; calling out someone's bad
 -- roll live in raid chat would be a jerk move this addon shouldn't enable.
-local function recordNeedLoss(loserName, itemLink, bossOverride)
+local function recordNeedLoss(loserName, itemLink, bossOverride, encounterIDOverride)
   if not GuildToolsLootDB.enabled or not loserName or not itemLink then return end
-  if not isTrackedRaidDifficulty() then return end
+  if not isTrackedEncounter(encounterIDOverride or currentEncounterID) then return end
   local itemId = itemIdFromLink(itemLink)
   if isExcludedFromNeedTracking(itemId) then return end
 
@@ -292,11 +313,11 @@ local function handleLootHistoryDrop(encounterID, lootListID, bossNameHint)
     if name then bossName = name end
   end
 
-  recordNeedWin(dropInfo.winner.playerName, dropInfo.itemHyperlink, bossName)
+  recordNeedWin(dropInfo.winner.playerName, dropInfo.itemHyperlink, bossName, encounterID)
 
   for _, roll in ipairs(dropInfo.rollInfos) do
     if not roll.isWinner and (roll.state == NEED_MAIN_SPEC_STATE or roll.state == NEED_OFF_SPEC_STATE) then
-      recordNeedLoss(roll.playerName, dropInfo.itemHyperlink, bossName)
+      recordNeedLoss(roll.playerName, dropInfo.itemHyperlink, bossName, encounterID)
     end
   end
 end
@@ -418,6 +439,7 @@ frame:SetScript("OnEvent", function(_, event, ...)
   elseif event == "ENCOUNTER_START" then
     local encounterID, encounterName = ...
     currentBoss = encounterName
+    currentEncounterID = encounterID
     if encounterID then
       GuildToolsLootDB.seenEncounters[tostring(encounterID)] = encounterName
     end
