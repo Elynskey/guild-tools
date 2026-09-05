@@ -9,6 +9,8 @@ export interface ManualLootRecordInput {
   slot?: string;
   /** Unix seconds. Omitted (or left at its default) means "now" -- set explicitly when logging a night after the fact, so it groups into the right night instead of today's. */
   time?: number;
+  /** Set only when itemName came from the smart picker (a real item in this tier's loot table) -- lets a manual add still resolve a real icon via getItemIconUrls instead of always going iconless. Omitted/null for the free-text fallback fields. */
+  itemId?: number | null;
 }
 
 export interface LootRecordPatch {

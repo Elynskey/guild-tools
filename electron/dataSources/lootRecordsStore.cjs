@@ -117,13 +117,13 @@ function sync(newRecords, newTrades, newNeedLosses) {
   return { records: db.records, trades: db.trades, needLosses: db.needLosses, addedRecords, addedTrades, addedNeedLosses };
 }
 
-/** Officer-entered record -- no real itemLink available by hand, so the item name is stored as a plain "[Name]" string (the same bracketed shape LootLogTable's display parsing already expects; it just won't carry a real tooltip). */
-function manualAdd({ winner, itemName, boss, slot, time: recordTime }) {
+/** Officer-entered record -- no real itemLink available by hand, so the item name is stored as a plain "[Name]" string (the same bracketed shape LootLogTable's display parsing already expects; it just won't carry a real tooltip). itemId, when the app's smart picker supplied one (a real item from this tier's loot table), is kept so getItemIconUrls can still resolve a real icon -- free-text entries just get null, same as before. */
+function manualAdd({ winner, itemName, boss, slot, time: recordTime, itemId }) {
   if (!winner || !itemName) throw new Error('winner and itemName are both required.');
   const db = load();
   const record = {
     id: crypto.randomUUID(),
-    itemId: null,
+    itemId: itemId ?? null,
     itemLink: `[${itemName}]`,
     winner,
     boss: boss || null,

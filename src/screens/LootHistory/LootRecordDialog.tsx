@@ -14,7 +14,7 @@ interface LootRecordDialogProps {
   entry?: LootEntry;
   onClose: () => void;
   /** keepOpen: true for "Save & add another" (dialog stays open for the next item on the same night) -- only ever true from the add flow, never from edit. */
-  onSave: (fields: { winner: string; itemName: string; boss: string; slot: string; time?: number }, keepOpen: boolean) => void;
+  onSave: (fields: { winner: string; itemName: string; boss: string; slot: string; time?: number; itemId?: number | null }, keepOpen: boolean) => void;
   onDelete?: () => void;
   saving: boolean;
   /** Null when unavailable (no Electron, no proxy, or a failed live fetch with nothing cached) -- the add flow falls back to plain text fields in that case. */
@@ -70,7 +70,7 @@ function SmartAddFields({
   bossLootTable: BossLootTable;
   classByName: Record<string, string>;
   itemIcons: Record<number, string | null>;
-  onPick: (fields: { boss: string; itemName: string; slot: string }) => void;
+  onPick: (fields: { boss: string; itemName: string; slot: string; itemId: number }) => void;
 }) {
   const [boss, setBoss] = useState<string | null>(null);
   const [itemId, setItemId] = useState<number | null>(null);
@@ -103,9 +103,9 @@ function SmartAddFields({
   }, [boss]);
 
   useEffect(() => {
-    if (boss && selectedItem) onPick({ boss, itemName: selectedItem.name, slot: selectedItem.slot });
+    if (boss && selectedItem && itemId != null) onPick({ boss, itemName: selectedItem.name, slot: selectedItem.slot, itemId });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [boss, selectedItem]);
+  }, [boss, selectedItem, itemId]);
 
   return (
     <>
@@ -137,6 +137,10 @@ export function LootRecordDialog({ entry, onClose, onSave, onDelete, saving, bos
   const [itemName, setItemName] = useState(entry ? itemLabel(entry.itemLink) : '');
   const [boss, setBoss] = useState(entry?.boss ?? '');
   const [slot, setSlot] = useState(entry?.slot ?? '');
+  // Only ever set via the smart picker (a real item from this tier's loot table) --
+  // stays null for the plain-text fallback fields and for editing, same as before this
+  // existed. Lets a manual add still resolve a real icon instead of always going iconless.
+  const [itemId, setItemId] = useState<number | null>(null);
   // Only meaningful for add (not edit) -- lets an officer logging a night after the fact
   // set the real date once, then add several items under it without re-picking each time.
   // Defaults to now; only sent along if actually adding.
@@ -177,13 +181,14 @@ export function LootRecordDialog({ entry, onClose, onSave, onDelete, saving, bos
   const canSave = !!winner.trim() && !!itemName.trim() && !saving;
 
   const commit = (keepOpen: boolean) => {
-    onSave({ winner: winner.trim(), itemName: itemName.trim(), boss: boss.trim(), slot: slot.trim(), time: entry ? undefined : time }, keepOpen);
+    onSave({ winner: winner.trim(), itemName: itemName.trim(), boss: boss.trim(), slot: slot.trim(), time: entry ? undefined : time, itemId }, keepOpen);
     if (keepOpen) {
       setJustAdded(`${itemName.trim()} logged for ${winner.trim()}.`);
       setWinner('');
       setItemName('');
       setBoss('');
       setSlot('');
+      setItemId(null);
       setFormKey((k) => k + 1);
     }
   };
@@ -240,6 +245,7 @@ export function LootRecordDialog({ entry, onClose, onSave, onDelete, saving, bos
               setBoss(fields.boss);
               setItemName(fields.itemName);
               setSlot(fields.slot);
+              setItemId(fields.itemId);
             }}
           />
         ) : (
