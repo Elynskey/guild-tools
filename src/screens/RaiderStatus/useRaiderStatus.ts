@@ -160,9 +160,15 @@ export function useRaiderStatus() {
   // (perf, deaths, pulls, deathCauses) stay whatever the roster fetch computed,
   // since "Season Overview" always means the same thing regardless of which log
   // is selected for the night view.
+  // Filters down to raiders actually IN that snapshot -- someone on the current roster
+  // who wasn't at that specific past raid (bench, absence, joined since) has no entry
+  // in nightSnapshot at all, and previously fell through to `r` unchanged, which kept
+  // them showing in the picked-night view with stale/season data as if they'd been
+  // there. A specific log view should only ever show who actually attended it.
   const rosterForWindow = useMemo(() => {
-    if (win !== 'night' || !nightSnapshot || !roster) return roster;
-    return roster.map((r) => (nightSnapshot[r.name] ? { ...r, ...nightSnapshot[r.name] } : r));
+    if (win !== 'night' || !roster) return roster;
+    if (!nightSnapshot) return roster; // latest report -- warcraftlogs.cjs only assigns night* fields onto attendees of that report (see the Object.assign loop keyed on lastNightFields[name]), so this at least won't show stale copied data for an absentee the way the bug above did
+    return roster.filter((r) => nightSnapshot[r.name]).map((r) => ({ ...r, ...nightSnapshot[r.name] }));
   }, [roster, win, nightSnapshot]);
 
   const all = useMemo<ScoredRaider[]>(() => (rosterForWindow ? scoreRoster(rosterForWindow, win, gates) : []), [rosterForWindow, win, gates]);
