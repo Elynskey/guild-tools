@@ -99,6 +99,9 @@ const raider = (
   mythicPlusRuns: synthesizeMythicPlusRuns(name, rioCurrent),
   perf,
   perfRaw: synthesizePerfRaw(role, perf),
+  // No real season-wide WCL pooling behind fabricated raiders -- sample mode just
+  // omits the "compared against" explanation rather than fabricating a class pool.
+  perfComparisonBasis: null,
   gearCompletion,
   gearDetail: synthesizeGearDetail(name, gearCompletion),
   // No Blizzard fetch behind fabricated raiders, so no real avatar to show -- RosterRow

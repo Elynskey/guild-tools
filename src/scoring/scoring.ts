@@ -238,12 +238,25 @@ export function generateFeedback(r: Raider, window: Window, gates: Gates, derive
   // night -- without a qualifier here, a raider whose season average happens to be
   // close to (or, early in a tier, nearly identical to) their one logged night reads
   // as the exact same stat shown twice, not two different timeframes that coincide.
+  // Spells out which pool the percentile actually came from -- a same-spec+class peer
+  // ("vs 1 other Restoration Shaman") when there were enough of them this season,
+  // otherwise the whole role ("vs all 5 healers"). Without this, two raiders' percentiles
+  // silently meant different comparisons (some same-kit, some cross-kit) with no way to
+  // tell which from the number alone.
+  const comparisonText =
+    r.role === 'dps' || !r.perfComparisonBasis
+      ? ''
+      : r.perfComparisonBasis.scope === 'class'
+        ? ` (vs ${r.perfComparisonBasis.peerCount} other ${r.perfComparisonBasis.className}${r.perfComparisonBasis.peerCount === 1 ? '' : 's'} this season)`
+        : r.perfComparisonBasis.peerCount === 0
+          ? ' (nobody else logged this role this season)'
+          : ` (vs all ${r.perfComparisonBasis.peerCount + 1} ${r.role}s this season)`;
   const perfText =
     r.role === 'dps'
       ? `${night ? 'tier-to-date ' : ''}damage at ${perf}% of the guild's DPS minimum${perfRawText}`
       : r.role === 'healer'
-        ? `${night ? 'tier-to-date ' : ''}HPS percentile at ${ordinal(perf)}${perfRawText}`
-        : `${night ? 'tier-to-date ' : ''}survivability percentile at ${ordinal(perf)}${perfRawText}`;
+        ? `${night ? 'tier-to-date ' : ''}HPS percentile at ${ordinal(perf)}${perfRawText}${comparisonText}`
+        : `${night ? 'tier-to-date ' : ''}survivability percentile at ${ordinal(perf)}${perfRawText}${comparisonText}`;
   const gearText =
     missing === 0 ? "every gem and enchant in place against this month’s reference table" : `${missing} slot${missing > 1 ? 's' : ''} still missing a gem or enchant`;
   const trendText =

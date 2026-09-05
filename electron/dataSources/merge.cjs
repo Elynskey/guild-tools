@@ -62,6 +62,7 @@ function mergeSources({ wowauditRoster, rio, gearCompletion, portraits, wcl }) {
         portraitUrl: portraits?.[key] ?? null,
         perf: wclData.perf,
         perfRaw: wclData.perfRaw ?? null,
+        perfComparisonBasis: wclData.perfComparisonBasis ?? null,
         parseTrend: wclData.parseTrend,
         deaths: wclData.deaths,
         pulls: wclData.pulls,

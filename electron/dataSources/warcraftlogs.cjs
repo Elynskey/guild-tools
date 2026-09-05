@@ -387,6 +387,14 @@ function nightFieldsFromAggregate(agg, roleByName, minDps) {
   return result;
 }
 
+function statsOf(values) {
+  const n = values.length;
+  if (n === 0) return null;
+  const mean = values.reduce((a, v) => a + v, 0) / n;
+  const variance = values.reduce((a, v) => a + (v - mean) ** 2, 0) / n;
+  return { mean, stddev: Math.sqrt(variance) };
+}
+
 /**
  * Season-wide healer/tank percentile. Deliberately NOT "average each raider's
  * numbers across the season, then z-score those averages against each other" --
@@ -405,49 +413,87 @@ function nightFieldsFromAggregate(agg, roleByName, minDps) {
  * rewards "collects more data": more raid nights logged this tier -> a more
  * reliable read on what's actually normal variance for this role in this raid.
  *
- * @returns {{ percentile: Map<string, number>, raw: Map<string, number> }} `raw` is
- *   each raider's own season-average throughput (the number the percentile is
+ * Compared within CLASS when there are at least 2 distinct raiders of that class in
+ * this role this season (e.g. two Blood DKs, or two Restoration Shaman) -- different
+ * healer/tank specs can have systematically different raw HPS/damage-taken profiles
+ * for kit reasons that have nothing to do with skill (a Discipline Priest's absorbs
+ * don't count as "healing" the same way a Restoration Druid's HoTs do), so comparing
+ * across classes directly can penalize a spec's kit rather than the player. Falls
+ * back to the whole-role pool (the prior behavior) for a raider who's the only one of
+ * their class this season -- there's no same-class peer to compare against, and
+ * silently scoring them 100 (nothing to compare against, same as `perRaider.size ===
+ * 1` below) would hide a real signal rather than just being cautious about a small one.
+ * `classOf` is optional (older callers/tests can omit it) and every raider just uses
+ * the role-wide pool, identical to this function's pre-class-aware behavior.
+ *
+ * @returns {{ percentile: Map<string, number>, raw: Map<string, number>, basis: Map<string, { scope: 'class'|'role', className: string|null, peerCount: number }> }}
+ *   `raw` is each raider's own season-average throughput (the number the percentile is
  *   computed FROM) -- surfaced so the app can show "42,300 HPS (72nd percentile)"
  *   instead of the percentile alone, and so it can average `raw` across a role for
  *   an "average HPS this tier" comparison (equal weight per raider, unlike `mean`
  *   above which weights raiders with more logged nights more heavily -- that
  *   weighting is right for the percentile's reference distribution, wrong for a
  *   plain "what does the average healer put out" number).
+ *   `basis` is which reference pool actually produced each raider's percentile and
+ *   how many OTHER distinct raiders were in it -- for explaining the number in the UI
+ *   ("vs 1 other Restoration Shaman this season" / "vs all 5 healers this season").
  */
-function computeSeasonPercentiles(aggregates, metricKey, role, roleOf, higherIsBetter) {
+function computeSeasonPercentiles(aggregates, metricKey, role, roleOf, higherIsBetter, classOf = () => null) {
   const samples = [];
-  const perRaider = new Map(); // name -> {total, count}
+  const samplesByClass = new Map(); // class -> value[]
+  const perRaider = new Map(); // name -> {total, count, class}
   for (const agg of aggregates) {
     for (const [name, value] of agg[metricKey]) {
       if (value == null || roleOf(name) !== role) continue;
       samples.push(value);
-      const prev = perRaider.get(name) ?? { total: 0, count: 0 };
-      perRaider.set(name, { total: prev.total + value, count: prev.count + 1 });
+      const cls = classOf(name);
+      if (cls) {
+        const arr = samplesByClass.get(cls) ?? [];
+        arr.push(value);
+        samplesByClass.set(cls, arr);
+      }
+      const prev = perRaider.get(name) ?? { total: 0, count: 0, class: cls };
+      perRaider.set(name, { total: prev.total + value, count: prev.count + 1, class: cls });
     }
   }
 
   const percentile = new Map();
   const raw = new Map();
+  const basis = new Map();
   for (const [name, { total, count }] of perRaider) raw.set(name, total / count);
-  if (samples.length === 0) return { percentile, raw };
+  if (samples.length === 0) return { percentile, raw, basis };
   if (perRaider.size === 1) {
-    percentile.set([...perRaider.keys()][0], 100); // nothing to compare against
-    return { percentile, raw };
+    const [[name]] = perRaider;
+    percentile.set(name, 100); // nothing to compare against
+    basis.set(name, { scope: 'role', className: null, peerCount: 0 });
+    return { percentile, raw, basis };
   }
 
-  const mean = samples.reduce((a, v) => a + v, 0) / samples.length;
-  const variance = samples.reduce((a, v) => a + (v - mean) ** 2, 0) / samples.length;
-  const stddev = Math.sqrt(variance);
+  // How many DISTINCT raiders (not samples) of each class are in this role's pool
+  // this season -- a same-class comparison only means something with a real peer,
+  // not just more logged nights from the same one person.
+  const distinctByClass = new Map();
+  for (const { class: cls } of perRaider.values()) {
+    if (cls) distinctByClass.set(cls, (distinctByClass.get(cls) ?? 0) + 1);
+  }
+
+  const roleStats = statsOf(samples);
+  const classStatsCache = new Map();
 
   for (const [name, avg] of raw) {
-    if (stddev === 0) {
+    const cls = perRaider.get(name).class;
+    const hasClassPeers = cls && (distinctByClass.get(cls) ?? 0) >= 2;
+    const stats = hasClassPeers ? (classStatsCache.get(cls) ?? classStatsCache.set(cls, statsOf(samplesByClass.get(cls))).get(cls)) : roleStats;
+    basis.set(name, hasClassPeers ? { scope: 'class', className: cls, peerCount: distinctByClass.get(cls) - 1 } : { scope: 'role', className: null, peerCount: perRaider.size - 1 });
+
+    if (stats.stddev === 0) {
       percentile.set(name, 50); // no spread in the data at all -- nobody is above or below
       continue;
     }
-    const z = ((avg - mean) / stddev) * (higherIsBetter ? 1 : -1);
+    const z = ((avg - stats.mean) / stats.stddev) * (higherIsBetter ? 1 : -1);
     percentile.set(name, Math.round(normalCdf(z) * 100));
   }
-  return { percentile, raw };
+  return { percentile, raw, basis };
 }
 
 /**
@@ -494,8 +540,16 @@ async function fetchWarcraftLogs(guild, tierZoneName, roleByName) {
   // compare against. DPS is unaffected -- it stays %-of-the-guild's-minimum, a
   // flat threshold rather than a ranking, so it has no "peer pool" to grow.
   const roleOfResolved = (name) => resolvedIdentity[name]?.role ?? roleByName[name];
-  const { percentile: seasonHealerPercent, raw: seasonHealerRaw } = computeSeasonPercentiles(aggregates, 'hps', 'healer', roleOfResolved, true);
-  const { percentile: seasonTankPercent, raw: seasonTankRaw } = computeSeasonPercentiles(aggregates, 'damageTaken', 'tank', roleOfResolved, false);
+  // Grouped by spec+class ("Restoration Shaman"), not bare class -- a class with two
+  // healing specs (Priest: Holy/Discipline) would otherwise pool two genuinely
+  // different throughput profiles together under one label.
+  const classOfResolved = (name) => {
+    const id = resolvedIdentity[name];
+    return id ? `${id.spec} ${id.class}` : null;
+  };
+  const { percentile: seasonHealerPercent, raw: seasonHealerRaw, basis: seasonHealerBasis } = computeSeasonPercentiles(aggregates, 'hps', 'healer', roleOfResolved, true, classOfResolved);
+  const { percentile: seasonTankPercent, raw: seasonTankRaw, basis: seasonTankBasis } = computeSeasonPercentiles(aggregates, 'damageTaken', 'tank', roleOfResolved, false, classOfResolved);
+  const seasonPerfBasis = { ...Object.fromEntries(seasonHealerBasis), ...Object.fromEntries(seasonTankBasis) };
 
   const names = Object.keys(roleByName);
   const result = {};
@@ -564,6 +618,10 @@ async function fetchWarcraftLogs(guild, tierZoneName, roleByName) {
       spec: resolvedIdentity[name]?.spec ?? null,
       perf: seasonPerf ?? seriesLast,
       perfRaw: perfRaw == null ? null : Math.round(perfRaw),
+      // Which pool actually produced perf, for healers/tanks -- null for DPS (a flat
+      // threshold, not a ranking, so there's no "compared against" to explain) and for
+      // anyone who fell back to seriesLast just above (no season pool entry at all).
+      perfComparisonBasis: role === MIN_DPS_ROLE ? null : (seasonPerfBasis[name] ?? null),
       parseTrend,
       deaths,
       pulls,
@@ -723,4 +781,4 @@ async function fetchNightSnapshot(code, roleByName) {
   return nightFieldsFromAggregate(agg, roleByName, minDps);
 }
 
-module.exports = { fetchWarcraftLogs, fetchGuildReports, fetchFights, fetchReportAggregate, fetchRaidNights, fetchPullBreakdown, fetchNightSnapshot };
+module.exports = { fetchWarcraftLogs, fetchGuildReports, fetchFights, fetchReportAggregate, fetchRaidNights, fetchPullBreakdown, fetchNightSnapshot, computeSeasonPercentiles };

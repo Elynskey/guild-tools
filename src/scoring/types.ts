@@ -30,6 +30,15 @@ export interface MythicPlusRun {
   url: string;
 }
 
+/** Which pool a healer/tank's season perf percentile was actually compared against. `scope: 'class'` means a same-spec+class peer pool (e.g. "Restoration Shaman") -- only used when there are 2+ distinct raiders of that spec+class this season, since a same-spec comparison with nobody else in it is meaningless. Falls back to `scope: 'role'` (the whole healer/tank pool, any class) otherwise. Null for DPS (a flat threshold, not a ranking) or when there's no season data yet. */
+export interface PerfComparisonBasis {
+  scope: 'class' | 'role';
+  /** The spec+class label (e.g. "Restoration Shaman"), only set when scope is 'class'. */
+  className: string | null;
+  /** How many OTHER distinct raiders were in the comparison pool -- not counting this raider themself. */
+  peerCount: number;
+}
+
 export interface Raider {
   name: string;
   role: Role;
@@ -45,6 +54,8 @@ export interface Raider {
   perf: number;
   /** Raw metric behind perf -- dps: raw damage/s from the same report perf uses; healer: season-average healing/s; tank: season-average damage taken/s (lower is better -- less damage taken is more survivable). Null when unavailable (sample mode falls back to a synthesized value; a real fetch can still be null for a brand-new raider with too little logged history). */
   perfRaw: number | null;
+  /** For healers/tanks, which pool perf was actually compared against -- see PerfComparisonBasis. Null for DPS or when there's no season data yet. */
+  perfComparisonBasis: PerfComparisonBasis | null;
   /** % of gem/enchant slots correct vs the monthly reference table. */
   gearCompletion: number;
   /** What's behind gearCompletion -- which slots lack an enchant, how many sockets are empty. Null when unavailable. */
