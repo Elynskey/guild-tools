@@ -1,6 +1,7 @@
-const { app, BrowserWindow, ipcMain, shell, clipboard, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, clipboard, dialog, session } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
+const crypto = require('node:crypto');
 
 // Without this, Electron derives the app name (and therefore the userData path)
 // from package.json's "name" field ("raider-status"), not the "Guild Tools"
@@ -87,10 +88,23 @@ ipcMain.handle('update:downloadAndInstall', async () => {
   const { baseUrl, apiKey } = getProxyConfig();
   if (!baseUrl || !apiKey) throw new Error('Update download requires the API proxy to be configured.');
 
+  // Re-check the manifest right before downloading (rather than trusting a value the
+  // renderer might pass in) to get the expected hash -- the manifest itself comes from
+  // gist.githubusercontent.com over HTTPS, so this is a real, independently-sourced
+  // integrity check on the installer the proxy hands back, not just a formality.
+  const manifest = await checkForUpdate(app.getVersion());
+  if (!manifest?.sha256) throw new Error('Could not verify this update -- no checksum is published for it yet. Try again shortly, or download it manually from the release page.');
+
   const res = await fetch(`${baseUrl}/update/download`, { headers: { 'X-Proxy-Key': apiKey } });
   if (!res.ok) throw new Error(`Update download failed: ${res.status} ${res.statusText}`);
 
   const buffer = Buffer.from(await res.arrayBuffer());
+  const actualHash = crypto.createHash('sha256').update(buffer).digest('hex');
+  const expectedHash = manifest.sha256.trim().toLowerCase();
+  const isValid = actualHash.length === expectedHash.length
+    && crypto.timingSafeEqual(Buffer.from(actualHash), Buffer.from(expectedHash));
+  if (!isValid) throw new Error('Downloaded installer failed checksum verification -- refusing to run it. Please try again, and let an officer know if this keeps happening.');
+
   const dest = path.join(app.getPath('temp'), 'Guild-Tools-Setup-latest.exe');
   fs.writeFileSync(dest, buffer);
 
@@ -179,6 +193,31 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  // Production only -- dev mode loads Vite's own server (HMR client, etc.) which has
+  // different script/style needs and already runs on the developer's own trusted machine.
+  // Fonts come from Google Fonts (design-system/tokens/fonts.css), item icons from
+  // Blizzard's render CDN (fetchItemIcons.cjs) -- the renderer only ever talks to those two
+  // third parties directly (everything else goes through the IPC bridge to this process),
+  // so connect-src stays 'self'. session.defaultSession is only available once the app is
+  // ready, so this has to live in here rather than at module scope.
+  if (!process.env.ELECTRON_START_URL) {
+    const CSP = [
+      "default-src 'self'",
+      "script-src 'self'",
+      "style-src 'self' https://fonts.googleapis.com",
+      "font-src 'self' https://fonts.gstatic.com",
+      "img-src 'self' data: https://*.worldofwarcraft.com",
+      "connect-src 'self'",
+      "object-src 'none'",
+      "base-uri 'self'",
+    ].join('; ');
+
+    session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+      if (details.resourceType !== 'mainFrame') return callback({ cancel: false });
+      callback({ responseHeaders: { ...details.responseHeaders, 'Content-Security-Policy': [CSP] } });
+    });
+  }
+
   createWindow();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

@@ -19,7 +19,7 @@ function isNewer(remote, current) {
 
 /**
  * @param {string} currentVersion
- * @returns {Promise<{ version: string, releaseUrl: string } | null>}
+ * @returns {Promise<{ version: string, releaseUrl: string, sha256: string | null } | null>}
  */
 async function checkForUpdate(currentVersion) {
   try {
@@ -28,7 +28,7 @@ async function checkForUpdate(currentVersion) {
     const data = await res.json();
     if (!data.version || !data.releaseUrl) return null;
     if (!isNewer(data.version, currentVersion)) return null;
-    return { version: data.version, releaseUrl: data.releaseUrl };
+    return { version: data.version, releaseUrl: data.releaseUrl, sha256: data.sha256 ?? null };
   } catch (err) {
     console.warn('[update] Check failed (non-fatal):', err.message);
     return null;
