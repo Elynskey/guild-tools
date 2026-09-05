@@ -144,11 +144,13 @@ export function LootHistory() {
             setEditing(null);
             setAdding(false);
           }}
-          onSave={(fields) => {
+          onSave={(fields, keepOpen) => {
             if (editing?.id) lh.updateRecord(editing.id, fields);
             else lh.addRecord(fields);
-            setEditing(null);
-            setAdding(false);
+            if (!keepOpen) {
+              setEditing(null);
+              setAdding(false);
+            }
           }}
           onDelete={
             editing?.id

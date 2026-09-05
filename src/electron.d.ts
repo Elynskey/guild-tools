@@ -7,6 +7,8 @@ export interface ManualLootRecordInput {
   itemName: string;
   boss?: string;
   slot?: string;
+  /** Unix seconds. Omitted (or left at its default) means "now" -- set explicitly when logging a night after the fact, so it groups into the right night instead of today's. */
+  time?: number;
 }
 
 export interface LootRecordPatch {

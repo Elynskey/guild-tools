@@ -13,7 +13,8 @@ interface LootRecordDialogProps {
   /** Present when editing an existing record; absent when adding a new one. */
   entry?: LootEntry;
   onClose: () => void;
-  onSave: (fields: { winner: string; itemName: string; boss: string; slot: string }) => void;
+  /** keepOpen: true for "Save & add another" (dialog stays open for the next item on the same night) -- only ever true from the add flow, never from edit. */
+  onSave: (fields: { winner: string; itemName: string; boss: string; slot: string; time?: number }, keepOpen: boolean) => void;
   onDelete?: () => void;
   saving: boolean;
   /** Null when unavailable (no Electron, no proxy, or a failed live fetch with nothing cached) -- the add flow falls back to plain text fields in that case. */
@@ -21,6 +22,19 @@ interface LootRecordDialogProps {
   /** Character name -> class, from the live roster -- drives item eligibility filtering. */
   classByName?: Record<string, string>;
   itemIcons?: Record<number, string | null>;
+}
+
+/** Unix seconds -> the local-time string a `datetime-local` input expects ("YYYY-MM-DDTHH:mm"). Built from local date/time parts, not toISOString (which is UTC), so the picker shows and edits wall-clock time -- what an officer typing in a raid's actual start time means. */
+function toDatetimeLocalValue(unixSeconds: number): string {
+  const d = new Date(unixSeconds * 1000);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+/** Inverse of toDatetimeLocalValue -- the input's value is already local time, so `new Date(str)` (no "Z") parses it as local, same as the picker displayed it. */
+function fromDatetimeLocalValue(value: string): number | undefined {
+  const ms = new Date(value).getTime();
+  return Number.isNaN(ms) ? undefined : Math.floor(ms / 1000);
 }
 
 function itemIconImg(url: string | null | undefined) {
@@ -123,6 +137,14 @@ export function LootRecordDialog({ entry, onClose, onSave, onDelete, saving, bos
   const [itemName, setItemName] = useState(entry ? itemLabel(entry.itemLink) : '');
   const [boss, setBoss] = useState(entry?.boss ?? '');
   const [slot, setSlot] = useState(entry?.slot ?? '');
+  // Only meaningful for add (not edit) -- lets an officer logging a night after the fact
+  // set the real date once, then add several items under it without re-picking each time.
+  // Defaults to now; only sent along if actually adding.
+  const [time, setTime] = useState(() => Math.floor(Date.now() / 1000));
+  // Bumped on every "Save & add another" -- remounts SmartAddFields so its own internal
+  // boss/item selection clears, without losing the chosen date/time above.
+  const [formKey, setFormKey] = useState(0);
+  const [justAdded, setJustAdded] = useState<string | null>(null);
 
   // A standalone trade (no matching win record) isn't a "win" the app tracked -- it's
   // just a record that this character traded an item to someone. Nothing to edit, only
@@ -152,6 +174,19 @@ export function LootRecordDialog({ entry, onClose, onSave, onDelete, saving, bos
   // data, a different tier, or something the addon captured that isn't in the Journal),
   // so forcing it through the dropdown flow would risk silently discarding it.
   const useSmartAdd = !entry && !!bossLootTable;
+  const canSave = !!winner.trim() && !!itemName.trim() && !saving;
+
+  const commit = (keepOpen: boolean) => {
+    onSave({ winner: winner.trim(), itemName: itemName.trim(), boss: boss.trim(), slot: slot.trim(), time: entry ? undefined : time }, keepOpen);
+    if (keepOpen) {
+      setJustAdded(`${itemName.trim()} logged for ${winner.trim()}.`);
+      setWinner('');
+      setItemName('');
+      setBoss('');
+      setSlot('');
+      setFormKey((k) => k + 1);
+    }
+  };
 
   return (
     <Dialog
@@ -159,7 +194,7 @@ export function LootRecordDialog({ entry, onClose, onSave, onDelete, saving, bos
       eyebrow="Manual correction"
       onClose={onClose}
       footer={
-        <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', gap: 8 }}>
           {entry && onDelete ? (
             <Button variant="danger" onClick={onDelete} disabled={saving}>
               Remove
@@ -167,15 +202,35 @@ export function LootRecordDialog({ entry, onClose, onSave, onDelete, saving, bos
           ) : (
             <span />
           )}
-          <Button variant="primary" disabled={!winner.trim() || !itemName.trim() || saving} onClick={() => onSave({ winner: winner.trim(), itemName: itemName.trim(), boss: boss.trim(), slot: slot.trim() })}>
-            {saving ? 'Saving…' : 'Save'}
-          </Button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {!entry && (
+              <Button variant="secondary" disabled={!canSave} onClick={() => commit(true)}>
+                Save &amp; add another
+              </Button>
+            )}
+            <Button variant="primary" disabled={!canSave} onClick={() => commit(false)}>
+              {saving ? 'Saving…' : entry ? 'Save' : 'Save & close'}
+            </Button>
+          </div>
         </div>
       }
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {!entry && (
+          <Input
+            type="datetime-local"
+            label="Raid night"
+            value={toDatetimeLocalValue(time)}
+            onChange={(e) => setTime(fromDatetimeLocalValue(e.target.value) ?? time)}
+            hint="Set this once when logging a past night -- it stays put for every item you add below, so they all land in the same night."
+          />
+        )}
+        {justAdded && (
+          <p style={{ margin: 0, fontSize: 'var(--text-body-s)', color: 'var(--status-success)' }}>{justAdded} Add the next item, or Save &amp; close when done.</p>
+        )}
         {useSmartAdd ? (
           <SmartAddFields
+            key={formKey}
             winner={winner}
             setWinner={setWinner}
             bossLootTable={bossLootTable}
