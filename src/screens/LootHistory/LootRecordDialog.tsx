@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Dialog } from '../../design-system/Dialog';
 import { Input } from '../../design-system/Input';
 import { Button } from '../../design-system/Button';
@@ -52,10 +52,19 @@ function lookupClass(name: string, classByName: Record<string, string>): string 
   return match?.[1] ?? null;
 }
 
+/** Finds the item ID in this tier's loot table matching an existing entry's boss+item name, so editing can pre-select the same smart-picker fields instead of starting blank. Null if the entry's boss isn't in this tier's table, or its item name doesn't match any of that boss's drops (old data, a different tier, or something the addon captured that isn't in the Journal) -- the caller falls back to plain text fields in that case rather than risk silently discarding it. */
+function findMatchingItemId(bossLootTable: BossLootTable, boss: string | null | undefined, itemName: string): number | null {
+  if (!boss) return null;
+  const ids = bossLootTable.lootByBoss[boss] ?? [];
+  const match = ids.find((id) => bossLootTable.items[id]?.name === itemName);
+  return match ?? null;
+}
+
 /**
  * The smart add flow: character -> verified class -> boss -> class-eligible items (from
- * this tier's real loot table) -> slot auto-filled from the item. Used only when adding
- * (not editing) and only when a loot table actually loaded -- see bossLootTable prop.
+ * this tier's real loot table) -> slot auto-filled from the item. Used for both adding
+ * and editing whenever a loot table loaded AND (for editing) the entry's existing
+ * boss+item actually matches something in it -- see findMatchingItemId/useSmartAdd.
  */
 function SmartAddFields({
   winner,
@@ -63,6 +72,8 @@ function SmartAddFields({
   bossLootTable,
   classByName,
   itemIcons,
+  initialBoss = null,
+  initialItemId = null,
   onPick,
 }: {
   winner: string;
@@ -70,10 +81,13 @@ function SmartAddFields({
   bossLootTable: BossLootTable;
   classByName: Record<string, string>;
   itemIcons: Record<number, string | null>;
+  /** Pre-selects the pickers to an existing entry's values (editing) instead of starting blank (adding). */
+  initialBoss?: string | null;
+  initialItemId?: number | null;
   onPick: (fields: { boss: string; itemName: string; slot: string; itemId: number }) => void;
 }) {
-  const [boss, setBoss] = useState<string | null>(null);
-  const [itemId, setItemId] = useState<number | null>(null);
+  const [boss, setBoss] = useState<string | null>(initialBoss);
+  const [itemId, setItemId] = useState<number | null>(initialItemId);
 
   const matchedClass = lookupClass(winner, classByName);
 
@@ -98,7 +112,16 @@ function SmartAddFields({
 
   const selectedItem = itemId != null ? bossLootTable.items[itemId] : null;
 
+  // Clears the item whenever the boss actually CHANGES -- compared against the last
+  // boss value seen, not "has this effect run before": a boolean/ref flag breaks under
+  // React 18 StrictMode's dev-only double-invoke of effects (confirmed live -- see the
+  // matching comment in useProfessions.ts), which re-runs this with the SAME initial
+  // `boss` value a second time and would otherwise look identical to a real change,
+  // wiping out initialItemId (an edit's pre-selected item) right after the first paint.
+  const prevBoss = useRef(initialBoss);
   useEffect(() => {
+    if (boss === prevBoss.current) return;
+    prevBoss.current = boss;
     setItemId(null);
   }, [boss]);
 
@@ -173,11 +196,13 @@ export function LootRecordDialog({ entry, onClose, onSave, onDelete, saving, bos
     );
   }
 
-  // Editing an existing record keeps the plain text form -- the entry's original boss/
-  // item text doesn't necessarily match a real entry in this tier's loot table (old
-  // data, a different tier, or something the addon captured that isn't in the Journal),
-  // so forcing it through the dropdown flow would risk silently discarding it.
-  const useSmartAdd = !entry && !!bossLootTable;
+  // Editing gets the same smart picker as adding whenever the entry's existing
+  // boss+item actually matches something in this tier's loot table (pre-selected, not
+  // blank) -- falls back to the plain text form only when it doesn't (old data, a
+  // different tier, or something the addon captured that isn't in the Journal), so
+  // switching to the dropdown flow can never silently discard a real value.
+  const matchedItemId = entry && bossLootTable ? findMatchingItemId(bossLootTable, entry.boss, itemLabel(entry.itemLink)) : null;
+  const useSmartAdd = !!bossLootTable && (!entry || matchedItemId != null);
   const canSave = !!winner.trim() && !!itemName.trim() && !saving;
 
   const commit = (keepOpen: boolean) => {
@@ -241,6 +266,8 @@ export function LootRecordDialog({ entry, onClose, onSave, onDelete, saving, bos
             bossLootTable={bossLootTable}
             classByName={classByName}
             itemIcons={itemIcons}
+            initialBoss={entry?.boss ?? null}
+            initialItemId={matchedItemId}
             onPick={(fields) => {
               setBoss(fields.boss);
               setItemName(fields.itemName);
