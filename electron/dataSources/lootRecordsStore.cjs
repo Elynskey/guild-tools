@@ -161,10 +161,24 @@ function manualAdd({ winner, itemName, boss, slot, time: recordTime, itemId }) {
   return db.records;
 }
 
+// Same guard as manualAdd's, so editing a record into a collision with a DIFFERENT
+// existing record is caught the same way adding one is -- checked against the
+// PATCHED values before anything is mutated, since `record` is the live object
+// inside db.records and mutating it first would make the record collide with itself.
 function update(id, patch) {
   const db = load();
   const record = db.records.find((r) => r.id === id);
   if (!record) return db.records;
+
+  const effectiveWinner = patch.winner !== undefined ? patch.winner : record.winner;
+  const effectiveItemName = patch.itemName !== undefined ? patch.itemName : extractItemName(record.itemLink);
+  const duplicate = db.records.find(
+    (r) => r.id !== id && r.winner.toLowerCase() === effectiveWinner.toLowerCase() && extractItemName(r.itemLink)?.toLowerCase() === effectiveItemName?.toLowerCase() && Math.abs(r.time - record.time) <= DUPLICATE_WINDOW_SECONDS,
+  );
+  if (duplicate) {
+    throw new Error(`${effectiveWinner} already has a separate logged win for "${effectiveItemName}" around this time -- that would create a duplicate instead of fixing this one.`);
+  }
+
   if (patch.winner !== undefined) record.winner = patch.winner;
   if (patch.itemName !== undefined) {
     record.itemLink = `[${patch.itemName}]`;

@@ -61,3 +61,34 @@ describe('manualAdd duplicate detection', () => {
     expect(() => store.manualAdd({ winner: 'Silverhorn', itemName: 'Shellbound Bracers', time: 1200 })).toThrow(/already has a logged win/);
   });
 });
+
+describe('update duplicate detection (editing must guard the same as adding)', () => {
+  it('rejects editing a record into a collision with a DIFFERENT existing record', () => {
+    store.manualAdd({ winner: 'Silverhorn', itemName: 'Shellbound Bracers', time: 1000 });
+    const records = store.manualAdd({ winner: 'Silverhorn', itemName: 'Something Else', time: 1000 });
+    const toEdit = records.find((r) => r.itemLink.includes('Something Else'));
+    expect(() => store.update(toEdit.id, { itemName: 'Shellbound Bracers' })).toThrow(/already has a separate logged win/);
+  });
+
+  it('does not treat a record as colliding with itself (editing something else about it is fine)', () => {
+    const records = store.manualAdd({ winner: 'Silverhorn', itemName: 'Shellbound Bracers', boss: 'The Lost Explorers', time: 1000 });
+    const record = records[0];
+    const updated = store.update(record.id, { boss: 'A Different Boss' });
+    expect(updated.find((r) => r.id === record.id).boss).toBe('A Different Boss');
+  });
+
+  it('allows editing the winner to a name that has no conflicting record', () => {
+    const records = store.manualAdd({ winner: 'Silverhorn', itemName: 'Shellbound Bracers', time: 1000 });
+    const record = records[0];
+    const updated = store.update(record.id, { winner: 'Someone New' });
+    expect(updated.find((r) => r.id === record.id).winner).toBe('Someone New');
+  });
+
+  it('checks the collision using the PATCHED values, not the record\'s original ones', () => {
+    store.manualAdd({ winner: 'Abractus', itemName: 'First Mate\'s Shellward', time: 1000 });
+    const records = store.manualAdd({ winner: 'Silverhorn', itemName: 'Shellbound Bracers', time: 1000 });
+    const toEdit = records.find((r) => r.winner === 'Silverhorn');
+    // Editing BOTH winner and item to match the Abractus record should still be caught.
+    expect(() => store.update(toEdit.id, { winner: 'Abractus', itemName: 'First Mate\'s Shellward' })).toThrow(/already has a separate logged win/);
+  });
+});

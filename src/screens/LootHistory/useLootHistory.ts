@@ -154,13 +154,25 @@ export function useLootHistory() {
     [electron, load],
   );
 
+  // Same success/failure signaling as addRecord -- editing into a collision with a
+  // DIFFERENT existing record (update()'s own duplicate check) needs the same
+  // stay-open-and-show-the-error treatment as adding one, not a silently swallowed
+  // rejection.
   const updateRecord = useCallback(
-    (id: string, patch: LootRecordPatch) => {
-      if (!electron) return;
+    (id: string, patch: LootRecordPatch): Promise<boolean> => {
+      if (!electron) return Promise.resolve(false);
       setSaving(true);
-      electron
+      setSaveError(null);
+      return electron
         .updateLootRecord(id, patch)
-        .then(() => load())
+        .then(() => {
+          load();
+          return true;
+        })
+        .catch((err: Error) => {
+          setSaveError(err.message);
+          return false;
+        })
         .finally(() => setSaving(false));
     },
     [electron, load],
