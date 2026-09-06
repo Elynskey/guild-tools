@@ -14,6 +14,7 @@ export function useSettings() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<number | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!electron) {
@@ -26,21 +27,31 @@ export function useSettings() {
     });
   }, [electron]);
 
+  // Waits for the proxy round-trip before touching `settings`/`savedAt` -- an earlier
+  // version updated `settings` optimistically before the network call resolved, so a
+  // failed save (proxy unreachable, etc.) looked identical to a successful one: the
+  // field kept showing the typed value with no error, and only a reload would reveal
+  // it never actually persisted.
   const save = useCallback(
-    (next: GuildToolsSettings): Promise<void> => {
-      setSettings(next);
-      if (!electron) return Promise.resolve();
+    (next: GuildToolsSettings): Promise<boolean> => {
+      if (!electron) return Promise.resolve(false);
       setSaving(true);
+      setSaveError(null);
       return electron
         .saveSettings(next)
         .then((saved) => {
           setSettings(saved);
           setSavedAt(Date.now());
+          return true;
+        })
+        .catch((err: Error) => {
+          setSaveError(err.message || 'Could not save settings.');
+          return false;
         })
         .finally(() => setSaving(false));
     },
     [electron],
   );
 
-  return { settings, loading, saving, savedAt, save, available: !!electron };
+  return { settings, loading, saving, savedAt, saveError, save, available: !!electron };
 }

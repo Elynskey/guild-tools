@@ -10,7 +10,7 @@ import { TIER_BOSS_NAMES } from '../../raid/bossIcons';
 import { useSettings } from './useSettings';
 
 export function Settings() {
-  const { settings, loading, saving, savedAt, save, available } = useSettings();
+  const { settings, loading, saving, savedAt, saveError, save, available } = useSettings();
   const [draft, setDraft] = useState(settings);
   const [dirty, setDirty] = useState(false);
   const [inviteUrl, setInviteUrl] = useState<string | null>(null);
@@ -56,8 +56,9 @@ export function Settings() {
   };
 
   const submit = () => {
-    save(draft);
-    setDirty(false);
+    save(draft).then((ok) => {
+      if (ok) setDirty(false);
+    });
   };
 
   return (
@@ -111,6 +112,7 @@ export function Settings() {
             </Button>
 
             {!dirty && savedAt !== null && <Toast tone="success" title="Saved" />}
+            {saveError && <Toast tone="danger" title="Couldn't save" message={saveError} />}
           </div>
         )}
 
@@ -135,6 +137,7 @@ export function Settings() {
             </Button>
 
             {!dirty && savedAt !== null && <Toast tone="success" title="Saved" />}
+            {saveError && <Toast tone="danger" title="Couldn't save" message={saveError} />}
           </div>
         )}
 
@@ -187,6 +190,7 @@ export function Settings() {
             </Button>
 
             {!dirty && savedAt !== null && <Toast tone="success" title="Saved" />}
+            {saveError && <Toast tone="danger" title="Couldn't save" message={saveError} />}
           </div>
         )}
 
