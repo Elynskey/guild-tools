@@ -1,3 +1,4 @@
+import { Badge } from '../../design-system/Badge';
 import { Icon } from '../../design-system/Icon';
 import { IconButton } from '../../design-system/IconButton';
 import { BossIcon } from '../../raid/BossIcon';
@@ -55,6 +56,11 @@ export function LootLogTable({ entries, itemIcons, onEdit }: LootLogTableProps) 
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 'var(--text-body-s)', color: 'var(--text-muted)' }}>
               {e.boss && <BossIcon boss={e.boss} size={28} />}
               {e.boss ?? '—'}
+              {e.source === 'chat-tail' && (
+                <Badge tone="warning" dot title="Captured live -- /reload in-game to fill in the boss/slot">
+                  Unverified
+                </Badge>
+              )}
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 'var(--text-body-s)', color: 'var(--text-strong)', fontWeight: 600 }}>
               {iconUrl && (

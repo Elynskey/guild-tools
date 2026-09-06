@@ -7,10 +7,13 @@ interface PostToDiscordDialogProps {
   onConfirm: () => void;
   posting: boolean;
   error: string | null;
+  /** Entries in this night still captured live (chat-log tailing) with no boss/slot yet -- see lootRecordsStore.cjs's upgradeRecord. Posting is blocked while this is nonzero so an announcement never goes out with an unattributed win. */
+  unverifiedCount: number;
+  onRefresh: () => void;
 }
 
 /** Confirm-before-send: posting is a real, visible, hard-to-take-back action (a message in the guild's Discord channel), so this always shows exactly what's about to go out before it's sent -- no one-click posting. */
-export function PostToDiscordDialog({ messages, onClose, onConfirm, posting, error }: PostToDiscordDialogProps) {
+export function PostToDiscordDialog({ messages, onClose, onConfirm, posting, error, unverifiedCount, onRefresh }: PostToDiscordDialogProps) {
   const bossCount = messages.length;
 
   return (
@@ -23,13 +26,35 @@ export function PostToDiscordDialog({ messages, onClose, onConfirm, posting, err
           <Button variant="secondary" onClick={onClose} disabled={posting}>
             Cancel
           </Button>
-          <Button variant="primary" onClick={onConfirm} disabled={posting || bossCount === 0}>
+          <Button variant="primary" onClick={onConfirm} disabled={posting || bossCount === 0 || unverifiedCount > 0}>
             {posting ? 'Posting…' : `Post ${bossCount} message${bossCount === 1 ? '' : 's'}`}
           </Button>
         </div>
       }
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {unverifiedCount > 0 && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 12,
+              padding: '10px 14px',
+              border: '1px solid rgba(168,50,50,.5)',
+              borderRadius: 'var(--radius-sm)',
+              background: 'rgba(168,50,50,.12)',
+            }}
+          >
+            <p style={{ margin: 0, fontSize: 'var(--text-body-s)', lineHeight: 1.5, color: 'var(--text-body)' }}>
+              {unverifiedCount} entr{unverifiedCount === 1 ? 'y' : 'ies'} from this night {unverifiedCount === 1 ? "hasn't" : "haven't"} been
+              verified yet (boss/slot still unknown) -- /reload in-game, then Refresh, before posting.
+            </p>
+            <Button variant="secondary" size="sm" onClick={onRefresh}>
+              Refresh
+            </Button>
+          </div>
+        )}
         <p style={{ margin: 0, fontSize: 'var(--text-body-s)', lineHeight: 1.6, color: 'var(--text-body)' }}>
           This posts one message per boss to the guild's configured loot channel, for everything shown in this raid night. It doesn't check
           whether this was already posted automatically -- only post if you mean to (re-announcing an older night, or after a correction).

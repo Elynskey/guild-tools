@@ -469,12 +469,14 @@ frame:SetScript("OnEvent", function(_, event, ...)
       -- than immediate so this doesn't scan before the last roll has actually settled.
       C_Timer.After(20, function()
         scanLootHistory()
-        -- SavedVariables only get written to disk on logout/reload -- nothing captured
-        -- this fight (live or via the backfill scan just above) reaches the Guild Tools
-        -- app until that happens. Only fires when this kill actually produced a win, so
-        -- a trash-only reset or a boss nobody needed on stays silent.
+        -- Guild Tools also tails the live chat log now, so a win already shows up
+        -- there within seconds -- SavedVariables (this data) still only flush to disk
+        -- on reload/logout, but that's now just what fills in the real boss/slot on an
+        -- already-visible entry, not the only way it reaches the app at all. Only
+        -- fires when this kill actually produced a win, so a trash-only reset or a
+        -- boss nobody needed on stays silent.
         if lootCapturedThisEncounter then
-          announce('Loot captured -- /reload, then hit Refresh in Guild Tools to sync it.')
+          announce("Loot captured -- it'll show up live in Guild Tools; /reload whenever's convenient to confirm the boss/slot.")
         end
       end)
     end
@@ -564,7 +566,7 @@ SlashCmdList["GUILDTOOLSLOOT"] = function(msg)
       -- only flush to disk on /reload or logout, and that's the only way Guild Tools (the
       -- app) can pick up a scan's results -- confirmed live 2026-08-29 as the cause of
       -- "scanned, but the app never updated" (officer never reloaded after scanning).
-      announce(added > 0 and (added .. " new Need win" .. (added == 1 and "" or "s") .. " pulled in from Loot History. Scan complete. Please /reload to update Guild Tools.") or "Loot History checked -- nothing new to add.")
+      announce(added > 0 and (added .. " new Need win" .. (added == 1 and "" or "s") .. " pulled in from Loot History. /reload whenever's convenient to confirm the boss/slot in Guild Tools.") or "Loot History checked -- nothing new to add.")
     end
   else
     announce((GuildToolsLootDB.enabled and "currently logging Need wins." or "currently NOT logging.") .. " /gtloot on|off to change, /gtloot scan to pull in anything Loot History has that wasn't caught live.")

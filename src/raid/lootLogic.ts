@@ -8,6 +8,8 @@ export interface RawLootRecord {
   /** Equip slot ("Head", "Trinket", ...), or "Other" for non-equippable. Optional -- records synced before this field existed won't have it. */
   slot?: string;
   time: number; // unix seconds
+  /** Set only while this record has no boss/slot attribution yet -- captured live from WoW's chat log (lootChatTail.cjs) rather than the addon's SavedVariables, which is the only source that knows which boss a win came from. Cleared once the addon's own sync reconciles it (see lootRecordsStore.cjs's upgradeRecord). */
+  source?: 'chat-tail';
 }
 
 /** A Need roll that did NOT win -- see recordNeedLoss in the addon. Deliberately its own shape, not a LootEntry variant: there's no winner/trade lifecycle to it, just "who rolled Need on what and lost." */
@@ -47,6 +49,8 @@ export interface LootEntry {
   tradedTo: string | null;
   /** True if this entry has no matching Need-win record -- the item was won before the addon was tracking, so only the trade half is known. */
   standaloneTrade: boolean;
+  /** See RawLootRecord's `source` -- carried straight through by annotateWithTrades. */
+  source?: 'chat-tail';
 }
 
 export interface LootNight {

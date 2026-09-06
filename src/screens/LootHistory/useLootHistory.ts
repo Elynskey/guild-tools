@@ -21,6 +21,8 @@ export function useLootHistory() {
   const [saving, setSaving] = useState(false);
   const [bossLootTable, setBossLootTable] = useState<BossLootTable | null>(null);
   const [classByName, setClassByName] = useState<Record<string, string>>({});
+  // Defaults true so nothing flashes a "turn on /chatlog" nudge before the first load resolves.
+  const [chatLogActive, setChatLogActive] = useState(true);
 
   const load = useCallback((): Promise<void> => {
     if (!electron) {
@@ -36,6 +38,7 @@ export function useLootHistory() {
         const entries = annotateWithTrades(result.records, result.trades);
         setNights(groupLootByNight(entries));
         setStatus(result.status);
+        setChatLogActive(result.chatLogActive);
       }),
       electron.getWowPathConfig().then(setWowPathState),
     ])
@@ -104,6 +107,12 @@ export function useLootHistory() {
     const names = new Set(selectedNight.entries.map((e) => e.winner));
     return new Map([...names].map((name) => [name, needWinCount(selectedNight.entries, name)]));
   }, [selectedNight]);
+
+  // Captured live via chat-log tailing but not yet reconciled with the addon's
+  // authoritative boss/slot data (see lootRecordsStore.cjs's upgradeRecord) -- gates
+  // posting to Discord (PostToDiscordDialog) so a night's announcement never goes out
+  // with "Unknown boss" entries that a reload would have filled in.
+  const unverifiedCount = useMemo(() => (selectedNight ? selectedNight.entries.filter((e) => e.source === 'chat-tail').length : 0), [selectedNight]);
 
   const pickWowFolder = useCallback(() => {
     if (!electron) return;
@@ -258,5 +267,7 @@ export function useLootHistory() {
     postNightToDiscord,
     posting,
     postError,
+    chatLogActive,
+    unverifiedCount,
   };
 }

@@ -15,6 +15,12 @@ describe('annotateWithTrades', () => {
     expect(entries[0].standaloneTrade).toBe(false);
   });
 
+  it('carries a chat-tail source through unchanged', () => {
+    const records = [record({ time: 1000, source: 'chat-tail' })];
+    const entries = annotateWithTrades(records, []);
+    expect(entries[0].source).toBe('chat-tail');
+  });
+
   it('does not match a trade outside the 2-hour BoP window', () => {
     const records = [record({ time: 1000, itemId: 5, winner: 'Grimsyl' })];
     const trades: RawTradeRecord[] = [{ itemId: 5, itemLink: '[Item]', from: 'Grimsyl', to: 'Zalanto', time: 1000 + 3 * 60 * 60 }];

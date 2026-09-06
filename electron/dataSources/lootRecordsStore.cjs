@@ -65,12 +65,18 @@ const needLossKey = (r) => `${r.itemId}::${r.name}::${r.time}`;
  * addedTrades) -- callers that want to announce new loot (e.g. the Discord posting route)
  * need that distinction so multiple officers syncing the same raid night never double-post.
  *
- * Records go through isSyncDuplicate (below) rather than an exact-key match -- confirmed
+ * Records go through findSyncDuplicate (below) rather than an exact-key match -- confirmed
  * live 2026-09-06: the addon's two independent capture paths (C_LootHistory and
  * CHAT_MSG_LOOT) both fire for the same real Need win, landing a second or two apart, so
  * an exact `time` match let 7 duplicate pairs from one raid night silently double-post to
  * Discord (same itemId+winner, time off by exactly 1). A tolerant match closes that gap
  * without risking a false merge of two genuinely separate wins later the same night.
+ *
+ * A match against an existing `source: 'chat-tail'` record (see lootChatTail.cjs -- a
+ * live capture path with no boss/slot attribution, tailing WoW's chat log instead of
+ * waiting on the addon's SavedVariables) is upgraded in place with the incoming
+ * authoritative data instead of being discarded as a no-op duplicate -- see
+ * upgradeRecord.
  *
  * Trades/needLosses still dedupe on an exact key -- multiple addon instances observing the
  * same broadcasted event is a records-only concern (trades and need-losses aren't captured
@@ -97,7 +103,15 @@ function sync(newRecords, newTrades, newNeedLosses) {
 
   for (const r of newRecords ?? []) {
     if (removed.has(recordKey(r))) continue;
-    if (isSyncDuplicate(db.records, r)) continue;
+    const match = findSyncDuplicate(db.records, r);
+    if (match) {
+      // An addon-sourced (or otherwise authoritative) record filling in a chat-tail
+      // placeholder isn't a new win -- it's the SAME win becoming fully attributed --
+      // so it's deliberately excluded from addedRecords, otherwise postLootNight.cjs's
+      // Discord-announce caller would re-announce a win that already went out live.
+      if (match.source === 'chat-tail' && r.source !== 'chat-tail') upgradeRecord(match, r);
+      continue;
+    }
     const withId = { id: crypto.randomUUID(), ...r };
     db.records.push(withId);
     addedRecords.push(withId);
@@ -151,14 +165,43 @@ const DUPLICATE_WINDOW_SECONDS = 6 * 60 * 60;
 // after a live manual entry the addon's real sync will actually run.
 const SYNC_DUPLICATE_WINDOW_SECONDS = 60;
 
-function isSyncDuplicate(existingRecords, candidate) {
+// Returns the matched existing record (not just a boolean) so sync() can upgrade a
+// chat-tail placeholder in place rather than just discarding whichever side arrives
+// second.
+function findSyncDuplicate(existingRecords, candidate) {
   const candidateName = extractItemName(candidate.itemLink)?.toLowerCase();
-  return existingRecords.some((r) => {
-    if (r.winner.toLowerCase() !== candidate.winner.toLowerCase()) return false;
-    if (extractItemName(r.itemLink)?.toLowerCase() !== candidateName) return false;
-    const window = r.itemId == null || candidate.itemId == null ? DUPLICATE_WINDOW_SECONDS : SYNC_DUPLICATE_WINDOW_SECONDS;
-    return Math.abs(r.time - candidate.time) <= window;
-  });
+  return (
+    existingRecords.find((r) => {
+      if (r.winner.toLowerCase() !== candidate.winner.toLowerCase()) return false;
+      if (extractItemName(r.itemLink)?.toLowerCase() !== candidateName) return false;
+      // A chat-tail placeholder's authoritative (addon-sourced) counterpart might not
+      // land until the officer's next reload -- possibly hours later, at the very end
+      // of the raid -- so either side being a chat-tail record widens the window to the
+      // full DUPLICATE_WINDOW_SECONDS, same as a manual-placeholder match. Two chat-tail
+      // records for the same winner+item still use the tight window (two officers'
+      // clients both tailing the same broadcast land within seconds, never hours).
+      const wide = r.source === 'chat-tail' || candidate.source === 'chat-tail';
+      const window = wide || r.itemId == null || candidate.itemId == null ? DUPLICATE_WINDOW_SECONDS : SYNC_DUPLICATE_WINDOW_SECONDS;
+      return Math.abs(r.time - candidate.time) <= window;
+    }) ?? null
+  );
+}
+
+// Fills in whatever the chat-tail path couldn't determine on its own (boss, slot, a real
+// itemId if the chat-tail capture somehow missed it) from the addon's authoritative sync,
+// then clears `source` -- the record is no longer "unverified" once this runs. Mutates
+// `existing` in place (a live reference into db.records), same pattern update() uses, so
+// sync()'s own save(db) call persists it. Deliberately keeps `existing.time` (the
+// chat-tail capture time) rather than adopting `incoming.time` -- the addon's own
+// comments already note its scan-stamped time isn't the roll's real time, so the
+// near-real-time chat-tail stamp is arguably the better one, and keeping it avoids
+// reshuffling which raid-night bucket the record lands in.
+function upgradeRecord(existing, incoming) {
+  if (existing.boss == null && incoming.boss != null) existing.boss = incoming.boss;
+  if (existing.slot == null && incoming.slot != null) existing.slot = incoming.slot;
+  if (existing.itemId == null && incoming.itemId != null) existing.itemId = incoming.itemId;
+  if ((incoming.itemLink?.length ?? 0) > (existing.itemLink?.length ?? 0)) existing.itemLink = incoming.itemLink;
+  delete existing.source;
 }
 
 /** Officer-entered record -- no real itemLink available by hand, so the item name is stored as a plain "[Name]" string (the same bracketed shape LootLogTable's display parsing already expects; it just won't carry a real tooltip). itemId, when the app's smart picker supplied one (a real item from this tier's loot table), is kept so getItemIconUrls can still resolve a real icon -- free-text entries just get null, same as before. */

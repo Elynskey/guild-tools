@@ -61,6 +61,11 @@ export function LootHistory() {
             {lh.installMessage ? lh.installMessage : 'Re-copies the addon bundled in this build of Guild Tools -- run this after updating the app to pick up addon fixes.'}
           </div>
         )}
+        {lh.status === 'ok' && !lh.chatLogActive && (
+          <div style={{ marginBottom: 20, fontSize: 'var(--text-micro)', color: 'var(--text-faint)' }}>
+            Turn on <code>/chatlog</code> in-game (once, ever) for live loot updates without reloading.
+          </div>
+        )}
         {lh.status !== 'ok' ? (
           <SetupCard lh={lh} />
         ) : lh.empty ? (
@@ -174,6 +179,8 @@ export function LootHistory() {
           messages={lh.nightMessagesForDiscord}
           posting={lh.posting}
           error={lh.postError}
+          unverifiedCount={lh.unverifiedCount}
+          onRefresh={lh.refresh}
           onClose={() => setPostingOpen(false)}
           onConfirm={() => {
             lh.postNightToDiscord().then((ok) => {

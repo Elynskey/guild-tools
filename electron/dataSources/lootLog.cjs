@@ -101,4 +101,4 @@ function installAddon() {
   return destDir;
 }
 
-module.exports = { getLootRecords, getWowPathConfig, setWowPath, installAddon };
+module.exports = { getLootRecords, getWowPathConfig, setWowPath, installAddon, resolveWowPath, isRealWowPath };

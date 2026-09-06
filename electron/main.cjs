@@ -28,7 +28,7 @@ const { signIn: bnetSignIn } = require('./dataSources/bnetAuth.cjs');
 const { signIn: discordSignIn } = require('./dataSources/discordAuth.cjs');
 const { loadSession, saveSession, clearSession } = require('./dataSources/authSession.cjs');
 const { getWowPathConfig, setWowPath, installAddon } = require('./dataSources/lootLog.cjs');
-const { fetchLootLog, addManualLootRecord, updateLootRecord, removeLootRecord, removeLootTrade } = require('./dataSources/fetchLootLog.cjs');
+const { fetchLootLog, addManualLootRecord, updateLootRecord, removeLootRecord, removeLootTrade, syncChatTailCapture } = require('./dataSources/fetchLootLog.cjs');
 const { getItemIconUrls } = require('./dataSources/fetchItemIcons.cjs');
 const { fetchBossLootTable } = require('./dataSources/fetchBossLootTable.cjs');
 const { postLootNightToDiscord } = require('./dataSources/postLootNight.cjs');
@@ -222,6 +222,18 @@ app.whenReady().then(() => {
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
+
+  // Live loot capture: tails WoW's chat log (see lootChatTail.cjs) so a Need win shows
+  // up without the officer having to /reload -- the addon's SavedVariables read (which
+  // DOES have real boss/slot data, but only flushes to disk on reload/logout) remains
+  // the authoritative source and reconciles these on whatever reload cadence actually
+  // happens. Runs immediately once, then every 10s; a stat()-only check on ticks with
+  // nothing new keeps this cheap for the rest of the app's lifetime.
+  syncChatTailCapture().catch((err) => console.error('[lootChatTail] Poll failed:', err));
+  const chatTailInterval = setInterval(() => {
+    syncChatTailCapture().catch((err) => console.error('[lootChatTail] Poll failed:', err));
+  }, 10_000);
+  app.on('will-quit', () => clearInterval(chatTailInterval));
 });
 
 app.on('window-all-closed', () => {

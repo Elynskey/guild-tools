@@ -94,6 +94,53 @@ describe('sync duplicate detection (two capture paths/clients observing the same
   });
 });
 
+describe('chat-tail reconciliation', () => {
+  it('upgrades a chat-tail placeholder in place when the addon syncs the same win hours later', () => {
+    const first = store.sync([{ itemId: 268232, itemLink: '[Cincture of the Abyssal Grotto]', winner: 'Dharma', boss: null, slot: null, source: 'chat-tail', time: 1000 }], [], []);
+    expect(first.addedRecords).toHaveLength(1);
+    const placeholderId = first.records[0].id;
+
+    const THREE_HOURS = 3 * 60 * 60;
+    const second = store.sync([{ itemId: 268232, itemLink: '|cnIQ4:|Hitem:268232::::::::90:577::5:5:...|h[Cincture of the Abyssal Grotto]|h|r', winner: 'Dharma', boss: 'Nymrissa Wavecaller', slot: 'Waist', time: 1000 + THREE_HOURS }], [], []);
+
+    expect(second.records).toHaveLength(1);
+    expect(second.addedRecords).toHaveLength(0); // an upgrade is not a new win -- must not be re-announced
+    const upgraded = second.records[0];
+    expect(upgraded.id).toBe(placeholderId);
+    expect(upgraded.boss).toBe('Nymrissa Wavecaller');
+    expect(upgraded.slot).toBe('Waist');
+    expect(upgraded.source).toBeUndefined();
+    expect(upgraded.time).toBe(1000); // keeps the earlier, near-real-time chat-tail stamp
+  });
+
+  it('still dedupes two chat-tail records for the same winner+item a couple seconds apart (tight window unchanged)', () => {
+    store.sync([{ itemId: 1, itemLink: '[Item A]', winner: 'Dharma', boss: null, slot: null, source: 'chat-tail', time: 1000 }], [], []);
+    const second = store.sync([{ itemId: 1, itemLink: '[Item A]', winner: 'Dharma', boss: null, slot: null, source: 'chat-tail', time: 1002 }], [], []);
+    expect(second.records).toHaveLength(1);
+    expect(second.addedRecords).toHaveLength(0);
+  });
+
+  it('leaves a normal addon-only sync (no chat-tail involved anywhere) byte-for-byte unaffected', () => {
+    const first = store.sync([{ itemId: 5, itemLink: '[Item B]', winner: 'Eilerra', boss: 'Some Boss', slot: 'Chest', time: 1000 }], [], []);
+    const second = store.sync([{ itemId: 5, itemLink: '[Item B]', winner: 'Eilerra', boss: 'Some Boss', slot: 'Chest', time: 1001 }], [], []);
+    expect(second.records).toHaveLength(1);
+    expect(second.records[0].boss).toBe('Some Boss');
+    expect(first.records[0].id).toBe(second.records[0].id);
+  });
+
+  it('inserts a new record instead of upgrading when winner/item genuinely differ from any existing chat-tail placeholder', () => {
+    store.sync([{ itemId: 1, itemLink: '[Item A]', winner: 'Dharma', boss: null, slot: null, source: 'chat-tail', time: 1000 }], [], []);
+    const second = store.sync([{ itemId: 2, itemLink: '[Item C]', winner: 'Eilerra', boss: 'Some Boss', slot: 'Feet', time: 1000 }], [], []);
+    expect(second.records).toHaveLength(2);
+    expect(second.addedRecords).toHaveLength(1);
+  });
+
+  it('manualAdd still guards against a chat-tail-sourced existing record, same as any other', () => {
+    store.sync([{ itemId: 1, itemLink: '[Item A]', winner: 'Dharma', boss: null, slot: null, source: 'chat-tail', time: 1000 }], [], []);
+    expect(() => store.manualAdd({ winner: 'Dharma', itemName: 'Item A', time: 1000 })).toThrow(/already has a logged win/);
+  });
+});
+
 describe('update duplicate detection (editing must guard the same as adding)', () => {
   it('rejects editing a record into a collision with a DIFFERENT existing record', () => {
     store.manualAdd({ winner: 'Silverhorn', itemName: 'Shellbound Bracers', time: 1000 });
