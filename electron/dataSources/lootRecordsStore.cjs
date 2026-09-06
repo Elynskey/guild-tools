@@ -6,11 +6,12 @@ const { resolveDataDir } = require('./dataDir.cjs');
 // The shared, officer-wide loot log -- runs on the API proxy server. Same JSON-file
 // pattern as craftRequestsStore.cjs. Multiple officers' PCs can each have the
 // GuildToolsLoot addon running during the same raid (Group Loot broadcasts every Need
-// win to the whole raid, so more than one addon instance sees the exact same roll) --
-// sync() dedupes on that overlap rather than creating duplicate entries.
+// win to the whole raid, so more than one addon instance sees the exact same roll), and
+// even a single client's addon can observe one win through two independent capture
+// paths -- sync() dedupes on that overlap (see isSyncDuplicate) rather than creating
+// duplicate entries.
 //
-// Every record gets an `id` assigned here (not by the addon -- the addon's own natural
-// key is itemId+winner+time, which is what sync() dedupes on) so officers can edit or
+// Every record gets an `id` assigned here (not by the addon) so officers can edit or
 // remove individual entries in the app when neither capture path in the addon caught
 // something correctly. manualAdd()/update()/remove() exist for exactly that -- a
 // correction tool, not a replacement for the addon's automatic capture.
@@ -54,8 +55,6 @@ function load() {
   return db;
 }
 
-// Two different addon instances observing the same broadcasted roll produce the same
-// item + winner within the same second, so that triple is a safe natural key.
 const recordKey = (r) => `${r.itemId}::${r.winner}::${r.time}`;
 const tradeKey = (t) => `${t.itemId}::${t.from}::${t.to}::${t.time}`;
 const needLossKey = (r) => `${r.itemId}::${r.name}::${r.time}`;
@@ -65,6 +64,17 @@ const needLossKey = (r) => `${r.itemId}::${r.name}::${r.time}`;
  * merged store plus which of the incoming records/trades were genuinely new (addedRecords/
  * addedTrades) -- callers that want to announce new loot (e.g. the Discord posting route)
  * need that distinction so multiple officers syncing the same raid night never double-post.
+ *
+ * Records go through isSyncDuplicate (below) rather than an exact-key match -- confirmed
+ * live 2026-09-06: the addon's two independent capture paths (C_LootHistory and
+ * CHAT_MSG_LOOT) both fire for the same real Need win, landing a second or two apart, so
+ * an exact `time` match let 7 duplicate pairs from one raid night silently double-post to
+ * Discord (same itemId+winner, time off by exactly 1). A tolerant match closes that gap
+ * without risking a false merge of two genuinely separate wins later the same night.
+ *
+ * Trades/needLosses still dedupe on an exact key -- multiple addon instances observing the
+ * same broadcasted event is a records-only concern (trades and need-losses aren't captured
+ * redundantly the same way).
  *
  * Also skips anything matching a removedKeys entry -- an officer deleting a record/trade
  * in the app must stay deleted even though the addon's own local SavedVariables still has
@@ -78,7 +88,6 @@ const needLossKey = (r) => `${r.itemId}::${r.name}::${r.time}`;
  */
 function sync(newRecords, newTrades, newNeedLosses) {
   const db = load();
-  const recordKeys = new Set(db.records.map(recordKey));
   const tradeKeys = new Set(db.trades.map(tradeKey));
   const needLossKeys = new Set(db.needLosses.map(needLossKey));
   const removed = new Set(db.removedKeys);
@@ -87,13 +96,11 @@ function sync(newRecords, newTrades, newNeedLosses) {
   const addedNeedLosses = [];
 
   for (const r of newRecords ?? []) {
-    const k = recordKey(r);
-    if (!recordKeys.has(k) && !removed.has(k)) {
-      const withId = { id: crypto.randomUUID(), ...r };
-      db.records.push(withId);
-      recordKeys.add(k);
-      addedRecords.push(withId);
-    }
+    if (removed.has(recordKey(r))) continue;
+    if (isSyncDuplicate(db.records, r)) continue;
+    const withId = { id: crypto.randomUUID(), ...r };
+    db.records.push(withId);
+    addedRecords.push(withId);
   }
   for (const t of newTrades ?? []) {
     const k = tradeKey(t);
@@ -133,6 +140,26 @@ function extractItemName(itemLink) {
 // generous enough to catch "this was already logged earlier tonight" without
 // flagging a genuinely new win of the same item on a later night.
 const DUPLICATE_WINDOW_SECONDS = 6 * 60 * 60;
+
+// Two capture paths (or two officers' addon instances) observing the exact same
+// broadcasted roll should always land within a couple seconds of each other -- never
+// hours apart -- so this stays far shorter than DUPLICATE_WINDOW_SECONDS specifically
+// so sync() can dedupe automatically, with no officer confirmation, without risking
+// silently dropping a genuinely separate later win of the same item by the same person.
+// A manually-added placeholder record (itemId null, bracket-only itemLink) uses the
+// full window instead, same as manualAdd's own guard -- there's no telling how long
+// after a live manual entry the addon's real sync will actually run.
+const SYNC_DUPLICATE_WINDOW_SECONDS = 60;
+
+function isSyncDuplicate(existingRecords, candidate) {
+  const candidateName = extractItemName(candidate.itemLink)?.toLowerCase();
+  return existingRecords.some((r) => {
+    if (r.winner.toLowerCase() !== candidate.winner.toLowerCase()) return false;
+    if (extractItemName(r.itemLink)?.toLowerCase() !== candidateName) return false;
+    const window = r.itemId == null || candidate.itemId == null ? DUPLICATE_WINDOW_SECONDS : SYNC_DUPLICATE_WINDOW_SECONDS;
+    return Math.abs(r.time - candidate.time) <= window;
+  });
+}
 
 /** Officer-entered record -- no real itemLink available by hand, so the item name is stored as a plain "[Name]" string (the same bracketed shape LootLogTable's display parsing already expects; it just won't carry a real tooltip). itemId, when the app's smart picker supplied one (a real item from this tier's loot table), is kept so getItemIconUrls can still resolve a real icon -- free-text entries just get null, same as before. */
 function manualAdd({ winner, itemName, boss, slot, time: recordTime, itemId }) {

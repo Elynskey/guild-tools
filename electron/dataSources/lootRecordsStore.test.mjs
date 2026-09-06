@@ -62,6 +62,38 @@ describe('manualAdd duplicate detection', () => {
   });
 });
 
+describe('sync duplicate detection (two capture paths/clients observing the same real win)', () => {
+  it('dedupes two addon-captured records for the same item+winner landing a second apart (confirmed live 2026-09-06)', () => {
+    const first = store.sync([{ itemId: 268232, itemLink: '|cnIQ4:|Hitem:268232::::::::90:254::5:5:...|h[Cincture of the Abyssal Grotto]|h|r', winner: 'Dharma', boss: 'Nymrissa Wavecaller', time: 1788656362 }], [], []);
+    expect(first.addedRecords).toHaveLength(1);
+    const second = store.sync([{ itemId: 268232, itemLink: '|cnIQ4:|Hitem:268232::::::::90:577::5:5:...|h[Cincture of the Abyssal Grotto]|h|r', winner: 'Dharma', boss: 'Nymrissa Wavecaller', time: 1788656363 }], [], []);
+    expect(second.addedRecords).toHaveLength(0);
+    expect(second.records).toHaveLength(1);
+  });
+
+  it('does not dedupe two addon-captured records for the same item+winner more than a minute apart (a real second win)', () => {
+    store.sync([{ itemId: 268240, itemLink: '[Restless Spirit Shackles]', winner: 'Ranikina', time: 1000 }], [], []);
+    const second = store.sync([{ itemId: 268240, itemLink: '[Restless Spirit Shackles]', winner: 'Ranikina', time: 1000 + 3600 }], [], []);
+    expect(second.addedRecords).toHaveLength(1);
+    expect(second.records).toHaveLength(2);
+  });
+
+  it('does not dedupe a different winner or a different item within the same second', () => {
+    store.sync([{ itemId: 1, itemLink: '[Item A]', winner: 'Dharma', time: 1000 }], [], []);
+    const differentWinner = store.sync([{ itemId: 1, itemLink: '[Item A]', winner: 'Eilerra', time: 1000 }], [], []);
+    expect(differentWinner.addedRecords).toHaveLength(1);
+    const differentItem = store.sync([{ itemId: 2, itemLink: '[Item B]', winner: 'Dharma', time: 1000 }], [], []);
+    expect(differentItem.addedRecords).toHaveLength(1);
+  });
+
+  it('dedupes an addon-captured record against an earlier manual placeholder for the same win, using the wider window (confirmed live: Perseffonee, 55 seconds apart)', () => {
+    store.manualAdd({ winner: 'Perseffonee', itemName: 'Bubblefin Splash Guard', time: 1788570613 });
+    const synced = store.sync([{ itemId: 268262, itemLink: '|cnIQ4:|Hitem:268262::::::::90:254::3:3:...|h[Bubblefin Splash Guard]|h|r', winner: 'Perseffonee', time: 1788570668 }], [], []);
+    expect(synced.addedRecords).toHaveLength(0);
+    expect(synced.records).toHaveLength(1);
+  });
+});
+
 describe('update duplicate detection (editing must guard the same as adding)', () => {
   it('rejects editing a record into a collision with a DIFFERENT existing record', () => {
     store.manualAdd({ winner: 'Silverhorn', itemName: 'Shellbound Bracers', time: 1000 });
