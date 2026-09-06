@@ -93,6 +93,14 @@ local currentBoss = nil
 -- isTrackedEncounter for the chat-text capture path, which has no encounterID of its own.
 local currentEncounterID = nil
 
+-- Set by recordNeedWin whenever it actually inserts something (not on a dedup no-op),
+-- reset at each ENCOUNTER_START -- lets the ENCOUNTER_END handler know, after its
+-- delayed backfill scan settles, whether THIS kill produced anything worth reminding
+-- the officer to /reload for. SavedVariables only ever get written to disk on
+-- logout/reload, never live, so nothing captured this fight actually reaches the app
+-- until that happens.
+local lootCapturedThisEncounter = false
+
 -- rollID -> { link = itemLink, name = itemName }, populated on START_LOOT_ROLL, read
 -- when that roll's outcome is announced in chat, then cleared.
 local pendingRolls = {}
@@ -227,6 +235,7 @@ local function recordNeedWin(winnerName, itemLink, bossOverride, encounterIDOver
     slot = slotLabel(itemLink),
     time = now,
   })
+  lootCapturedThisEncounter = true
 
   -- Real-time confirmation that a win actually got captured -- itemLink is the real
   -- escape-coded link, so this renders as a normal clickable/hoverable item in chat,
@@ -440,6 +449,7 @@ frame:SetScript("OnEvent", function(_, event, ...)
     local encounterID, encounterName = ...
     currentBoss = encounterName
     currentEncounterID = encounterID
+    lootCapturedThisEncounter = false
     if encounterID then
       GuildToolsLootDB.seenEncounters[tostring(encounterID)] = encounterName
     end
@@ -457,7 +467,16 @@ frame:SetScript("OnEvent", function(_, event, ...)
     if C_Timer then
       -- Need rolls take a little while to resolve after the kill -- delayed rather
       -- than immediate so this doesn't scan before the last roll has actually settled.
-      C_Timer.After(20, scanLootHistory)
+      C_Timer.After(20, function()
+        scanLootHistory()
+        -- SavedVariables only get written to disk on logout/reload -- nothing captured
+        -- this fight (live or via the backfill scan just above) reaches the Guild Tools
+        -- app until that happens. Only fires when this kill actually produced a win, so
+        -- a trash-only reset or a boss nobody needed on stays silent.
+        if lootCapturedThisEncounter then
+          announce('Loot captured -- /reload, then hit Refresh in Guild Tools to sync it.')
+        end
+      end)
     end
 
   elseif event == "START_LOOT_ROLL" then
