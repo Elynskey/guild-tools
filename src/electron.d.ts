@@ -124,6 +124,7 @@ export interface AuthState {
 export interface GuildToolsSettings {
   raidSignupsChannelId: string;
   lootLogChannelId: string;
+  gotmChannelId: string;
   gates: { rio: number; ilvl: number };
   minDps: number;
   /** Boss names excluded from the DPS check this tier -- deaths/healer/tank percentile/pulls are unaffected. */
@@ -158,6 +159,43 @@ export interface RaidSignupPost {
   signups: RaidSignupEntry[];
   assignments: Record<RaidRole, RaidAssignment[]>;
   finalizedAt: string | null;
+}
+
+export interface GotmVote {
+  voterId: string;
+  voterUsername: string;
+  nomineeId: string;
+  nomineeUsername: string;
+  votedAt: string;
+}
+
+export interface GotmTallyEntry {
+  nomineeId: string;
+  nomineeUsername: string;
+  count: number;
+}
+
+export interface GotmTieEntry {
+  id: string;
+  username: string;
+}
+
+export interface GotmPost {
+  id: string;
+  month: string;
+  openedBy: string | null;
+  introText: string;
+  createdAt: string;
+  discordChannelId: string | null;
+  discordMessageId: string | null;
+  votes: GotmVote[];
+  tally?: GotmTallyEntry[];
+  closedAt: string | null;
+  winnerId: string | null;
+  winnerUsername: string | null;
+  winnerTieBrokeAmong: GotmTieEntry[] | null;
+  winnerAnnounceText: string | null;
+  winnerAnnounceMessageId: string | null;
 }
 
 export interface ElectronAPI {
@@ -197,6 +235,12 @@ export interface ElectronAPI {
   createRaidSignup: (raidName: string, teamType: TeamType, signupText: string) => Promise<RaidSignupPost>;
   setRaidSignupAssignments: (id: string, assignments: Record<RaidRole, RaidAssignment[]>) => Promise<RaidSignupPost | null>;
   finalizeRaidSignup: (id: string) => Promise<RaidSignupPost | null>;
+  listGotmPosts: () => Promise<GotmPost[]>;
+  getGotmPost: (id: string) => Promise<GotmPost | null>;
+  getCurrentGotmPost: () => Promise<GotmPost | null>;
+  createGotmPost: (openedBy: string | null, introText: string) => Promise<GotmPost>;
+  closeGotmVoting: (id: string) => Promise<GotmPost | null>;
+  announceGotmWinner: (id: string, winnerAnnounceText: string) => Promise<GotmPost | null>;
   listRaidNights: () => Promise<RaidNight[] | null>;
   getPullFeedback: (code: string) => Promise<PullFeedbackResult | null>;
   getNightSnapshot: (code: string) => Promise<Record<string, NightSnapshotEntry> | null>;

@@ -53,6 +53,12 @@ const CARDS: NavCardDef[] = [
     description: 'Post Heroic Progression and Alt Raid signups to Discord, assign primary/backup by hand.',
   },
   {
+    to: '/gotm',
+    icon: 'trophy',
+    title: 'Guildie of the Month',
+    description: 'Open this month\'s vote, watch the tally live, and announce the winner to Discord.',
+  },
+  {
     to: '/settings',
     icon: 'settings',
     title: 'Settings',

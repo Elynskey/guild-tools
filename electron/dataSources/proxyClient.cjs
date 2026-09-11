@@ -156,6 +156,30 @@ async function finalizeRaidSignup(id) {
   return proxyFetchJson(`/raid-signups/${encodeURIComponent(id)}/finalize`, { method: 'POST' });
 }
 
+async function listGotmPosts() {
+  return proxyFetchJson('/gotm');
+}
+
+async function getGotmPost(id) {
+  return proxyFetchJson(`/gotm/${encodeURIComponent(id)}`);
+}
+
+async function getCurrentGotmPost() {
+  return proxyFetchJson('/gotm/current');
+}
+
+async function createGotmPost(openedBy, introText) {
+  return proxyFetchJson('/gotm', { method: 'POST', body: JSON.stringify({ openedBy, introText }) });
+}
+
+async function closeGotmVoting(id) {
+  return proxyFetchJson(`/gotm/${encodeURIComponent(id)}/close`, { method: 'POST' });
+}
+
+async function announceGotmWinner(id, winnerAnnounceText) {
+  return proxyFetchJson(`/gotm/${encodeURIComponent(id)}/announce`, { method: 'POST', body: JSON.stringify({ winnerAnnounceText }) });
+}
+
 async function getItemIconUrls(itemIds) {
   return proxyFetchJson('/item-icons', { method: 'POST', body: JSON.stringify({ itemIds }) });
 }
@@ -226,6 +250,12 @@ module.exports = {
   createRaidSignup,
   setRaidSignupAssignments,
   finalizeRaidSignup,
+  listGotmPosts,
+  getGotmPost,
+  getCurrentGotmPost,
+  createGotmPost,
+  closeGotmVoting,
+  announceGotmWinner,
   getItemIconUrls,
   getBossLootTable,
   addManualLootRecord,

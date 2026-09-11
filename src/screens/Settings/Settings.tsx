@@ -32,7 +32,7 @@ export function Settings() {
     });
   };
 
-  const field = (key: 'raidSignupsChannelId' | 'lootLogChannelId', value: string) => {
+  const field = (key: 'raidSignupsChannelId' | 'lootLogChannelId' | 'gotmChannelId', value: string) => {
     setDraft({ ...draft, [key]: value });
     setDirty(true);
   };
@@ -105,6 +105,12 @@ export function Settings() {
               placeholder="Channel ID"
               value={draft.lootLogChannelId}
               onChange={(e) => field('lootLogChannelId', e.target.value)}
+            />
+            <Input
+              label="Guildie of the Month channel"
+              placeholder="Channel ID"
+              value={draft.gotmChannelId}
+              onChange={(e) => field('gotmChannelId', e.target.value)}
             />
 
             <Button onClick={submit} disabled={saving || !dirty} iconLeft="check">

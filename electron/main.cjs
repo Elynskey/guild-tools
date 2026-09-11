@@ -40,6 +40,14 @@ const {
   setRaidSignupAssignments,
   finalizeRaidSignup,
 } = require('./dataSources/fetchRaidSignups.cjs');
+const {
+  listGotmPosts,
+  getGotmPost,
+  getCurrentGotmPost,
+  createGotmPost,
+  closeGotmVoting,
+  announceGotmWinner,
+} = require('./dataSources/fetchGotm.cjs');
 
 // Sign-in state is remembered for 14 days (see authSession.cjs) so an officer isn't
 // re-proving guild membership through a browser every single launch -- restored here at
@@ -161,6 +169,12 @@ ipcMain.handle('raidSignups:get', async (_event, id) => getRaidSignup(id));
 ipcMain.handle('raidSignups:create', async (_event, raidName, teamType, signupText) => createRaidSignup(raidName, teamType, signupText));
 ipcMain.handle('raidSignups:setAssignments', async (_event, id, assignments) => setRaidSignupAssignments(id, assignments));
 ipcMain.handle('raidSignups:finalize', async (_event, id) => finalizeRaidSignup(id));
+ipcMain.handle('gotm:list', async () => listGotmPosts());
+ipcMain.handle('gotm:get', async (_event, id) => getGotmPost(id));
+ipcMain.handle('gotm:getCurrent', async () => getCurrentGotmPost());
+ipcMain.handle('gotm:create', async (_event, openedBy, introText) => createGotmPost(openedBy, introText));
+ipcMain.handle('gotm:close', async (_event, id) => closeGotmVoting(id));
+ipcMain.handle('gotm:announce', async (_event, id, winnerAnnounceText) => announceGotmWinner(id, winnerAnnounceText));
 ipcMain.handle('lootLog:installAddon', async () => {
   try {
     const dest = installAddon();

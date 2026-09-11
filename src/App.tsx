@@ -8,6 +8,7 @@ import { SeasonLootReport } from './screens/SeasonLootReport/SeasonLootReport';
 import { MythicPlus } from './screens/MythicPlus/MythicPlus';
 import { Settings } from './screens/Settings/Settings';
 import { RaidSignups } from './screens/RaidSignups/RaidSignups';
+import { GuildieOfTheMonth } from './screens/GuildieOfTheMonth/GuildieOfTheMonth';
 import { UpdateBanner } from './shared/UpdateBanner';
 import { VersionTag } from './shared/VersionTag';
 import { LoginScreen } from './shared/LoginScreen';
@@ -38,6 +39,7 @@ export function App() {
         <Route path="/mythic-plus" element={<MythicPlus />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/raid-signups" element={<RaidSignups />} />
+        <Route path="/gotm" element={<GuildieOfTheMonth />} />
       </Routes>
     </HashRouter>
   );
