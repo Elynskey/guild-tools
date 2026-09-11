@@ -73,6 +73,9 @@ ipcMain.handle('recipeCatalogue:fetch', async () => fetchRecipeCatalogue());
 ipcMain.handle('raidNights:list', async () => fetchRaidNightsList());
 ipcMain.handle('pullFeedback:fetch', async (_event, code) => fetchPullFeedback(code));
 ipcMain.handle('nightSnapshot:fetch', async (_event, code) => fetchNightSnapshotForCode(code));
+ipcMain.handle('warcraftlogs:openReport', async (_event, code) => {
+  if (typeof code === 'string' && /^[A-Za-z0-9]+$/.test(code)) shell.openExternal(`https://www.warcraftlogs.com/reports/${code}`);
+});
 ipcMain.handle('update:check', async () => checkForUpdate(app.getVersion()));
 ipcMain.handle('update:openReleasePage', async (_event, url) => {
   if (typeof url === 'string' && url.startsWith('https://github.com/')) shell.openExternal(url);

@@ -167,6 +167,7 @@ export interface ElectronAPI {
   onProfessionsProgress: (callback: (progress: ProfessionsProgress) => void) => () => void;
   checkForUpdate: () => Promise<UpdateInfo | null>;
   openReleasePage: (url: string) => Promise<void>;
+  openWarcraftLogsReport: (code: string) => Promise<void>;
   downloadAndInstallUpdate: () => Promise<{ ok: true }>;
   getCachedRecipeCatalogue: () => Promise<LiveRecipeCatalogueResult | null>;
   getRecipeCatalogue: () => Promise<LiveRecipeCatalogueResult | null>;

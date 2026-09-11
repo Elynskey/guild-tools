@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { Crest } from '../../design-system/Crest';
 import { Select } from '../../design-system/Select';
+import { IconButton } from '../../design-system/IconButton';
 import type { RaidNight } from '../../electron';
 
 interface PullFeedbackHeaderProps {
@@ -51,6 +52,12 @@ export function PullFeedbackHeader({ nights, selectedCode, onSelect }: PullFeedb
           onChange={(e) => onSelect(e.target.value)}
           options={nights.map((n) => ({ value: n.code, label: formatNightLabel(n.date) }))}
           style={{ minWidth: 200 }}
+        />
+        <IconButton
+          icon="external-link"
+          label="Open this report on Warcraft Logs"
+          disabled={!selectedCode}
+          onClick={() => selectedCode && window.electronAPI?.openWarcraftLogsReport(selectedCode)}
         />
       </div>
     </header>

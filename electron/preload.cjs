@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   checkForUpdate: () => ipcRenderer.invoke('update:check'),
   openReleasePage: (url) => ipcRenderer.invoke('update:openReleasePage', url),
+  openWarcraftLogsReport: (code) => ipcRenderer.invoke('warcraftlogs:openReport', code),
   downloadAndInstallUpdate: () => ipcRenderer.invoke('update:downloadAndInstall'),
   getCachedRecipeCatalogue: () => ipcRenderer.invoke('recipeCatalogue:getCached'),
   getRecipeCatalogue: () => ipcRenderer.invoke('recipeCatalogue:fetch'),
