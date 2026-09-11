@@ -1,5 +1,19 @@
-import { useCallback, useEffect, useState } from 'react';
-import type { GotmPost } from '../../electron';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { GotmPost, GotmTallyEntry } from '../../electron';
+
+/** Computed client-side from votes rather than trusted from the server -- not every
+ * endpoint (e.g. the list route) attaches a pre-tallied `tally` field, so deriving it
+ * here works no matter which endpoint the post came from. */
+function tally(post: GotmPost): GotmTallyEntry[] {
+  const counts = new Map<string, GotmTallyEntry>();
+  for (const v of post.votes) {
+    const current = counts.get(v.nomineeId) ?? { nomineeId: v.nomineeId, nomineeUsername: v.nomineeUsername, count: 0 };
+    current.count += 1;
+    current.nomineeUsername = v.nomineeUsername;
+    counts.set(v.nomineeId, current);
+  }
+  return [...counts.values()].sort((a, b) => b.count - a.count);
+}
 
 export function useGuildieOfTheMonth() {
   const electron = window.electronAPI;
@@ -22,6 +36,7 @@ export function useGuildieOfTheMonth() {
   }, [refresh]);
 
   const selected = posts.find((p) => p.id === selectedId) ?? null;
+  const selectedTally = useMemo(() => (selected ? tally(selected) : []), [selected]);
 
   const create = useCallback(
     (openedBy: string | null, introText: string) => {
@@ -67,6 +82,7 @@ export function useGuildieOfTheMonth() {
     available: !!electron,
     posts,
     selected,
+    selectedTally,
     setSelectedId,
     create,
     creating,

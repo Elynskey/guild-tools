@@ -114,10 +114,10 @@ export function GuildieOfTheMonth() {
               <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border-hairline)', fontSize: 'var(--text-body-s)', fontWeight: 600, color: 'var(--text-strong)' }}>
                 Tally
               </div>
-              {!g.selected.tally || g.selected.tally.length === 0 ? (
+              {g.selectedTally.length === 0 ? (
                 <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--text-faint)', fontSize: 'var(--text-body-s)' }}>No votes yet.</div>
               ) : (
-                g.selected.tally.map((t) => (
+                g.selectedTally.map((t) => (
                   <div key={t.nomineeId} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 20px', borderTop: '1px solid var(--border-hairline)' }}>
                     <span style={{ fontSize: 'var(--text-body-m)', color: 'var(--text-strong)' }}>{t.nomineeUsername}</span>
                     <span style={{ fontSize: 'var(--text-body-m)', color: 'var(--text-muted)' }}>{t.count}</span>
