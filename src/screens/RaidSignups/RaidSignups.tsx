@@ -9,10 +9,32 @@ import { Tabs } from '../../design-system/Tabs';
 import { Badge } from '../../design-system/Badge';
 import { Toast } from '../../design-system/Toast';
 import { useRaidSignups } from './useRaidSignups';
+import { specIcon, specIconFallback } from '../../scoring/specIcons';
 import type { AssignmentTier, RaidRole, TeamType } from '../../electron';
 
 const ROLE_LABEL: Record<RaidRole, string> = { tank: 'Tank', healer: 'Healer', dps: 'DPS' };
 const TEAM_LABEL: Record<TeamType, string> = { heroic: 'Heroic Progression', alt: 'Alt Raid' };
+
+/** One square icon per spec (a flex signup like Arms/Fury shows both), matching the same WoW icon set + fallback RosterRow already uses. */
+function SpecIcons({ specs, wowClass }: { specs: string[]; wowClass: string }) {
+  return (
+    <div style={{ display: 'flex', gap: 3, flex: 'none' }}>
+      {specs.map((spec) => (
+        <img
+          key={spec}
+          src={specIcon(spec, wowClass)}
+          alt={`${spec} ${wowClass}`}
+          title={`${spec} ${wowClass}`}
+          onError={(e) => {
+            e.currentTarget.onerror = null;
+            e.currentTarget.src = specIconFallback;
+          }}
+          style={{ width: 20, height: 20, borderRadius: 2, border: '1px solid var(--border-hairline)', boxShadow: 'var(--shadow-1)', objectFit: 'cover' }}
+        />
+      ))}
+    </div>
+  );
+}
 
 function CompStat({ label, value }: { label: string; value: number }) {
   return (
@@ -183,11 +205,14 @@ export function RaidSignups() {
                         <div style={{ fontSize: 'var(--text-body-s)', color: raider ? 'var(--text-body)' : 'var(--text-faint)' }}>
                           {raider ? `${raider.perf}% perf` : 'Not on roster'}
                         </div>
-                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
                           {rs.classFor(s) && (
-                            <span style={{ fontSize: 'var(--text-micro)', color: 'var(--text-muted)' }}>
-                              {rs.specsFor(s)?.length ? `${rs.specsFor(s)!.join('/')} ${rs.classFor(s)}` : rs.classFor(s)}
-                            </span>
+                            <>
+                              {rs.specsFor(s)?.length ? <SpecIcons specs={rs.specsFor(s)!} wowClass={rs.classFor(s)!} /> : null}
+                              <span style={{ fontSize: 'var(--text-micro)', color: 'var(--text-muted)' }}>
+                                {rs.specsFor(s)?.length ? `${rs.specsFor(s)!.join('/')} ${rs.classFor(s)}` : rs.classFor(s)}
+                              </span>
+                            </>
                           )}
                           {utility.map((tag) => (
                             <Badge key={tag} tone="gold">
