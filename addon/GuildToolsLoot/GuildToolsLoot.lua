@@ -461,12 +461,12 @@ StaticPopupDialogs["GUILDTOOLSLOOT_CONFIRM"] = {
 -- printing to chat; /gtloot on|off|scan stay chat-only since those are already
 -- confirming an action the player just took, not something they need to go verify.
 local function buildStatusText()
-  local logging = GuildToolsLootDB.enabled and "|cff40ff40Logging Need wins|r" or "|cffff4040NOT logging|r (old content/alt run?)"
+  local logging = GuildToolsLootDB.enabled and "|cff5f9e4aLogging Need wins|r" or "|cffa83232NOT logging|r (old content/alt run?)"
   local chatLogging
   if IsChatLogging then
     chatLogging = IsChatLogging()
-        and "|cff40ff40Chat logging is ON|r -- live updates will reach Guild Tools"
-        or "|cffff4040Chat logging is OFF|r -- type /chatlog once, ever, to turn it on"
+        and "|cff5f9e4aChat logging is ON|r -- live updates will reach Guild Tools"
+        or "|cffa83232Chat logging is OFF|r -- type /chatlog once, ever, to turn it on"
   else
     chatLogging = "Chat logging status unavailable on this client"
   end
