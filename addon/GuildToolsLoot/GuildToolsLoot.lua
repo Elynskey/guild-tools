@@ -93,12 +93,40 @@ end
 -- SavedVariables), which Blizzard's client only writes if chat logging is turned on
 -- via /chatlog -- a one-time, easy-to-forget setting with no in-game indicator of its
 -- own. IsChatLogging() is the same check the default UI's own "Log all chat" option
--- reads, guarded like every other less-than-certain API in this file. Only announced
--- at login and raid-entry (not on every event) -- the setting essentially never
--- flips mid-session, so more than that would just be noise.
+-- reads, guarded like every other less-than-certain API in this file.
+--
+-- IsChatLogging() itself isn't fully trustworthy either -- confirmed live 2026-09-12,
+-- same day: it read OFF for an officer who had chat logging genuinely on. Root cause
+-- unconfirmed (possibly a CVar that hasn't settled yet at the moment this happens to be
+-- called). Two mitigations, not a real fix (there's no file access from in-game Lua to
+-- verify against directly):
+--   1. Once a true reading is ever seen this session, remembered -- a later false
+--      reading is reported as "reads off, but was on earlier" rather than a flat
+--      contradiction of something the officer already confirmed with their own eyes.
+--   2. /gtloot's on-demand check (not this passive reminder) samples twice, a beat
+--      apart, before reporting -- cheap insurance against a one-off transient read.
+local chatLoggingSeenOnThisSession = false
+
+local function chatLoggingStatusLine()
+  if not IsChatLogging then return 'unavailable on this client', nil end
+  local isOn = IsChatLogging()
+  if isOn then
+    chatLoggingSeenOnThisSession = true
+    return 'ON', true
+  end
+  if chatLoggingSeenOnThisSession then
+    return 'reads OFF right now, but was ON earlier this session -- possibly a stale read; check Interface Options if unsure', false
+  end
+  return 'OFF', false
+end
+
+-- Only announced at login and raid-entry (not on every event) -- the setting
+-- essentially never flips mid-session, so more than that would just be noise. A
+-- separate, narrower warning fires at actual capture time instead (see recordNeedWin).
 local function remindChatLoggingIfOff()
-  if IsChatLogging and not IsChatLogging() then
-    announce('chat logging is OFF -- Guild Tools needs it for live loot updates without /reload. Type /chatlog once to turn it on for good.')
+  local line, isOn = chatLoggingStatusLine()
+  if isOn == false then
+    announce('chat logging ' .. line .. ' -- Guild Tools needs it for live loot updates. Type /chatlog once, THEN FULLY LOG OUT (not just /reload) -- confirmed live: it only starts actually writing after a real login, not mid-session.')
   end
 end
 
@@ -277,8 +305,12 @@ local function recordNeedWin(winnerName, itemLink, bossOverride, encounterIDOver
 
   -- Real-time confirmation that a win actually got captured -- itemLink is the real
   -- escape-coded link, so this renders as a normal clickable/hoverable item in chat,
-  -- not plain text.
-  announce(winnerName .. "'s Need win captured: " .. itemLink)
+  -- not plain text. Tied directly to the moment it matters: if chat logging reads off
+  -- right now, THIS capture won't reach Guild Tools live either, so the warning lands
+  -- on the exact win it affects instead of only at login/raid-entry.
+  local _, chatLoggingOn = chatLoggingStatusLine()
+  local warning = chatLoggingOn == false and ' |cffa83232(chat logging is off -- won\'t show up live, only after a reload)|r' or ''
+  announce(winnerName .. "'s Need win captured: " .. itemLink .. warning)
 end
 
 -- Records a Need roll that did NOT win -- who's rolling and not winning, as opposed to
@@ -460,15 +492,44 @@ StaticPopupDialogs["GUILDTOOLSLOOT_CONFIRM"] = {
 -- /gtloot with no argument (the "just checking" case) shows this instead of only
 -- printing to chat; /gtloot on|off|scan stay chat-only since those are already
 -- confirming an action the player just took, not something they need to go verify.
-local function buildStatusText()
+-- Samples IsChatLogging() twice, ~0.5s apart, before this on-demand check reports --
+-- cheap insurance against the one-off transient false read confirmed live 2026-09-12
+-- (an officer had chat logging genuinely on and this read it as off). Not a fix for a
+-- wrong reading that persists across both samples -- there's no way to check the
+-- actual log file from in-game Lua -- just narrows the window a truly transient hiccup
+-- could land in. Only used here, not in the passive login/raid-entry reminder or the
+-- capture-time warning -- those fire automatically and shouldn't add a delay.
+local function sampleChatLogging(callback)
+  if not IsChatLogging then
+    callback(nil)
+    return
+  end
+  if IsChatLogging() then
+    chatLoggingSeenOnThisSession = true
+    callback(true)
+    return
+  end
+  C_Timer.After(0.5, function()
+    local second = IsChatLogging()
+    if second then chatLoggingSeenOnThisSession = true end
+    callback(second)
+  end)
+end
+
+-- chatLoggingResult is true/false/nil, already resolved by sampleChatLogging above --
+-- kept as a plain parameter (not re-sampled in here) so this stays synchronous and
+-- StaticPopup_Show can be called directly from the sampleChatLogging callback.
+local function buildStatusText(chatLoggingResult)
   local logging = GuildToolsLootDB.enabled and "|cff5f9e4aLogging Need wins|r" or "|cffa83232NOT logging|r (old content/alt run?)"
   local chatLogging
-  if IsChatLogging then
-    chatLogging = IsChatLogging()
-        and "|cff5f9e4aChat logging is ON|r -- live updates will reach Guild Tools"
-        or "|cffa83232Chat logging is OFF|r -- type /chatlog once, ever, to turn it on"
-  else
+  if chatLoggingResult == nil then
     chatLogging = "Chat logging status unavailable on this client"
+  elseif chatLoggingResult == true then
+    chatLogging = "|cff5f9e4aChat logging is ON|r -- live updates will reach Guild Tools"
+  elseif chatLoggingSeenOnThisSession then
+    chatLogging = "|cffc0902fReads OFF right now, but was ON earlier this session|r -- possibly a stale read. Trust Interface Options if it disagrees."
+  else
+    chatLogging = "|cffa83232Chat logging is OFF|r -- type /chatlog once, THEN FULLY LOG OUT (not /reload) to make it stick"
   end
   return logging .. "\n" .. chatLogging .. "\n\n/gtloot on|off to change -- /gtloot scan to pull in anything missed"
 end
@@ -650,6 +711,8 @@ SlashCmdList["GUILDTOOLSLOOT"] = function(msg)
       announce(added > 0 and (added .. " new Need win" .. (added == 1 and "" or "s") .. " pulled in from Loot History. /reload whenever's convenient to confirm the boss/slot in Guild Tools.") or "Loot History checked -- nothing new to add.")
     end
   else
-    StaticPopup_Show("GUILDTOOLSLOOT_STATUS", buildStatusText())
+    sampleChatLogging(function(result)
+      StaticPopup_Show("GUILDTOOLSLOOT_STATUS", buildStatusText(result))
+    end)
   end
 end
