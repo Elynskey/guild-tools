@@ -21,8 +21,6 @@ export function useLootHistory() {
   const [saving, setSaving] = useState(false);
   const [bossLootTable, setBossLootTable] = useState<BossLootTable | null>(null);
   const [classByName, setClassByName] = useState<Record<string, string>>({});
-  // Defaults true so nothing flashes a "turn on /chatlog" nudge before the first load resolves.
-  const [chatLogActive, setChatLogActive] = useState(true);
 
   const load = useCallback((): Promise<void> => {
     if (!electron) {
@@ -38,7 +36,6 @@ export function useLootHistory() {
         const entries = annotateWithTrades(result.records, result.trades);
         setNights(groupLootByNight(entries));
         setStatus(result.status);
-        setChatLogActive(result.chatLogActive);
       }),
       electron.getWowPathConfig().then(setWowPathState),
     ])
@@ -315,7 +312,6 @@ export function useLootHistory() {
     postNightToDiscord,
     posting,
     postError,
-    chatLogActive,
     unverifiedCount,
   };
 }

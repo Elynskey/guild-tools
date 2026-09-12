@@ -4,7 +4,6 @@ import { LootLogTable } from './LootLogTable';
 import { LootRecordDialog } from './LootRecordDialog';
 import { PostToDiscordDialog } from './PostToDiscordDialog';
 import { DeleteNightDialog } from './DeleteNightDialog';
-import { Toast } from '../../design-system/Toast';
 import { Button } from '../../design-system/Button';
 import { useLootHistory } from './useLootHistory';
 import type { LootEntry } from '../../raid/lootLogic';
@@ -65,15 +64,6 @@ export function LootHistory() {
               {lh.installing ? 'Updating…' : 'Update addon'}
             </Button>
             {lh.installMessage ? lh.installMessage : 'Re-copies the addon bundled in this build of Guild Tools -- run this after updating the app to pick up addon fixes.'}
-          </div>
-        )}
-        {lh.status === 'ok' && !lh.chatLogActive && (
-          <div style={{ marginBottom: 20 }}>
-            <Toast
-              tone="danger"
-              title="Live loot updates are off"
-              message="Turn on chat logging in-game -- type /chatlog once, ever. The addon captures wins fine either way, but without this, nothing reaches this app until someone /reloads."
-            />
           </div>
         )}
         {lh.status !== 'ok' ? (

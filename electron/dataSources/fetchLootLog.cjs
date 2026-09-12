@@ -1,5 +1,5 @@
 const { getLootRecords } = require('./lootLog.cjs');
-const { getChatLogStatus, pollChatLog } = require('./lootChatTail.cjs');
+const { pollChatLog } = require('./lootChatTail.cjs');
 const { fetchBossLootTable } = require('./fetchBossLootTable.cjs');
 const proxyClient = require('./proxyClient.cjs');
 const lootRecordsStore = require('./lootRecordsStore.cjs');
@@ -11,9 +11,8 @@ const lootRecordsStore = require('./lootRecordsStore.cjs');
 // branch-don't-rewrite pattern as everything else in this pipeline.
 async function fetchLootLog() {
   const local = getLootRecords();
-  const chatLogActive = getChatLogStatus().active;
 
-  if (!proxyClient.isAvailable()) return { ...local, chatLogActive };
+  if (!proxyClient.isAvailable()) return local;
 
   try {
     if (local.records.length > 0 || local.trades.length > 0 || local.needLosses.length > 0) {
@@ -21,10 +20,10 @@ async function fetchLootLog() {
     }
     const shared = await proxyClient.getSharedLootRecords();
     const status = shared.records.length > 0 || shared.trades.length > 0 || local.status === 'ok' ? 'ok' : local.status;
-    return { records: shared.records, trades: shared.trades, needLosses: shared.needLosses ?? [], status, chatLogActive };
+    return { records: shared.records, trades: shared.trades, needLosses: shared.needLosses ?? [], status };
   } catch (err) {
     console.error('[lootLog] Proxy sync failed, showing local-only data:', err);
-    return { ...local, chatLogActive };
+    return local;
   }
 }
 

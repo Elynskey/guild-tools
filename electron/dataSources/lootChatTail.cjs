@@ -12,26 +12,18 @@ const { resolveWowPath, isRealWowPath } = require('./lootLog.cjs');
 // don't exist outside the game). Records from here carry `source: 'chat-tail'` and
 // `boss: null`; lootRecordsStore.cjs's sync() reconciles them once the addon's
 // authoritative data eventually arrives (see upgradeRecord there).
-
-const ACTIVE_WINDOW_MS = 15 * 60 * 1000;
+//
+// Whether chat logging is actually on used to also be guessed at here (a file-mtime
+// freshness check surfaced as a banner in the app) -- removed 2026-09-12 after that
+// guess disagreed with reality live, more than once. GuildToolsLoot.lua's own
+// IsChatLogging() reminder is the real, authoritative version of the same signal and
+// already runs in-game at login/raid-entry -- no reason to keep a worse guess of it
+// here too.
 
 function chatLogPath() {
   const wowPath = resolveWowPath();
   if (!isRealWowPath(wowPath)) return null;
   return path.join(wowPath, 'Logs', 'WoWChatLog.txt');
-}
-
-/** @returns {{ path: string | null, exists: boolean, active: boolean }} */
-function getChatLogStatus() {
-  const p = chatLogPath();
-  if (!p) return { path: null, exists: false, active: false };
-  let stats;
-  try {
-    stats = fs.statSync(p);
-  } catch {
-    return { path: p, exists: false, active: false };
-  }
-  return { path: p, exists: true, active: Date.now() - stats.mtimeMs <= ACTIVE_WINDOW_MS };
 }
 
 function statePath() {
@@ -140,4 +132,4 @@ function pollChatLog() {
   return { status: 'ok', newRecords };
 }
 
-module.exports = { getChatLogStatus, pollChatLog };
+module.exports = { pollChatLog };

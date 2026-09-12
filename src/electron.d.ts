@@ -217,7 +217,7 @@ export interface ElectronAPI {
   addCraftRequest: (requester: string, profession: string, description: string) => Promise<CraftRequest[]>;
   fulfillCraftRequest: (id: string, fulfilledBy: string) => Promise<CraftRequest[]>;
   removeCraftRequest: (id: string) => Promise<CraftRequest[]>;
-  getLootLog: () => Promise<{ records: RawLootRecord[]; trades: RawTradeRecord[]; needLosses: RawNeedLossRecord[]; status: 'ok' | 'not_configured' | 'addon_not_installed'; chatLogActive: boolean }>;
+  getLootLog: () => Promise<{ records: RawLootRecord[]; trades: RawTradeRecord[]; needLosses: RawNeedLossRecord[]; status: 'ok' | 'not_configured' | 'addon_not_installed' }>;
   addManualLootRecord: (record: ManualLootRecordInput) => Promise<RawLootRecord[]>;
   updateLootRecord: (id: string, patch: LootRecordPatch) => Promise<RawLootRecord[]>;
   removeLootRecord: (id: string) => Promise<RawLootRecord[]>;

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { mkdtempSync, rmSync, mkdirSync, writeFileSync, appendFileSync, utimesSync } from 'node:fs';
+import { mkdtempSync, rmSync, mkdirSync, writeFileSync, appendFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -31,26 +31,6 @@ afterEach(() => {
 });
 
 const WON_LINE = "9/6 22:15:03.123  [Loot]: Dharma (Need - 92) Won: |cff9d9d9d|Hitem:268232::::::::90:577::3:5:43:13696:13662:13333:12834:1:28:7359:::::|h[Cincture of the Abyssal Grotto]|h|r";
-
-describe('getChatLogStatus', () => {
-  it('reports not existing when the file has never been created', () => {
-    expect(tail.getChatLogStatus()).toEqual({ path: chatLogFile, exists: false, active: false });
-  });
-
-  it('reports active for a just-written file', () => {
-    writeFileSync(chatLogFile, 'hello\n');
-    const status = tail.getChatLogStatus();
-    expect(status.exists).toBe(true);
-    expect(status.active).toBe(true);
-  });
-
-  it('reports inactive for a file with an old mtime', () => {
-    writeFileSync(chatLogFile, 'hello\n');
-    const old = new Date(Date.now() - 20 * 60 * 1000);
-    utimesSync(chatLogFile, old, old);
-    expect(tail.getChatLogStatus().active).toBe(false);
-  });
-});
 
 describe('pollChatLog', () => {
   it('seeks to EOF on the very first poll of a new path and captures nothing pre-existing', () => {
