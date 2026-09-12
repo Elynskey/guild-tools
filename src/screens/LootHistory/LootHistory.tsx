@@ -59,6 +59,36 @@ export function LootHistory() {
 
       <div style={{ maxWidth: 1160, margin: '0 auto', padding: 32 }}>
         {lh.status === 'ok' && (
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 6,
+              marginBottom: 16,
+              padding: '12px 16px',
+              border: '1px solid var(--border-hairline)',
+              borderRadius: 'var(--radius-sm)',
+              background: 'var(--surface-raised)',
+              fontSize: 'var(--text-body-s)',
+              color: 'var(--text-muted)',
+            }}
+          >
+            <div className="crd-eyebrow">In-game commands</div>
+            <div>
+              <code>/gtloot</code> -- check status in-game (pops up a dialog: logging on/off, chat logging on/off)
+            </div>
+            <div>
+              <code>/gtloot on</code> / <code>/gtloot off</code> -- toggle logging for this run (old content, alts, off-progression)
+            </div>
+            <div>
+              <code>/gtloot scan</code> -- pull in any wins Loot History caught but the addon missed live
+            </div>
+            <div>
+              <code>/chatlog</code> -- turns on live updates to this app, once, ever
+            </div>
+          </div>
+        )}
+        {lh.status === 'ok' && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20, fontSize: 'var(--text-micro)', color: 'var(--text-faint)' }}>
             <Button variant="ghost" size="sm" onClick={lh.installAddon} disabled={lh.installing} iconLeft="download">
               {lh.installing ? 'Updating…' : 'Update addon'}

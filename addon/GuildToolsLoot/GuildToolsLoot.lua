@@ -454,6 +454,33 @@ StaticPopupDialogs["GUILDTOOLSLOOT_CONFIRM"] = {
   preferredIndex = 3,
 }
 
+-- A real popup instead of a chat line -- confirmed live twice now (2026-09-11,
+-- 2026-09-12) that whether /chatlog is actually on is exactly the thing officers get
+-- wrong without noticing, and a chat message scrolls away/gets missed in raid spam.
+-- /gtloot with no argument (the "just checking" case) shows this instead of only
+-- printing to chat; /gtloot on|off|scan stay chat-only since those are already
+-- confirming an action the player just took, not something they need to go verify.
+local function buildStatusText()
+  local logging = GuildToolsLootDB.enabled and "|cff40ff40Logging Need wins|r" or "|cffff4040NOT logging|r (old content/alt run?)"
+  local chatLogging
+  if IsChatLogging then
+    chatLogging = IsChatLogging()
+        and "|cff40ff40Chat logging is ON|r -- live updates will reach Guild Tools"
+        or "|cffff4040Chat logging is OFF|r -- type /chatlog once, ever, to turn it on"
+  else
+    chatLogging = "Chat logging status unavailable on this client"
+  end
+  return logging .. "\n" .. chatLogging .. "\n\n/gtloot on|off to change -- /gtloot scan to pull in anything missed"
+end
+
+StaticPopupDialogs["GUILDTOOLSLOOT_STATUS"] = {
+  text = "%s",
+  button1 = "OK",
+  timeout = 0,
+  whileDead = true,
+  hideOnEscape = true,
+}
+
 local frame = CreateFrame("Frame")
 frame:RegisterEvent("PLAYER_LOGIN")
 frame:RegisterEvent("PLAYER_ENTERING_WORLD")
@@ -623,6 +650,6 @@ SlashCmdList["GUILDTOOLSLOOT"] = function(msg)
       announce(added > 0 and (added .. " new Need win" .. (added == 1 and "" or "s") .. " pulled in from Loot History. /reload whenever's convenient to confirm the boss/slot in Guild Tools.") or "Loot History checked -- nothing new to add.")
     end
   else
-    announce((GuildToolsLootDB.enabled and "currently logging Need wins." or "currently NOT logging.") .. " /gtloot on|off to change, /gtloot scan to pull in anything Loot History has that wasn't caught live.")
+    StaticPopup_Show("GUILDTOOLSLOOT_STATUS", buildStatusText())
   end
 end
