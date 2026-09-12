@@ -239,6 +239,7 @@ export interface ElectronAPI {
   getGotmPost: (id: string) => Promise<GotmPost | null>;
   getCurrentGotmPost: () => Promise<GotmPost | null>;
   createGotmPost: (openedBy: string | null, introText: string) => Promise<GotmPost>;
+  remindGotmVoters: (id: string, reminderText: string) => Promise<GotmPost | null>;
   closeGotmVoting: (id: string) => Promise<GotmPost | null>;
   announceGotmWinner: (id: string, winnerAnnounceText: string) => Promise<GotmPost | null>;
   listRaidNights: () => Promise<RaidNight[] | null>;

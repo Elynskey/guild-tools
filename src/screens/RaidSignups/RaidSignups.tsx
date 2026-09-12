@@ -7,16 +7,35 @@ import { Button } from '../../design-system/Button';
 import { Dialog } from '../../design-system/Dialog';
 import { Tabs } from '../../design-system/Tabs';
 import { Badge } from '../../design-system/Badge';
+import { Toast } from '../../design-system/Toast';
 import { useRaidSignups } from './useRaidSignups';
 import type { AssignmentTier, RaidRole, TeamType } from '../../electron';
 
 const ROLE_LABEL: Record<RaidRole, string> = { tank: 'Tank', healer: 'Healer', dps: 'DPS' };
 const TEAM_LABEL: Record<TeamType, string> = { heroic: 'Heroic Progression', alt: 'Alt Raid' };
 
-function CreateDialog({ onClose, onCreate, creating }: { onClose: () => void; onCreate: (raidName: string, teamType: TeamType, signupText: string) => void; creating: boolean }) {
+function CreateDialog({
+  onClose,
+  onCreate,
+  creating,
+  createError,
+}: {
+  onClose: () => void;
+  onCreate: (raidName: string, teamType: TeamType, signupText: string) => Promise<boolean>;
+  creating: boolean;
+  createError: string | null;
+}) {
   const [raidName, setRaidName] = useState('');
   const [teamType, setTeamType] = useState<TeamType>('heroic');
   const [signupText, setSignupText] = useState('');
+
+  // Stays open on failure (createError renders below) so the officer sees what went
+  // wrong and can retry -- only closes once the post actually succeeded.
+  const submit = () => {
+    void onCreate(raidName.trim(), teamType, signupText.trim()).then((ok) => {
+      if (ok) onClose();
+    });
+  };
 
   return (
     <Dialog
@@ -24,7 +43,7 @@ function CreateDialog({ onClose, onCreate, creating }: { onClose: () => void; on
       eyebrow="Post to Discord"
       onClose={onClose}
       footer={
-        <Button variant="primary" disabled={!raidName.trim() || creating} onClick={() => onCreate(raidName.trim(), teamType, signupText.trim())}>
+        <Button variant="primary" disabled={!raidName.trim() || creating} onClick={submit}>
           {creating ? 'Posting…' : 'Post to Discord'}
         </Button>
       }
@@ -33,6 +52,7 @@ function CreateDialog({ onClose, onCreate, creating }: { onClose: () => void; on
         <Input label="Raid name" placeholder="e.g. Liberation of Undermine" value={raidName} onChange={(e) => setRaidName(e.target.value)} autoFocus />
         <Select label="Team" value={teamType} onChange={(e) => setTeamType(e.target.value as TeamType)} options={[{ value: 'heroic', label: 'Heroic Progression' }, { value: 'alt', label: 'Alt Raid' }]} />
         <Input multiline label="Signup announcement" placeholder="What raiders should know before signing up" value={signupText} onChange={(e) => setSignupText(e.target.value)} />
+        {createError && <Toast tone="danger" title="Couldn't post" message={createError} />}
       </div>
     </Dialog>
   );
@@ -148,25 +168,18 @@ export function RaidSignups() {
               )}
             </div>
 
-            <div style={{ marginTop: 20 }}>
+            <div style={{ marginTop: 20, display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'flex-start' }}>
               <Button onClick={rs.finalize} disabled={rs.finalizing || !!rs.selected.finalizedAt} iconLeft="send">
                 {rs.finalizing ? 'Posting…' : rs.selected.finalizedAt ? 'Roster already posted' : 'Post final roster to Discord'}
               </Button>
+              {rs.finalizeError && <Toast tone="danger" title="Couldn't post the final roster" message={rs.finalizeError} />}
+              {rs.assignmentError && <Toast tone="danger" title="Couldn't save assignment" message={rs.assignmentError} />}
             </div>
           </>
         )}
       </div>
 
-      {showCreate && (
-        <CreateDialog
-          onClose={() => setShowCreate(false)}
-          creating={rs.creating}
-          onCreate={(raidName, teamType, signupText) => {
-            rs.create(raidName, teamType, signupText);
-            setShowCreate(false);
-          }}
-        />
-      )}
+      {showCreate && <CreateDialog onClose={() => setShowCreate(false)} creating={rs.creating} createError={rs.createError} onCreate={rs.create} />}
     </div>
   );
 }

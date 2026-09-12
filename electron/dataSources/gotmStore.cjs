@@ -93,6 +93,17 @@ async function create(openedBy, introText) {
   return entry;
 }
 
+/** Posts a one-off officer-written reminder to the same channel -- no state change on the record itself, just a nudge. Rejected once voting is closed (nothing left to remind anyone about). */
+async function sendReminder(id, reminderText) {
+  if (!reminderText) throw new Error('reminderText is required.');
+  const entry = get(id);
+  if (!entry) return null;
+  if (entry.closedAt) throw new Error('Voting is already closed -- nothing to remind anyone about.');
+  if (!entry.discordChannelId) throw new Error('No Discord channel configured for this vote.');
+  await discordPost.postMessage(entry.discordChannelId, { content: reminderText });
+  return entry;
+}
+
 /** Re-voting (same Discord user picking a different nominee) replaces their existing vote rather than stacking a duplicate. Rejected (treated the same as not-found) once voting is closed -- otherwise a vote whose ephemeral select was still open at the moment an officer closed voting would silently count anyway. */
 function recordVote(id, { voterId, voterUsername, nomineeId, nomineeUsername }) {
   const posts = load();
@@ -163,4 +174,4 @@ async function announceWinner(id, winnerAnnounceText) {
   return entry;
 }
 
-module.exports = { load, get, getCurrent, create, recordVote, tally, resolveWinner, announceWinner };
+module.exports = { load, get, getCurrent, create, sendReminder, recordVote, tally, resolveWinner, announceWinner };

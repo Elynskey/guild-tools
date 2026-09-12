@@ -45,6 +45,7 @@ const {
   getGotmPost,
   getCurrentGotmPost,
   createGotmPost,
+  remindGotmVoters,
   closeGotmVoting,
   announceGotmWinner,
 } = require('./dataSources/fetchGotm.cjs');
@@ -173,6 +174,7 @@ ipcMain.handle('gotm:list', async () => listGotmPosts());
 ipcMain.handle('gotm:get', async (_event, id) => getGotmPost(id));
 ipcMain.handle('gotm:getCurrent', async () => getCurrentGotmPost());
 ipcMain.handle('gotm:create', async (_event, openedBy, introText) => createGotmPost(openedBy, introText));
+ipcMain.handle('gotm:remind', async (_event, id, reminderText) => remindGotmVoters(id, reminderText));
 ipcMain.handle('gotm:close', async (_event, id) => closeGotmVoting(id));
 ipcMain.handle('gotm:announce', async (_event, id, winnerAnnounceText) => announceGotmWinner(id, winnerAnnounceText));
 ipcMain.handle('lootLog:installAddon', async () => {

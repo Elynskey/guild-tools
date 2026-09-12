@@ -12,8 +12,11 @@ export function useRaidSignups() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [roster, setRoster] = useState<Raider[]>([]);
   const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
   const [savingAssignments, setSavingAssignments] = useState(false);
+  const [assignmentError, setAssignmentError] = useState<string | null>(null);
   const [finalizing, setFinalizing] = useState(false);
+  const [finalizeError, setFinalizeError] = useState<string | null>(null);
 
   const refresh = useCallback(() => {
     if (!electron) return;
@@ -30,15 +33,22 @@ export function useRaidSignups() {
 
   const selected = posts.find((p) => p.id === selectedId) ?? null;
 
+  /** Returns whether it succeeded so the "New" dialog can stay open and show the error on failure, instead of closing immediately and discarding it. */
   const create = useCallback(
-    (raidName: string, teamType: TeamType, signupText: string) => {
-      if (!electron) return;
+    (raidName: string, teamType: TeamType, signupText: string): Promise<boolean> => {
+      if (!electron) return Promise.resolve(false);
       setCreating(true);
-      electron
+      setCreateError(null);
+      return electron
         .createRaidSignup(raidName, teamType, signupText)
         .then((post) => {
           setPosts((prev) => [post, ...prev]);
           setSelectedId(post.id);
+          return true;
+        })
+        .catch((err: Error) => {
+          setCreateError(err.message || 'Could not post this signup to Discord.');
+          return false;
         })
         .finally(() => setCreating(false));
     },
@@ -75,10 +85,14 @@ export function useRaidSignups() {
 
       setPosts((prev) => prev.map((p) => (p.id === selected.id ? { ...p, assignments: next } : p)));
       setSavingAssignments(true);
+      setAssignmentError(null);
       electron
         .setRaidSignupAssignments(selected.id, next)
         .then((updated) => {
           if (updated) setPosts((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+        })
+        .catch((err: Error) => {
+          setAssignmentError(err.message || 'Could not save this assignment -- refresh before assuming it stuck.');
         })
         .finally(() => setSavingAssignments(false));
     },
@@ -88,10 +102,14 @@ export function useRaidSignups() {
   const finalize = useCallback(() => {
     if (!electron || !selected) return;
     setFinalizing(true);
+    setFinalizeError(null);
     electron
       .finalizeRaidSignup(selected.id)
       .then((updated) => {
         if (updated) setPosts((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+      })
+      .catch((err: Error) => {
+        setFinalizeError(err.message || 'Could not post the final roster to Discord.');
       })
       .finally(() => setFinalizing(false));
   }, [electron, selected]);
@@ -104,11 +122,14 @@ export function useRaidSignups() {
     roles: ROLES,
     create,
     creating,
+    createError,
     matchRoster,
     utilityFor,
     setAssignment,
     savingAssignments,
+    assignmentError,
     finalize,
     finalizing,
+    finalizeError,
   };
 }

@@ -6,6 +6,7 @@ import { Input } from '../../design-system/Input';
 import { Button } from '../../design-system/Button';
 import { Dialog } from '../../design-system/Dialog';
 import { Badge } from '../../design-system/Badge';
+import { Toast } from '../../design-system/Toast';
 import { useGuildieOfTheMonth } from './useGuildieOfTheMonth';
 import { useAuth } from '../../shared/useAuth';
 
@@ -14,8 +15,26 @@ function formatMonth(month: string): string {
   return new Date(year, m - 1, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
 }
 
-function CreateDialog({ onClose, onCreate, creating }: { onClose: () => void; onCreate: (introText: string) => void; creating: boolean }) {
+function CreateDialog({
+  onClose,
+  onCreate,
+  creating,
+  createError,
+}: {
+  onClose: () => void;
+  onCreate: (introText: string) => Promise<boolean>;
+  creating: boolean;
+  createError: string | null;
+}) {
   const [introText, setIntroText] = useState('');
+
+  // Stays open on failure (createError renders below) so the officer sees what went
+  // wrong and can retry -- only closes once the post actually succeeded.
+  const submit = () => {
+    void onCreate(introText.trim()).then((ok) => {
+      if (ok) onClose();
+    });
+  };
 
   return (
     <Dialog
@@ -23,7 +42,7 @@ function CreateDialog({ onClose, onCreate, creating }: { onClose: () => void; on
       eyebrow="Post to Discord"
       onClose={onClose}
       footer={
-        <Button variant="primary" disabled={!introText.trim() || creating} onClick={() => onCreate(introText.trim())}>
+        <Button variant="primary" disabled={!introText.trim() || creating} onClick={submit}>
           {creating ? 'Posting…' : 'Post to Discord'}
         </Button>
       }
@@ -37,6 +56,7 @@ function CreateDialog({ onClose, onCreate, creating }: { onClose: () => void; on
           onChange={(e) => setIntroText(e.target.value)}
           autoFocus
         />
+        {createError && <Toast tone="danger" title="Couldn't post" message={createError} />}
       </div>
     </Dialog>
   );
@@ -47,6 +67,7 @@ export function GuildieOfTheMonth() {
   const auth = useAuth();
   const [showCreate, setShowCreate] = useState(false);
   const [announceText, setAnnounceText] = useState('');
+  const [reminderText, setReminderText] = useState('');
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--surface-page)', fontFamily: 'var(--font-ui)', color: 'var(--text-body)', paddingBottom: 80 }}>
@@ -143,10 +164,40 @@ export function GuildieOfTheMonth() {
               )}
             </div>
 
+            {!g.selected.closedAt && (
+              <div className="crd-card" style={{ marginBottom: 20, padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <div className="crd-eyebrow" style={{ color: 'var(--text-gold)' }}>
+                  Remind voters
+                </div>
+                <Input
+                  multiline
+                  label="Write a reminder -- it'll post exactly as written"
+                  placeholder="Don't forget to vote for Guildie of the Month! Click Vote on the post above."
+                  value={reminderText}
+                  onChange={(e) => setReminderText(e.target.value)}
+                />
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    g.sendReminder(reminderText.trim());
+                    setReminderText('');
+                  }}
+                  disabled={!reminderText.trim() || g.reminding}
+                  iconLeft="bell"
+                >
+                  {g.reminding ? 'Posting…' : 'Post reminder to Discord'}
+                </Button>
+                {g.remindError && <Toast tone="danger" title="Couldn't post reminder" message={g.remindError} />}
+              </div>
+            )}
+
             {!g.selected.closedAt ? (
-              <Button onClick={g.closeVoting} disabled={g.closing || g.selected.votes.length === 0} iconLeft="check">
-                {g.closing ? 'Closing…' : 'Close voting'}
-              </Button>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'flex-start' }}>
+                <Button onClick={g.closeVoting} disabled={g.closing || g.selected.votes.length === 0} iconLeft="check">
+                  {g.closing ? 'Closing…' : 'Close voting'}
+                </Button>
+                {g.closeError && <Toast tone="danger" title="Couldn't close voting" message={g.closeError} />}
+              </div>
             ) : !g.selected.winnerAnnounceMessageId ? (
               <div className="crd-card" style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 14 }}>
                 <div className="crd-eyebrow" style={{ color: 'var(--text-gold)' }}>
@@ -169,6 +220,7 @@ export function GuildieOfTheMonth() {
                 >
                   {g.announcing ? 'Posting…' : 'Post to Discord'}
                 </Button>
+                {g.announceError && <Toast tone="danger" title="Couldn't post announcement" message={g.announceError} />}
               </div>
             ) : (
               <Badge tone="success">Announced to Discord</Badge>
@@ -177,16 +229,7 @@ export function GuildieOfTheMonth() {
         )}
       </div>
 
-      {showCreate && (
-        <CreateDialog
-          onClose={() => setShowCreate(false)}
-          creating={g.creating}
-          onCreate={(introText) => {
-            g.create(auth.displayName, introText);
-            setShowCreate(false);
-          }}
-        />
-      )}
+      {showCreate && <CreateDialog onClose={() => setShowCreate(false)} creating={g.creating} createError={g.createError} onCreate={(introText) => g.create(auth.displayName, introText)} />}
     </div>
   );
 }

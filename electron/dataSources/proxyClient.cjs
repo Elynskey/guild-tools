@@ -172,6 +172,10 @@ async function createGotmPost(openedBy, introText) {
   return proxyFetchJson('/gotm', { method: 'POST', body: JSON.stringify({ openedBy, introText }) });
 }
 
+async function remindGotmVoters(id, reminderText) {
+  return proxyFetchJson(`/gotm/${encodeURIComponent(id)}/remind`, { method: 'POST', body: JSON.stringify({ reminderText }) });
+}
+
 async function closeGotmVoting(id) {
   return proxyFetchJson(`/gotm/${encodeURIComponent(id)}/close`, { method: 'POST' });
 }
@@ -254,6 +258,7 @@ module.exports = {
   getGotmPost,
   getCurrentGotmPost,
   createGotmPost,
+  remindGotmVoters,
   closeGotmVoting,
   announceGotmWinner,
   getItemIconUrls,

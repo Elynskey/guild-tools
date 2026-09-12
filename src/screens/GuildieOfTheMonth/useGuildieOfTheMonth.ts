@@ -20,8 +20,13 @@ export function useGuildieOfTheMonth() {
   const [posts, setPosts] = useState<GotmPost[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [reminding, setReminding] = useState(false);
+  const [remindError, setRemindError] = useState<string | null>(null);
   const [closing, setClosing] = useState(false);
+  const [closeError, setCloseError] = useState<string | null>(null);
   const [announcing, setAnnouncing] = useState(false);
+  const [announceError, setAnnounceError] = useState<string | null>(null);
 
   const refresh = useCallback(() => {
     if (!electron) return;
@@ -38,28 +43,54 @@ export function useGuildieOfTheMonth() {
   const selected = posts.find((p) => p.id === selectedId) ?? null;
   const selectedTally = useMemo(() => (selected ? tally(selected) : []), [selected]);
 
+  /** Returns whether it succeeded so the "New" dialog can stay open and show the error on failure, instead of closing immediately and discarding it. */
   const create = useCallback(
-    (openedBy: string | null, introText: string) => {
-      if (!electron) return;
+    (openedBy: string | null, introText: string): Promise<boolean> => {
+      if (!electron) return Promise.resolve(false);
       setCreating(true);
-      electron
+      setCreateError(null);
+      return electron
         .createGotmPost(openedBy, introText)
         .then((post) => {
           setPosts((prev) => [post, ...prev]);
           setSelectedId(post.id);
+          return true;
+        })
+        .catch((err: Error) => {
+          setCreateError(err.message || 'Could not post this vote to Discord.');
+          return false;
         })
         .finally(() => setCreating(false));
     },
     [electron],
   );
 
+  const sendReminder = useCallback(
+    (reminderText: string) => {
+      if (!electron || !selected) return;
+      setReminding(true);
+      setRemindError(null);
+      electron
+        .remindGotmVoters(selected.id, reminderText)
+        .catch((err: Error) => {
+          setRemindError(err.message || 'Could not post the reminder to Discord.');
+        })
+        .finally(() => setReminding(false));
+    },
+    [electron, selected],
+  );
+
   const closeVoting = useCallback(() => {
     if (!electron || !selected) return;
     setClosing(true);
+    setCloseError(null);
     electron
       .closeGotmVoting(selected.id)
       .then((updated) => {
         if (updated) setPosts((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+      })
+      .catch((err: Error) => {
+        setCloseError(err.message || 'Could not close voting.');
       })
       .finally(() => setClosing(false));
   }, [electron, selected]);
@@ -68,10 +99,14 @@ export function useGuildieOfTheMonth() {
     (winnerAnnounceText: string) => {
       if (!electron || !selected) return;
       setAnnouncing(true);
+      setAnnounceError(null);
       electron
         .announceGotmWinner(selected.id, winnerAnnounceText)
         .then((updated) => {
           if (updated) setPosts((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+        })
+        .catch((err: Error) => {
+          setAnnounceError(err.message || 'Could not post the winner announcement to Discord.');
         })
         .finally(() => setAnnouncing(false));
     },
@@ -86,9 +121,15 @@ export function useGuildieOfTheMonth() {
     setSelectedId,
     create,
     creating,
+    createError,
+    sendReminder,
+    reminding,
+    remindError,
     closeVoting,
     closing,
+    closeError,
     announceWinner,
     announcing,
+    announceError,
   };
 }

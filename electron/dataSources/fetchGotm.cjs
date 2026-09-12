@@ -30,6 +30,11 @@ async function createGotmPost(openedBy, introText) {
   return store.create(openedBy, introText);
 }
 
+async function remindGotmVoters(id, reminderText) {
+  if (proxyClient.isAvailable()) return proxyClient.remindGotmVoters(id, reminderText);
+  return store.sendReminder(id, reminderText);
+}
+
 async function closeGotmVoting(id) {
   if (proxyClient.isAvailable()) return proxyClient.closeGotmVoting(id);
   return store.resolveWinner(id);
@@ -40,4 +45,4 @@ async function announceGotmWinner(id, winnerAnnounceText) {
   return store.announceWinner(id, winnerAnnounceText);
 }
 
-module.exports = { listGotmPosts, getGotmPost, getCurrentGotmPost, createGotmPost, closeGotmVoting, announceGotmWinner };
+module.exports = { listGotmPosts, getGotmPost, getCurrentGotmPost, createGotmPost, remindGotmVoters, closeGotmVoting, announceGotmWinner };
