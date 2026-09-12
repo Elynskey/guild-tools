@@ -143,6 +143,8 @@ export interface RaidSignupEntry {
   discordUsername: string;
   characterName: string;
   role: RaidRole;
+  /** Self-reported at signup time (a real class picked from Discord, not a roster lookup) -- null for signups made before this field existed. */
+  class: string | null;
   signedUpAt: string;
 }
 

@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { AssignmentTier, RaidAssignment, RaidRole, RaidSignupPost, TeamType } from '../../electron';
+import type { AssignmentTier, RaidAssignment, RaidRole, RaidSignupEntry, RaidSignupPost, TeamType } from '../../electron';
 import { getRoster } from '../../data/rosterSource';
 import type { Raider } from '../../scoring/types';
-import { utilityGainedBy } from '../../raid/raidBuffs';
+import { utilityGainedBy, raidBuffCoverage, dpsRangeForClass } from '../../raid/raidBuffs';
 
 const ROLES: RaidRole[] = ['tank', 'healer', 'dps'];
 
@@ -57,24 +57,62 @@ export function useRaidSignups() {
 
   const rosterByName = useMemo(() => new Map(roster.map((r) => [r.name.toLowerCase(), r])), [roster]);
 
-  /** Roster match (perf/class) for a signup's character name -- null if this character isn't on the roster (an alt, a typo, or someone new). */
+  /** Roster match (perf) for a signup's character name -- null if this character isn't on the roster (an alt, a typo, or someone new). Only used for perf display now; class comes from the signup itself. */
   const matchRoster = useCallback((characterName: string) => rosterByName.get(characterName.toLowerCase()) ?? null, [rosterByName]);
+
+  /** Class for a signup -- self-reported at signup time (a real Blizzard class picked in Discord), falling back to a roster-name match only for signups made before that field existed. */
+  const classFor = useCallback((signup: RaidSignupEntry) => signup.class ?? matchRoster(signup.characterName)?.class ?? null, [matchRoster]);
+
+  const primarySignupsFor = useCallback(
+    (post: RaidSignupPost, role: RaidRole) =>
+      post.assignments[role]
+        .filter((a) => a.tier === 'primary')
+        .map((a) => post.signups.find((s) => s.discordUserId === a.discordUserId))
+        .filter((s): s is RaidSignupEntry => !!s),
+    [],
+  );
 
   /** Utility this signup's class would add on top of whoever is already assigned primary in this role -- empty if their class brings nothing tracked, or nothing new. */
   const utilityFor = useCallback(
     (post: RaidSignupPost, role: RaidRole, characterName: string) => {
-      const raider = matchRoster(characterName);
-      if (!raider) return [];
-      const primaryClasses = post.assignments[role]
-        .filter((a) => a.tier === 'primary')
-        .map((a) => post.signups.find((s) => s.discordUserId === a.discordUserId))
-        .filter((s): s is NonNullable<typeof s> => !!s)
-        .map((s) => matchRoster(s.characterName)?.class)
-        .filter((c): c is string => !!c);
-      return utilityGainedBy(raider.class, primaryClasses);
+      const signup = post.signups.find((s) => s.characterName === characterName);
+      const candidateClass = signup ? classFor(signup) : matchRoster(characterName)?.class;
+      if (!candidateClass) return [];
+      const primaryClasses = primarySignupsFor(post, role).map(classFor).filter((c): c is string => !!c);
+      return utilityGainedBy(candidateClass, primaryClasses);
     },
-    [matchRoster],
+    [classFor, matchRoster, primarySignupsFor],
   );
+
+  /** Raid-wide snapshot of who's actually going (primary assignments only, across all three roles) -- tank/healer/melee/ranged counts, plus which classes couldn't be bucketed into melee/ranged with confidence (see dpsRangeForClass). */
+  const compSummary = useMemo(() => {
+    if (!selected) return null;
+    const primaryTanks = primarySignupsFor(selected, 'tank');
+    const primaryHealers = primarySignupsFor(selected, 'healer');
+    const primaryDps = primarySignupsFor(selected, 'dps');
+
+    let melee = 0;
+    let ranged = 0;
+    const ambiguous: string[] = [];
+    for (const s of primaryDps) {
+      const cls = classFor(s);
+      if (!cls) continue;
+      const range = dpsRangeForClass(cls);
+      if (range === 'melee') melee++;
+      else if (range === 'ranged') ranged++;
+      else ambiguous.push(s.characterName);
+    }
+
+    return { tanks: primaryTanks.length, healers: primaryHealers.length, dps: primaryDps.length, melee, ranged, ambiguous };
+  }, [selected, primarySignupsFor, classFor]);
+
+  /** Buff/utility coverage across everyone actually assigned primary, any role -- Bloodlust doesn't care whether it comes from a healer or a DPS. */
+  const buffCoverage = useMemo(() => {
+    if (!selected) return null;
+    const allPrimary = (['tank', 'healer', 'dps'] as RaidRole[]).flatMap((r) => primarySignupsFor(selected, r));
+    const classes = allPrimary.map(classFor).filter((c): c is string => !!c);
+    return raidBuffCoverage(classes);
+  }, [selected, primarySignupsFor, classFor]);
 
   const setAssignment = useCallback(
     (role: RaidRole, discordUserId: string, tier: AssignmentTier | null) => {
@@ -124,7 +162,10 @@ export function useRaidSignups() {
     creating,
     createError,
     matchRoster,
+    classFor,
     utilityFor,
+    compSummary,
+    buffCoverage,
     setAssignment,
     savingAssignments,
     assignmentError,

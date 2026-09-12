@@ -35,3 +35,45 @@ export function utilityGainedBy(candidateClass: string, existingClasses: string[
   const covered = new Set(existingClasses.flatMap(getRaidUtility));
   return getRaidUtility(candidateClass).filter((tag) => !covered.has(tag));
 }
+
+/** Every utility tag this file tracks, for a raid-wide "do we have X covered at all" check (see raidBuffCoverage below) -- deduped, order matches first appearance in RAID_UTILITY. */
+export const ALL_UTILITY_TAGS: string[] = Array.from(new Set(Object.values(RAID_UTILITY).flat()));
+
+/** Which tracked utility tags a roster of classes covers between them, and which are missing entirely. */
+export function raidBuffCoverage(classes: string[]): { tag: string; covered: boolean }[] {
+  const covered = new Set(classes.flatMap(getRaidUtility));
+  return ALL_UTILITY_TAGS.map((tag) => ({ tag, covered: covered.has(tag) }));
+}
+
+export type DpsRange = 'melee' | 'ranged' | 'ambiguous';
+
+/**
+ * DPS melee/ranged split, by class -- not spec. The raid-signup flow only captures
+ * class (picked from a real list at signup time); asking for spec too would be a
+ * second select on top of that for comparatively little gain here. Three classes
+ * genuinely split their DPS specs between melee and ranged (Hunter: Survival vs Beast
+ * Mastery/Marksmanship; Shaman: Enhancement vs Elemental; Druid: Feral vs Balance) --
+ * those come back 'ambiguous' rather than a guessed default, since silently picking one
+ * would misrepresent the comp to whoever's planning around it. Every other class has
+ * exactly one DPS spec, or all of its DPS specs agree, so class alone is enough.
+ */
+const DPS_RANGE: Record<string, DpsRange> = {
+  Warrior: 'melee',
+  Paladin: 'melee', // only DPS spec: Retribution
+  Hunter: 'ambiguous',
+  Rogue: 'melee',
+  Priest: 'ranged', // only DPS spec: Shadow
+  'Death Knight': 'melee',
+  Shaman: 'ambiguous',
+  Mage: 'ranged',
+  Warlock: 'ranged',
+  Monk: 'melee', // only DPS spec: Windwalker
+  Druid: 'ambiguous',
+  'Demon Hunter': 'melee', // only DPS spec: Havoc
+  Evoker: 'ranged', // both DPS specs (Devastation, Augmentation) are ranged
+};
+
+/** 'ambiguous' for an unrecognized class too -- same "don't guess" reasoning as the three classes that are ambiguous on purpose. */
+export function dpsRangeForClass(className: string): DpsRange {
+  return DPS_RANGE[className] ?? 'ambiguous';
+}

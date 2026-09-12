@@ -14,6 +14,15 @@ import type { AssignmentTier, RaidRole, TeamType } from '../../electron';
 const ROLE_LABEL: Record<RaidRole, string> = { tank: 'Tank', healer: 'Healer', dps: 'DPS' };
 const TEAM_LABEL: Record<TeamType, string> = { heroic: 'Heroic Progression', alt: 'Alt Raid' };
 
+function CompStat({ label, value }: { label: string; value: number }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 64 }}>
+      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-title-m)', color: 'var(--text-strong)' }}>{value}</div>
+      <div style={{ fontSize: 'var(--text-micro)', letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>{label}</div>
+    </div>
+  );
+}
+
 function CreateDialog({
   onClose,
   onCreate,
@@ -117,6 +126,38 @@ export function RaidSignups() {
               {rs.selected.finalizedAt && <Badge tone="success">Roster posted {new Date(rs.selected.finalizedAt).toLocaleString()}</Badge>}
             </div>
 
+            {rs.compSummary && (
+              <div className="crd-card" style={{ padding: '18px 24px', marginBottom: 20 }}>
+                <div className="crd-eyebrow" style={{ marginBottom: 14 }}>Raid composition — primary assignments</div>
+                <div style={{ display: 'flex', gap: 28, flexWrap: 'wrap', alignItems: 'flex-start', marginBottom: 16 }}>
+                  <CompStat label="Tanks" value={rs.compSummary.tanks} />
+                  <CompStat label="Healers" value={rs.compSummary.healers} />
+                  <CompStat label="Melee" value={rs.compSummary.melee} />
+                  <CompStat label="Ranged" value={rs.compSummary.ranged} />
+                  {rs.compSummary.ambiguous.length > 0 && (
+                    <div style={{ fontSize: 'var(--text-micro)', color: 'var(--text-faint)', maxWidth: 260, paddingTop: 4 }}>
+                      Melee or ranged depends on spec, not shown here: {rs.compSummary.ambiguous.join(', ')}
+                    </div>
+                  )}
+                  {rs.compSummary.tanks + rs.compSummary.healers + rs.compSummary.dps === 0 && (
+                    <div style={{ fontSize: 'var(--text-micro)', color: 'var(--text-faint)', paddingTop: 4 }}>Assign someone Primary in a role below to see this fill in.</div>
+                  )}
+                </div>
+                {rs.buffCoverage && rs.buffCoverage.length > 0 && (
+                  <>
+                    <div className="crd-eyebrow" style={{ marginBottom: 10 }}>Raid buffs</div>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      {rs.buffCoverage.map(({ tag, covered }) => (
+                        <Badge key={tag} tone={covered ? 'success' : 'danger'}>
+                          {covered ? '✓' : '✕'} {tag}
+                        </Badge>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
             <Tabs
               tabs={rs.roles.map((r) => ({ value: r, label: ROLE_LABEL[r], count: rs.selected!.signups.filter((s) => s.role === r).length }))}
               value={role}
@@ -143,7 +184,7 @@ export function RaidSignups() {
                           {raider ? `${raider.perf}% perf` : 'Not on roster'}
                         </div>
                         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                          {raider && <span style={{ fontSize: 'var(--text-micro)', color: 'var(--text-muted)' }}>{raider.class}</span>}
+                          {rs.classFor(s) && <span style={{ fontSize: 'var(--text-micro)', color: 'var(--text-muted)' }}>{rs.classFor(s)}</span>}
                           {utility.map((tag) => (
                             <Badge key={tag} tone="gold">
                               {tag}
