@@ -149,8 +149,8 @@ export function RaidSignups() {
             </div>
 
             <div style={{ marginTop: 20 }}>
-              <Button onClick={rs.finalize} disabled={rs.finalizing} iconLeft="send">
-                {rs.finalizing ? 'Posting…' : 'Post final roster to Discord'}
+              <Button onClick={rs.finalize} disabled={rs.finalizing || !!rs.selected.finalizedAt} iconLeft="send">
+                {rs.finalizing ? 'Posting…' : rs.selected.finalizedAt ? 'Roster already posted' : 'Post final roster to Discord'}
               </Button>
             </div>
           </>

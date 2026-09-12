@@ -104,11 +104,11 @@ async function create(raidName, teamType, signupText) {
   return entry;
 }
 
-/** Re-signing up (same Discord user, e.g. changing role) replaces their existing entry rather than stacking a duplicate. */
+/** Re-signing up (same Discord user, e.g. changing role) replaces their existing entry rather than stacking a duplicate. Rejected once the roster's been finalized -- otherwise the running signup post could silently drift from the final roster Discord already saw. */
 async function addSignup(id, { discordUserId, discordUsername, characterName, role }) {
   const posts = load();
   const entry = posts.find((s) => s.id === id);
-  if (!entry) return null;
+  if (!entry || entry.finalizedAt) return null;
 
   entry.signups = entry.signups.filter((s) => s.discordUserId !== discordUserId);
   entry.signups.push({ discordUserId, discordUsername, characterName, role, signedUpAt: new Date().toISOString() });
@@ -143,6 +143,7 @@ async function finalize(id) {
   const posts = load();
   const entry = posts.find((s) => s.id === id);
   if (!entry) return null;
+  if (entry.finalizedAt) return entry; // idempotent -- a second call never re-posts
   entry.finalizedAt = new Date().toISOString();
   save(posts);
 
