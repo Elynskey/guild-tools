@@ -86,6 +86,22 @@ local function announce(msg)
   DEFAULT_CHAT_FRAME:AddMessage('|cffd4b358Guild Tools Loot:|r ' .. msg)
 end
 
+-- Confirmed live 2026-09-12: an officer had this addon capturing wins correctly (the
+-- in-game "Need win captured" announcement fired every time) but Guild Tools never
+-- updated live -- because the app's live-loot path doesn't read anything this addon
+-- writes at all. It tails WoW's own chat LOG FILE on disk instead (continuous, unlike
+-- SavedVariables), which Blizzard's client only writes if chat logging is turned on
+-- via /chatlog -- a one-time, easy-to-forget setting with no in-game indicator of its
+-- own. IsChatLogging() is the same check the default UI's own "Log all chat" option
+-- reads, guarded like every other less-than-certain API in this file. Only announced
+-- at login and raid-entry (not on every event) -- the setting essentially never
+-- flips mid-session, so more than that would just be noise.
+local function remindChatLoggingIfOff()
+  if IsChatLogging and not IsChatLogging() then
+    announce('chat logging is OFF -- Guild Tools needs it for live loot updates without /reload. Type /chatlog once to turn it on for good.')
+  end
+end
+
 local currentBoss = nil
 -- Mirrors currentBoss's "don't clear on ENCOUNTER_END" lifecycle (see that ENCOUNTER_END
 -- handler's own comment) -- loot resolves after the kill, so this needs to still be the
@@ -100,13 +116,19 @@ local currentEncounterID = nil
 -- nil for the Nymrissa Wavecaller Lair exception (a Delve, not a raid difficulty at all).
 local currentDifficulty = nil
 
--- Set by recordNeedWin whenever it actually inserts something (not on a dedup no-op),
--- reset at each ENCOUNTER_START -- lets the ENCOUNTER_END handler know, after its
--- delayed backfill scan settles, whether THIS kill produced anything worth reminding
--- the officer to /reload for. SavedVariables only ever get written to disk on
--- logout/reload, never live, so nothing captured this fight actually reaches the app
--- until that happens.
-local lootCapturedThisEncounter = false
+-- Generation counter + "captured in generation N" marker, NOT a single shared boolean
+-- that gets reset at the next ENCOUNTER_START -- a real live bug (2026-09-12): the
+-- ENCOUNTER_END reminder below waits 20s before checking whether anything was
+-- captured, and if the raid pulls the next boss within that window (fast trash, a
+-- quick repull), the next ENCOUNTER_START reset the shared flag to false right out
+-- from under the still-pending timer, so a real capture silently never got its
+-- reminder. Each encounter gets its own generation number instead; recordNeedWin
+-- stamps the CURRENT generation when it captures something, and the timer (which
+-- closed over the generation number AT THE MOMENT IT ENDED) only announces if that
+-- exact generation is the one that got stamped -- immune to how many new encounters
+-- have started by the time the 20s is up.
+local encounterGeneration = 0
+local capturedInGeneration = nil
 
 local function playerRealmName()
   local name, realm = UnitFullName("player")
@@ -251,7 +273,7 @@ local function recordNeedWin(winnerName, itemLink, bossOverride, encounterIDOver
     time = now,
     difficulty = difficultyOverride or currentDifficulty,
   })
-  lootCapturedThisEncounter = true
+  capturedInGeneration = encounterGeneration
 
   -- Real-time confirmation that a win actually got captured -- itemLink is the real
   -- escape-coded link, so this renders as a normal clickable/hoverable item in chat,
@@ -456,6 +478,7 @@ frame:SetScript("OnEvent", function(_, event, ...)
     else
       announce('NOT logging (type /gtloot on to resume).')
     end
+    remindChatLoggingIfOff()
 
   elseif event == "PLAYER_ENTERING_WORLD" then
     -- Never prompts for Raid Finder -- recordNeedWin's own isTrackedRaidDifficulty()
@@ -467,6 +490,7 @@ frame:SetScript("OnEvent", function(_, event, ...)
       if instanceID and instanceID ~= lastPromptedInstanceID then
         lastPromptedInstanceID = instanceID
         StaticPopup_Show("GUILDTOOLSLOOT_CONFIRM")
+        remindChatLoggingIfOff()
       end
     end
 
@@ -475,7 +499,7 @@ frame:SetScript("OnEvent", function(_, event, ...)
     currentBoss = encounterName
     currentEncounterID = encounterID
     currentDifficulty = currentRaidDifficultyLabel()
-    lootCapturedThisEncounter = false
+    encounterGeneration = encounterGeneration + 1
     if encounterID then
       GuildToolsLootDB.seenEncounters[tostring(encounterID)] = encounterName
     end
@@ -493,15 +517,20 @@ frame:SetScript("OnEvent", function(_, event, ...)
     if C_Timer then
       -- Need rolls take a little while to resolve after the kill -- delayed rather
       -- than immediate so this doesn't scan before the last roll has actually settled.
+      -- thisGeneration is captured NOW, by value, into the closure -- if the raid
+      -- pulls the next boss (or several) before this fires, encounterGeneration keeps
+      -- incrementing, but thisGeneration stays fixed at what THIS kill's ENCOUNTER_END
+      -- saw, so the comparison below stays correct regardless of what's happened since.
+      local thisGeneration = encounterGeneration
       C_Timer.After(20, function()
         scanLootHistory()
         -- Guild Tools also tails the live chat log now, so a win already shows up
         -- there within seconds -- SavedVariables (this data) still only flush to disk
         -- on reload/logout, but that's now just what fills in the real boss/slot on an
         -- already-visible entry, not the only way it reaches the app at all. Only
-        -- fires when this kill actually produced a win, so a trash-only reset or a
+        -- fires when THIS kill actually produced a win, so a trash-only reset or a
         -- boss nobody needed on stays silent.
-        if lootCapturedThisEncounter then
+        if capturedInGeneration == thisGeneration then
           announce("Loot captured -- it'll show up live in Guild Tools; /reload whenever's convenient to confirm the boss/slot.")
         end
       end)

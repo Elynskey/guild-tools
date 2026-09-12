@@ -4,6 +4,7 @@ import { LootLogTable } from './LootLogTable';
 import { LootRecordDialog } from './LootRecordDialog';
 import { PostToDiscordDialog } from './PostToDiscordDialog';
 import { DeleteNightDialog } from './DeleteNightDialog';
+import { Toast } from '../../design-system/Toast';
 import { Button } from '../../design-system/Button';
 import { useLootHistory } from './useLootHistory';
 import type { LootEntry } from '../../raid/lootLogic';
@@ -67,8 +68,12 @@ export function LootHistory() {
           </div>
         )}
         {lh.status === 'ok' && !lh.chatLogActive && (
-          <div style={{ marginBottom: 20, fontSize: 'var(--text-micro)', color: 'var(--text-faint)' }}>
-            Turn on <code>/chatlog</code> in-game (once, ever) for live loot updates without reloading.
+          <div style={{ marginBottom: 20 }}>
+            <Toast
+              tone="danger"
+              title="Live loot updates are off"
+              message="Turn on chat logging in-game -- type /chatlog once, ever. The addon captures wins fine either way, but without this, nothing reaches this app until someone /reloads."
+            />
           </div>
         )}
         {lh.status !== 'ok' ? (
