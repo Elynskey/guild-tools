@@ -10,13 +10,15 @@ interface LootHistoryHeaderProps {
   onSelect: (key: string) => void;
   onRefresh: () => void;
   refreshing: boolean;
+  /** Absent when there's nothing to delete yet, or the app isn't available (browser preview). */
+  onDeleteNight?: () => void;
 }
 
 function formatNightLabel(startTime: number): string {
   return new Date(startTime * 1000).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-export function LootHistoryHeader({ nights, selectedNightKey, onSelect, onRefresh, refreshing }: LootHistoryHeaderProps) {
+export function LootHistoryHeader({ nights, selectedNightKey, onSelect, onRefresh, refreshing, onDeleteNight }: LootHistoryHeaderProps) {
   return (
     <header style={{ position: 'sticky', top: 0, zIndex: 6, backgroundColor: 'rgba(18,16,12,.92)', backdropFilter: 'var(--blur-panel)', borderBottom: '1px solid var(--border-soft)' }}>
       <div style={{ maxWidth: 1160, margin: '0 auto', padding: '14px 32px', display: 'flex', alignItems: 'center', gap: 24, flexWrap: 'wrap' }}>
@@ -38,6 +40,9 @@ export function LootHistoryHeader({ nights, selectedNightKey, onSelect, onRefres
             options={nights.map((n) => ({ value: n.key, label: formatNightLabel(n.startTime) }))}
             style={{ minWidth: 200 }}
           />
+        )}
+        {onDeleteNight && (
+          <IconButton icon="trash-2" label="Delete this raid night" framed onClick={onDeleteNight} />
         )}
         <IconButton
           icon="refresh-cw"

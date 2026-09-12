@@ -288,4 +288,53 @@ function removeTrade(id) {
   return db.trades;
 }
 
-module.exports = { load, sync, manualAdd, update, remove, removeTrade };
+/** Bulk-removes every record/trade/needLoss whose time falls in [startTime, endTime] -- the "delete this whole raid night" action, since a night is purely a client-side time-gap grouping (see groupLootByNight), not an entity this store otherwise knows about. Tombstones each one the same way its own single-item remove function does, so a future sync from a client whose local addon data still has the originals can't silently bring any of it back. */
+function deleteNight(startTime, endTime) {
+  const db = load();
+  const inRange = (t) => t >= startTime && t <= endTime;
+
+  const keptRecords = [];
+  const keptTrades = [];
+  const keptNeedLosses = [];
+  let removedRecords = 0;
+  let removedTrades = 0;
+  let removedNeedLosses = 0;
+
+  for (const r of db.records) {
+    if (inRange(r.time)) {
+      removedRecords += 1;
+      if (r.itemId != null) db.removedKeys.push(recordKey(r));
+    } else {
+      keptRecords.push(r);
+    }
+  }
+  for (const t of db.trades) {
+    if (inRange(t.time)) {
+      removedTrades += 1;
+      db.removedKeys.push(tradeKey(t));
+    } else {
+      keptTrades.push(t);
+    }
+  }
+  for (const r of db.needLosses) {
+    if (inRange(r.time)) {
+      removedNeedLosses += 1;
+      db.removedKeys.push(needLossKey(r));
+    } else {
+      keptNeedLosses.push(r);
+    }
+  }
+
+  db.records = keptRecords;
+  db.trades = keptTrades;
+  db.needLosses = keptNeedLosses;
+  save(db);
+  return {
+    records: db.records,
+    trades: db.trades,
+    needLosses: db.needLosses,
+    removed: { records: removedRecords, trades: removedTrades, needLosses: removedNeedLosses },
+  };
+}
+
+module.exports = { load, sync, manualAdd, update, remove, removeTrade, deleteNight };

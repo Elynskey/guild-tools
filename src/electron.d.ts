@@ -222,6 +222,10 @@ export interface ElectronAPI {
   updateLootRecord: (id: string, patch: LootRecordPatch) => Promise<RawLootRecord[]>;
   removeLootRecord: (id: string) => Promise<RawLootRecord[]>;
   removeLootTrade: (id: string) => Promise<RawTradeRecord[]>;
+  deleteLootNight: (
+    startTime: number,
+    endTime: number,
+  ) => Promise<{ records: RawLootRecord[]; trades: RawTradeRecord[]; needLosses: RawNeedLossRecord[]; removed: { records: number; trades: number; needLosses: number } }>;
   getItemIconUrls: (itemIds: number[]) => Promise<Record<number, string | null>>;
   getBossLootTable: () => Promise<BossLootTable | null>;
   postLootNightToDiscord: (messages: string[]) => Promise<{ posted: number }>;

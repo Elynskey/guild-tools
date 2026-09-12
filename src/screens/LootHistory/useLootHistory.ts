@@ -199,6 +199,32 @@ export function useLootHistory() {
     [electron, load],
   );
 
+  const [deletingNight, setDeletingNight] = useState(false);
+  const [deleteNightError, setDeleteNightError] = useState<string | null>(null);
+
+  // Deletes every record/trade/needLoss in the currently-selected night in one action --
+  // a night is purely a time-gap grouping (see groupLootByNight), not something the
+  // store tracks as its own entity, so this just hands the night's start/end timestamps
+  // to the server rather than looping individual removes from here.
+  const deleteNight = useCallback((): Promise<boolean> => {
+    if (!electron || !selectedNight) return Promise.resolve(false);
+    const entries = selectedNight.entries;
+    const endTime = entries.reduce((max, e) => Math.max(max, e.time), selectedNight.startTime);
+    setDeletingNight(true);
+    setDeleteNightError(null);
+    return electron
+      .deleteLootNight(selectedNight.startTime, endTime)
+      .then(() => {
+        load();
+        return true;
+      })
+      .catch((err: Error) => {
+        setDeleteNightError(err.message || 'Could not delete this raid night.');
+        return false;
+      })
+      .finally(() => setDeletingNight(false));
+  }, [electron, selectedNight, load]);
+
   const removeTrade = useCallback(
     (id: string) => {
       if (!electron) return;
@@ -260,6 +286,9 @@ export function useLootHistory() {
     updateRecord,
     removeRecord,
     removeTrade,
+    deleteNight,
+    deletingNight,
+    deleteNightError,
     saving,
     saveError,
     available: !!electron,

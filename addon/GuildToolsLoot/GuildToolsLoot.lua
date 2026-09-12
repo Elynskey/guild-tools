@@ -405,6 +405,15 @@ StaticPopupDialogs["GUILDTOOLSLOOT_CONFIRM"] = {
   text = "Log Need-roll loot for this raid in Guild Tools?",
   button1 = "Yes",
   button2 = "Not now",
+  -- A raid-entry popup with no sound is easy to miss entirely (tabbed out, loading
+  -- screen just ended, chat spam) -- READY_CHECK is the closest existing Blizzard
+  -- sound kit to "a raid-wide prompt just appeared, please respond," and is already
+  -- a sound every raider recognizes instantly. OnShow rather than firing this next to
+  -- StaticPopup_Show() below, so it only ever plays at the moment the popup actually
+  -- becomes visible (never if Blizzard's own queueing defers it).
+  OnShow = function()
+    if SOUNDKIT and SOUNDKIT.READY_CHECK then PlaySound(SOUNDKIT.READY_CHECK) end
+  end,
   OnAccept = function()
     GuildToolsLootDB.enabled = true
     announce("logging Need wins for this raid. /gtloot off any time to stop.")

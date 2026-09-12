@@ -92,4 +92,9 @@ async function removeLootTrade(id) {
   return lootRecordsStore.removeTrade(id);
 }
 
-module.exports = { fetchLootLog, addManualLootRecord, updateLootRecord, removeLootRecord, removeLootTrade, syncChatTailCapture };
+async function deleteLootNight(startTime, endTime) {
+  if (proxyClient.isAvailable()) return proxyClient.deleteLootNight(startTime, endTime);
+  return lootRecordsStore.deleteNight(startTime, endTime);
+}
+
+module.exports = { fetchLootLog, addManualLootRecord, updateLootRecord, removeLootRecord, removeLootTrade, deleteLootNight, syncChatTailCapture };

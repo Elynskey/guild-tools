@@ -3,6 +3,7 @@ import { LootHistoryHeader } from './LootHistoryHeader';
 import { LootLogTable } from './LootLogTable';
 import { LootRecordDialog } from './LootRecordDialog';
 import { PostToDiscordDialog } from './PostToDiscordDialog';
+import { DeleteNightDialog } from './DeleteNightDialog';
 import { Button } from '../../design-system/Button';
 import { useLootHistory } from './useLootHistory';
 import type { LootEntry } from '../../raid/lootLogic';
@@ -41,6 +42,9 @@ export function LootHistory() {
   const [editing, setEditing] = useState<LootEntry | null>(null);
   const [adding, setAdding] = useState(false);
   const [postingOpen, setPostingOpen] = useState(false);
+  const [deletingNightOpen, setDeletingNightOpen] = useState(false);
+
+  const selectedNight = lh.nights.find((n) => n.key === lh.selectedNightKey) ?? null;
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--surface-page)', fontFamily: 'var(--font-ui)', color: 'var(--text-body)', paddingBottom: 80 }}>
@@ -50,6 +54,7 @@ export function LootHistory() {
         onSelect={lh.setSelectedNightKey}
         onRefresh={lh.refresh}
         refreshing={lh.refreshing}
+        onDeleteNight={lh.available && selectedNight ? () => setDeletingNightOpen(true) : undefined}
       />
 
       <div style={{ maxWidth: 1160, margin: '0 auto', padding: 32 }}>
@@ -171,6 +176,21 @@ export function LootHistory() {
                   }
                 : undefined
           }
+        />
+      )}
+
+      {deletingNightOpen && selectedNight && (
+        <DeleteNightDialog
+          entryCount={selectedNight.entries.length}
+          nightLabel={new Date(selectedNight.startTime * 1000).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}
+          deleting={lh.deletingNight}
+          error={lh.deleteNightError}
+          onClose={() => setDeletingNightOpen(false)}
+          onConfirm={() => {
+            lh.deleteNight().then((ok) => {
+              if (ok) setDeletingNightOpen(false);
+            });
+          }}
         />
       )}
 

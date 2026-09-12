@@ -208,6 +208,10 @@ async function removeLootTrade(id) {
   return proxyFetchJson(`/loot-trades/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }
 
+async function deleteLootNight(startTime, endTime) {
+  return proxyFetchJson('/loot-records/delete-night', { method: 'POST', body: JSON.stringify({ startTime, endTime }) });
+}
+
 async function getSettings() {
   return proxyFetchJson('/settings');
 }
@@ -267,4 +271,5 @@ module.exports = {
   updateLootRecord,
   removeLootRecord,
   removeLootTrade,
+  deleteLootNight,
 };

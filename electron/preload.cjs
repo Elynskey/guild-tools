@@ -27,6 +27,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   updateLootRecord: (id, patch) => ipcRenderer.invoke('lootLog:update', id, patch),
   removeLootRecord: (id) => ipcRenderer.invoke('lootLog:remove', id),
   removeLootTrade: (id) => ipcRenderer.invoke('lootLog:removeTrade', id),
+  deleteLootNight: (startTime, endTime) => ipcRenderer.invoke('lootLog:deleteNight', startTime, endTime),
   getItemIconUrls: (itemIds) => ipcRenderer.invoke('itemIcons:get', itemIds),
   getBossLootTable: () => ipcRenderer.invoke('bossLootTable:get'),
   postLootNightToDiscord: (messages) => ipcRenderer.invoke('lootLog:postNightToDiscord', messages),
