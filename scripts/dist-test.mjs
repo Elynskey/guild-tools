@@ -27,6 +27,21 @@ run('npm', ['run', 'icons:build']);
 run('npm', ['run', 'installer-art:build']);
 run('npm', ['run', 'proxy-config']);
 run('npm', ['run', 'build']);
-run('npx', ['electron-builder', '--win', '-c.productName=Guild Tools (Test)', '-c.artifactName=Guild-Tools-TEST-Setup-${version}.${ext}']);
+// Quoted as part of the token itself (not just the array element) -- run() shells out
+// on Windows (shell:true, needed to resolve npx.cmd), and an unquoted space/parens in
+// -c.productName=Guild Tools (Test) gets split into separate argv entries by cmd.exe,
+// which electron-builder then rejects as unknown arguments ("Tools", "(Test)").
+//
+// -c.nsis.artifactName, not the top-level -c.artifactName -- package.json's own
+// build.nsis.artifactName is more specific and won silently over a top-level override,
+// so the first version of this script produced a file named identically to the real
+// installer (confirmed live -- same filename appeared in release/ after a real build
+// had just put a different .exe there moments earlier).
+run('npx', [
+  'electron-builder',
+  '--win',
+  '-c.productName="Guild Tools (Test)"',
+  '-c.nsis.artifactName=Guild-Tools-TEST-Setup-${version}.${ext}',
+]);
 
 console.log('\n[dist-test] Done -- installer is release/Guild-Tools-TEST-Setup-<version>.exe');
