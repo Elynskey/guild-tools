@@ -1,11 +1,16 @@
+import { useState } from 'react';
 import { PullFeedbackHeader } from './PullFeedbackHeader';
 import { MechanicsSummary } from './MechanicsSummary';
 import { DeathMechanicsReport } from './DeathMechanicsReport';
 import { PullLog } from './PullLog';
+import { Tabs } from '../../design-system/Tabs';
 import { usePullFeedback } from './usePullFeedback';
+
+type ViewTab = 'night' | 'tier';
 
 export function PullFeedback() {
   const pf = usePullFeedback();
+  const [tab, setTab] = useState<ViewTab>('night');
 
   if (pf.error) {
     return <div style={{ padding: 48, textAlign: 'center', color: 'var(--status-danger)' }}>{pf.error}</div>;
@@ -30,17 +35,31 @@ export function PullFeedback() {
           </div>
         ) : (
           <>
-            <p style={{ margin: '0 0 22px', maxWidth: 720, fontSize: 'var(--text-body-m)', lineHeight: 1.6, color: 'var(--text-body)' }}>
-              Every attempt from this raid night, wipe or kill — and what's worth practicing before the next one.{' '}
-              <span style={{ color: 'var(--text-muted)' }}>Ranked below by what's actually costing us pulls, then broken down attempt by attempt underneath.</span>
-            </p>
-            <div className="crd-eyebrow" style={{ color: 'var(--text-gold)', marginBottom: 20 }}>
-              {pf.totalPulls} pull{pf.totalPulls === 1 ? '' : 's'} · {pf.kills} kill{pf.kills === 1 ? '' : 's'}
-              {pf.refreshing && ' · loading…'}
-            </div>
-            <DeathMechanicsReport entries={pf.deathMechanics} />
-            <MechanicsSummary groups={pf.mechanicsNeedingWork} />
-            <PullLog groups={pf.bossGroups} />
+            <Tabs
+              tabs={[
+                { value: 'night', label: 'This Raid Night' },
+                { value: 'tier', label: 'This Tier' },
+              ]}
+              value={tab}
+              onChange={(v) => setTab(v as ViewTab)}
+              style={{ marginBottom: 20 }}
+            />
+            {tab === 'night' ? (
+              <>
+                <p style={{ margin: '0 0 22px', maxWidth: 720, fontSize: 'var(--text-body-m)', lineHeight: 1.6, color: 'var(--text-body)' }}>
+                  Every attempt from this raid night, wipe or kill — and what's worth practicing before the next one.{' '}
+                  <span style={{ color: 'var(--text-muted)' }}>Ranked below by what's actually costing us pulls, then broken down attempt by attempt underneath.</span>
+                </p>
+                <div className="crd-eyebrow" style={{ color: 'var(--text-gold)', marginBottom: 20 }}>
+                  {pf.totalPulls} pull{pf.totalPulls === 1 ? '' : 's'} · {pf.kills} kill{pf.kills === 1 ? '' : 's'}
+                  {pf.refreshing && ' · loading…'}
+                </div>
+                <MechanicsSummary groups={pf.mechanicsNeedingWork} />
+                <PullLog groups={pf.bossGroups} />
+              </>
+            ) : (
+              <DeathMechanicsReport entries={pf.deathMechanics} />
+            )}
           </>
         )}
       </div>
