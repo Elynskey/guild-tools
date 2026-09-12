@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getRaidUtility, utilityGainedBy, raidBuffCoverage, dpsRangeForClass, dpsRangeForSpec } from './raidBuffs';
+import { getRaidUtility, utilityGainedBy, raidBuffCoverage, dpsRangeForClass, dpsRangeForSpecs } from './raidBuffs';
 
 describe('getRaidUtility', () => {
   it('returns the known tags for a tracked class', () => {
@@ -66,28 +66,39 @@ describe('dpsRangeForClass', () => {
   });
 });
 
-describe('dpsRangeForSpec', () => {
+describe('dpsRangeForSpecs', () => {
   it('resolves the three class-level-ambiguous classes precisely once spec is known', () => {
-    expect(dpsRangeForSpec('Hunter', 'Survival')).toBe('melee');
-    expect(dpsRangeForSpec('Hunter', 'Beast Mastery')).toBe('ranged');
-    expect(dpsRangeForSpec('Hunter', 'Marksmanship')).toBe('ranged');
-    expect(dpsRangeForSpec('Shaman', 'Enhancement')).toBe('melee');
-    expect(dpsRangeForSpec('Shaman', 'Elemental')).toBe('ranged');
-    expect(dpsRangeForSpec('Druid', 'Feral')).toBe('melee');
-    expect(dpsRangeForSpec('Druid', 'Balance')).toBe('ranged');
+    expect(dpsRangeForSpecs('Hunter', ['Survival'])).toBe('melee');
+    expect(dpsRangeForSpecs('Hunter', ['Beast Mastery'])).toBe('ranged');
+    expect(dpsRangeForSpecs('Hunter', ['Marksmanship'])).toBe('ranged');
+    expect(dpsRangeForSpecs('Shaman', ['Enhancement'])).toBe('melee');
+    expect(dpsRangeForSpecs('Shaman', ['Elemental'])).toBe('ranged');
+    expect(dpsRangeForSpecs('Druid', ['Feral'])).toBe('melee');
+    expect(dpsRangeForSpecs('Druid', ['Balance'])).toBe('ranged');
   });
 
   it('does not confuse a spec name that collides across classes (Frost)', () => {
-    expect(dpsRangeForSpec('Death Knight', 'Frost')).toBe('melee');
-    expect(dpsRangeForSpec('Mage', 'Frost')).toBe('ranged');
+    expect(dpsRangeForSpecs('Death Knight', ['Frost'])).toBe('melee');
+    expect(dpsRangeForSpecs('Mage', ['Frost'])).toBe('ranged');
   });
 
-  it('falls back to the class-level heuristic when spec is null', () => {
-    expect(dpsRangeForSpec('Warrior', null)).toBe('melee');
-    expect(dpsRangeForSpec('Hunter', null)).toBe('ambiguous');
+  it('resolves multiple selected specs that agree with each other', () => {
+    expect(dpsRangeForSpecs('Warrior', ['Arms', 'Fury'])).toBe('melee');
+    expect(dpsRangeForSpecs('Hunter', ['Beast Mastery', 'Marksmanship'])).toBe('ranged');
   });
 
-  it('falls back to the class-level heuristic when spec is unrecognized', () => {
-    expect(dpsRangeForSpec('Hunter', 'Not A Real Spec')).toBe('ambiguous');
+  it('is ambiguous when multiple selected specs disagree (flexible between melee and ranged)', () => {
+    expect(dpsRangeForSpecs('Shaman', ['Enhancement', 'Elemental'])).toBe('ambiguous');
+    expect(dpsRangeForSpecs('Hunter', ['Survival', 'Marksmanship'])).toBe('ambiguous');
+  });
+
+  it('falls back to the class-level heuristic when there are no specs at all', () => {
+    expect(dpsRangeForSpecs('Warrior', null)).toBe('melee');
+    expect(dpsRangeForSpecs('Hunter', [])).toBe('ambiguous');
+  });
+
+  it('falls back to the class-level heuristic when the spec is unrecognized, even when that heuristic is not itself ambiguous', () => {
+    expect(dpsRangeForSpecs('Hunter', ['Not A Real Spec'])).toBe('ambiguous');
+    expect(dpsRangeForSpecs('Warrior', ['Not A Real Spec'])).toBe('melee');
   });
 });

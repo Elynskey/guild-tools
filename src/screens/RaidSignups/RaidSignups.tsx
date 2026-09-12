@@ -136,7 +136,7 @@ export function RaidSignups() {
                   <CompStat label="Ranged" value={rs.compSummary.ranged} />
                   {rs.compSummary.ambiguous.length > 0 && (
                     <div style={{ fontSize: 'var(--text-micro)', color: 'var(--text-faint)', maxWidth: 260, paddingTop: 4 }}>
-                      No spec recorded, can't tell melee from ranged: {rs.compSummary.ambiguous.join(', ')}
+                      Can't tell melee from ranged (no spec recorded, or picked specs that don't agree): {rs.compSummary.ambiguous.join(', ')}
                     </div>
                   )}
                   {rs.compSummary.tanks + rs.compSummary.healers + rs.compSummary.dps === 0 && (
@@ -186,7 +186,7 @@ export function RaidSignups() {
                         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                           {rs.classFor(s) && (
                             <span style={{ fontSize: 'var(--text-micro)', color: 'var(--text-muted)' }}>
-                              {rs.specFor(s) ? `${rs.specFor(s)} ${rs.classFor(s)}` : rs.classFor(s)}
+                              {rs.specsFor(s)?.length ? `${rs.specsFor(s)!.join('/')} ${rs.classFor(s)}` : rs.classFor(s)}
                             </span>
                           )}
                           {utility.map((tag) => (

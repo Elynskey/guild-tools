@@ -98,7 +98,24 @@ const DPS_SPEC_RANGE: Record<string, Record<string, DpsRange>> = {
 };
 
 /** Prefers the (class, spec) pair when spec is known and recognized; falls back to the class-only heuristic (which may itself be 'ambiguous') otherwise -- never throws on an unrecognized class or spec, just falls through. */
-export function dpsRangeForSpec(className: string, specName: string | null): DpsRange {
-  const bySpec = specName ? DPS_SPEC_RANGE[className]?.[specName] : undefined;
-  return bySpec ?? dpsRangeForClass(className);
+function dpsRangeForOneSpec(className: string, specName: string): DpsRange | undefined {
+  return DPS_SPEC_RANGE[className]?.[specName];
+}
+
+/**
+ * A signup can list more than one spec for the same role (e.g. a Warrior flexible
+ * between Arms and Fury) -- resolves melee/ranged only when every listed spec agrees;
+ * a genuine split (picked, say, both a melee and a ranged spec because the class/role
+ * allowed it, or an unrecognized spec mixed with a recognized one) comes back
+ * 'ambiguous' rather than guessing which one they'd actually play. Falls back to the
+ * class-level heuristic when there's no spec at all (signups from before this field
+ * existed).
+ */
+export function dpsRangeForSpecs(className: string, specNames: string[] | null): DpsRange {
+  if (!specNames || specNames.length === 0) return dpsRangeForClass(className);
+  // Each spec individually falls back to the class-level heuristic if unrecognized
+  // (same as the single-spec case), so a typo'd spec on an otherwise-unambiguous class
+  // still resolves instead of going straight to 'ambiguous'.
+  const ranges = new Set(specNames.map((s) => dpsRangeForOneSpec(className, s) ?? dpsRangeForClass(className)));
+  return ranges.size === 1 ? [...ranges][0] : 'ambiguous';
 }

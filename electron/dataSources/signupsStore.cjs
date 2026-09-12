@@ -116,14 +116,14 @@ async function create(raidName, teamType, signupText) {
   return entry;
 }
 
-/** Re-signing up (same Discord user, e.g. changing role) replaces their existing entry rather than stacking a duplicate. Rejected once the roster's been finalized -- otherwise the running signup post could silently drift from the final roster Discord already saw. `class`/`spec` are self-reported (picked from a real Blizzard class+spec list in the Discord signup flow, not looked up against the roster) -- there's no other reliable link between a Discord account and a WoW character, and a live roster lookup here would be too slow for Discord's interaction reply window anyway. `spec` can be null even when `class` isn't, for signups made before this field existed. */
-async function addSignup(id, { discordUserId, discordUsername, characterName, role, class: wowClass, spec }) {
+/** Re-signing up (same Discord user, e.g. changing role) replaces their existing entry rather than stacking a duplicate. Rejected once the roster's been finalized -- otherwise the running signup post could silently drift from the final roster Discord already saw. `class`/`specs` are self-reported (picked from a real Blizzard class+spec list in the Discord signup flow, not looked up against the roster) -- there's no other reliable link between a Discord account and a WoW character, and a live roster lookup here would be too slow for Discord's interaction reply window anyway. `specs` can list more than one spec of the same role (someone flexible between Arms and Fury) -- never a mix of roles, since the options offered are already scoped to whichever role was picked first. Null (not just empty) when no spec was recorded at all, for signups made before this field existed. */
+async function addSignup(id, { discordUserId, discordUsername, characterName, role, class: wowClass, specs }) {
   const posts = load();
   const entry = posts.find((s) => s.id === id);
   if (!entry || entry.finalizedAt) return null;
 
   entry.signups = entry.signups.filter((s) => s.discordUserId !== discordUserId);
-  entry.signups.push({ discordUserId, discordUsername, characterName, role, class: wowClass ?? null, spec: spec ?? null, signedUpAt: new Date().toISOString() });
+  entry.signups.push({ discordUserId, discordUsername, characterName, role, class: wowClass ?? null, specs: specs ?? null, signedUpAt: new Date().toISOString() });
   save(posts);
 
   if (entry.discordChannelId && entry.discordMessageId) {
@@ -152,7 +152,7 @@ function characterOrUsername(entry, discordUserId) {
   if (!signup) return discordUserId;
   const name = signup.characterName || signup.discordUsername;
   if (!signup.class) return name;
-  const specLabel = signup.spec ? `${signup.spec} ${signup.class}` : signup.class;
+  const specLabel = signup.specs?.length ? `${signup.specs.join('/')} ${signup.class}` : signup.class;
   return `${name} (${specLabel})`;
 }
 
