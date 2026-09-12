@@ -88,9 +88,12 @@ const needLossKey = (r) => `${r.itemId}::${r.name}::${r.time}`;
  * live: deleting the Hexing Spiritrender trade only removed it from the shared store, and
  * the very next sync from the client that originally captured it silently re-added it).
  *
- * needLosses (Need rolls that did NOT win) merge the same way but have no id/removedKeys
- * handling -- there's no edit/remove UI for them (see recordNeedLoss in the addon), so
- * nothing can ever tombstone one.
+ * needLosses (Need rolls that did NOT win) merge the same way and DO respect removedKeys
+ * (added 2026-09-12: a bulk data-cleanup silently reverted a few minutes later because
+ * this check didn't exist yet -- the next sync from any client whose local SavedVariables
+ * still had the old data just re-added everything). There's still no per-entry id or
+ * edit/remove UI for these (see recordNeedLoss in the addon) -- removedKeys entries for
+ * needLosses only ever get added via a manual/direct cleanup, never through an app action.
  */
 function sync(newRecords, newTrades, newNeedLosses) {
   const db = load();
@@ -126,6 +129,7 @@ function sync(newRecords, newTrades, newNeedLosses) {
     }
   }
   for (const r of newNeedLosses ?? []) {
+    if (removed.has(needLossKey(r))) continue;
     const k = needLossKey(r);
     if (!needLossKeys.has(k)) {
       db.needLosses.push(r);
