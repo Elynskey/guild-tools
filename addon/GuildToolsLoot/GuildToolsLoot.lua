@@ -218,15 +218,27 @@ end
 -- difficulty this guild doesn't run.
 local DIFFICULTY_LABEL = { [14] = "Normal", [15] = "Heroic" }
 
--- Only Normal/Heroic raid loot counts -- Raid Finder, Mythic, and anything that isn't
--- a raid at all are excluded. Checked live at the moment of each win, not just at the
--- PLAYER_ENTERING_WORLD popup below: GuildToolsLootDB.enabled can already be true from
--- an earlier Normal/Heroic raid this session, and would otherwise keep capturing into
--- an LFR run walked into afterward with no fresh prompt to decline.
+-- The guild's current tier's raid, by its real in-game display name (matches
+-- src/config.ts's tier.name in the companion app -- keep these two in sync). Added
+-- after loot kept getting captured from Normal/Heroic runs of raids that AREN'T this
+-- tier's designated one (an old-tier farm/alt clear, or helping out in someone else's
+-- raid) -- difficulty alone (below) only ever excluded LFR/Mythic, not "the right
+-- difficulty, wrong raid." GetInstanceInfo()'s name is the real client-localized
+-- string, not a guessed numeric instanceID -- update this one line at the start of
+-- each new tier.
+local TRACKED_RAID_NAME = "The Venomous Abyss"
+
+-- Only Normal/Heroic loot from THIS tier's designated raid counts -- Raid Finder,
+-- Mythic, any other raid, and anything that isn't a raid at all are excluded. Checked
+-- live at the moment of each win, not just at the PLAYER_ENTERING_WORLD popup below:
+-- GuildToolsLootDB.enabled can already be true from an earlier tracked raid this
+-- session, and would otherwise keep capturing into an untracked run walked into
+-- afterward with no fresh prompt to decline.
 local function currentRaidDifficultyLabel()
   local inInstance, instanceType = IsInInstance()
   if not inInstance or instanceType ~= "raid" then return nil end
-  local _, _, difficultyID = GetInstanceInfo()
+  local name, _, difficultyID = GetInstanceInfo()
+  if name ~= TRACKED_RAID_NAME then return nil end
   return DIFFICULTY_LABEL[difficultyID]
 end
 
