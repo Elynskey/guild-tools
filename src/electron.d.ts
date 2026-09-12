@@ -208,11 +208,26 @@ export interface GotmPost {
   winnerAnnounceMessageId: string | null;
 }
 
+export interface AnalyticsEvent {
+  id: string;
+  event: string;
+  screen: string | null;
+  displayName: string | null;
+  appVersion: string | null;
+  mode: 'prod' | 'test';
+  meta: Record<string, unknown> | null;
+  at: string;
+}
+
 export interface ElectronAPI {
   /** True only in a "Guild Tools (Test)" build -- Raid Signups/GOTM tag every request as test-mode when this is true. Everything else in the app is unaffected. */
   isTestMode: () => Promise<boolean>;
   /** Sends feedback as a direct Discord message to the maintainer -- same destination from the real app or a test-mode build, since the whole point is it always reaches the same person. `screen` is whatever the feedback button was open on (e.g. "Raid Signups"), `sender` the signed-in officer's display name if known. */
   sendFeedback: (message: string, screen: string, sender?: string | null) => Promise<{ ok: true }>;
+  /** Logs one usage event (a screen visit or a key officer action) -- fire-and-forget, never throws in a way the caller needs to handle. `screen` and `meta` are optional context; `displayName`/`appVersion`/`mode` are filled in server-side, never passed from here. */
+  trackEvent: (event: string, screen?: string | null, meta?: Record<string, unknown> | null) => Promise<{ ok: true }>;
+  /** Raw, already-trimmed usage log for the Analytics screen -- scoped to this build's own mode (a test-mode build only ever sees test-mode events, same isolation as Raid Signups/GOTM). */
+  listAnalyticsEvents: () => Promise<AnalyticsEvent[]>;
   getRoster: () => Promise<LiveRosterResult | null>;
   getProfessions: () => Promise<LiveProfessionsResult | null>;
   getCachedProfessions: () => Promise<LiveProfessionsResult | null>;

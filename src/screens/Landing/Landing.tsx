@@ -59,6 +59,12 @@ const CARDS: NavCardDef[] = [
     description: 'Open this month\'s vote, watch the tally live, and announce the winner to Discord.',
   },
   {
+    to: '/analytics',
+    icon: 'activity',
+    title: 'Analytics',
+    description: 'Every screen visit and key action, filterable and timestamped -- plus which app version each officer is currently running.',
+  },
+  {
     to: '/settings',
     icon: 'settings',
     title: 'Settings',

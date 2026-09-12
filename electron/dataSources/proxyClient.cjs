@@ -245,6 +245,14 @@ async function sendFeedback(payload) {
   return proxyFetchJson('/feedback', { method: 'POST', body: JSON.stringify(payload) });
 }
 
+async function trackAnalyticsEvent(payload) {
+  return proxyFetchJson('/analytics', { method: 'POST', body: JSON.stringify(payload) });
+}
+
+async function listAnalyticsEvents() {
+  return proxyFetchJson('/analytics');
+}
+
 module.exports = {
   isAvailable,
   fetchRoster,
@@ -286,4 +294,6 @@ module.exports = {
   removeLootTrade,
   deleteLootNight,
   sendFeedback,
+  trackAnalyticsEvent,
+  listAnalyticsEvents,
 };

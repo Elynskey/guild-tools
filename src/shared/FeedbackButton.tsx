@@ -5,21 +5,7 @@ import { Input } from '../design-system/Input';
 import { Button } from '../design-system/Button';
 import { Toast } from '../design-system/Toast';
 import { IconButton } from '../design-system/IconButton';
-
-// One friendly label per route -- falls back to the raw path for anything not listed
-// here (a new screen added later, say) rather than showing nothing.
-const SCREEN_LABELS: Record<string, string> = {
-  '/': 'Landing',
-  '/raider-status': 'Raider Status',
-  '/professions': 'Professions',
-  '/pull-feedback': 'Pull Feedback',
-  '/loot-history': 'Loot History',
-  '/loot-report': 'Season Loot Report',
-  '/mythic-plus': 'M+ Keys',
-  '/settings': 'Settings',
-  '/raid-signups': 'Raid Signups',
-  '/gotm': 'Guildie of the Month',
-};
+import { screenLabelFor } from './screenLabels';
 
 interface FeedbackButtonProps {
   displayName: string | null;
@@ -40,7 +26,7 @@ export function FeedbackButton({ displayName }: FeedbackButtonProps) {
   const [sentAt, setSentAt] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const screen = SCREEN_LABELS[location.pathname] ?? location.pathname;
+  const screen = screenLabelFor(location.pathname);
   const available = !!window.electronAPI;
 
   const submit = () => {

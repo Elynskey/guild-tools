@@ -37,6 +37,7 @@ const { getItemIconUrls } = require('./dataSources/fetchItemIcons.cjs');
 const { fetchBossLootTable } = require('./dataSources/fetchBossLootTable.cjs');
 const { postLootNightToDiscord } = require('./dataSources/postLootNight.cjs');
 const { submitFeedback } = require('./dataSources/fetchFeedback.cjs');
+const { trackAnalyticsEvent, listAnalyticsEvents } = require('./dataSources/fetchAnalytics.cjs');
 const { getSettings, saveSettings } = require('./dataSources/fetchSettings.cjs');
 const {
   listRaidSignups,
@@ -67,17 +68,37 @@ ipcMain.handle('auth:signIn', async () => {
   const user = await bnetSignIn();
   authState = { provider: 'battlenet', displayName: user.battletag, id: user.id };
   saveSession(authState);
+  track('sign_in', null);
   return authState;
 });
 ipcMain.handle('auth:signInDiscord', async () => {
   authState = await discordSignIn();
   saveSession(authState);
+  track('sign_in', null);
   return authState;
 });
 ipcMain.handle('auth:signOut', async () => {
   authState = null;
   clearSession();
 });
+
+// App usage log (screen visits, key officer actions, which version each officer is
+// running) -- fired from inside this file for every curated action below rather than
+// from each screen's own hook, since main.cjs already centralizes every IPC handler in
+// one place and already has displayName/appVersion/mode in scope, same as
+// feedback:send already does. Failures are swallowed (console-logged only) -- analytics
+// must never surface an error to the officer or block the real action it's attached to.
+function track(event, screen, meta) {
+  trackAnalyticsEvent(
+    { event, screen, meta: meta ?? null, displayName: authState?.displayName ?? null, appVersion: app.getVersion() },
+    isTestModeBuild ? 'test' : 'prod',
+  ).catch((err) => console.error('[analytics] track failed (non-fatal):', err));
+}
+ipcMain.handle('analytics:track', async (_event, event, screen, meta) => {
+  track(event, screen, meta);
+  return { ok: true };
+});
+ipcMain.handle('analytics:list', async () => listAnalyticsEvents(isTestModeBuild ? 'test' : 'prod'));
 
 ipcMain.handle('roster:fetch', async () => fetchRoster());
 ipcMain.handle('professions:getCached', async () => getCachedProfessions());
@@ -122,6 +143,10 @@ ipcMain.handle('update:downloadAndInstall', async () => {
     && crypto.timingSafeEqual(Buffer.from(actualHash), Buffer.from(expectedHash));
   if (!isValid) throw new Error('Downloaded installer failed checksum verification -- refusing to run it. Please try again, and let an officer know if this keeps happening.');
 
+  // Fired here, before shell.openPath/the quit delay below, so the network call has
+  // time to actually complete rather than racing app.quit().
+  track('update_downloaded', null);
+
   const dest = path.join(app.getPath('temp'), 'Guild-Tools-Setup-latest.exe');
   fs.writeFileSync(dest, buffer);
 
@@ -146,22 +171,40 @@ ipcMain.handle('clipboard:write', async (_event, text) => {
   if (typeof text === 'string') clipboard.writeText(text);
 });
 ipcMain.handle('craftRequests:list', async () => listCraftRequests());
-ipcMain.handle('craftRequests:add', async (_event, requester, profession, description) => addCraftRequest(requester, profession, description));
-ipcMain.handle('craftRequests:fulfill', async (_event, id, fulfilledBy) => fulfillCraftRequest(id, fulfilledBy));
+ipcMain.handle('craftRequests:add', async (_event, requester, profession, description) => {
+  const result = await addCraftRequest(requester, profession, description);
+  track('craft_request_added', 'Professions');
+  return result;
+});
+ipcMain.handle('craftRequests:fulfill', async (_event, id, fulfilledBy) => {
+  const result = await fulfillCraftRequest(id, fulfilledBy);
+  track('craft_request_fulfilled', 'Professions');
+  return result;
+});
 ipcMain.handle('app:isTestMode', async () => isTestModeBuild);
-ipcMain.handle('feedback:send', async (_event, { message, screen, sender }) =>
-  submitFeedback({ message, screen, sender, appVersion: app.getVersion(), mode: isTestModeBuild ? 'test' : 'prod' }),
-);
+ipcMain.handle('feedback:send', async (_event, { message, screen, sender }) => {
+  const result = await submitFeedback({ message, screen, sender, appVersion: app.getVersion(), mode: isTestModeBuild ? 'test' : 'prod' });
+  track('feedback_sent', screen);
+  return result;
+});
 ipcMain.handle('craftRequests:remove', async (_event, id) => removeCraftRequest(id));
 ipcMain.handle('lootLog:get', async () => fetchLootLog());
-ipcMain.handle('lootLog:addManual', async (_event, record) => addManualLootRecord(record));
+ipcMain.handle('lootLog:addManual', async (_event, record) => {
+  const result = await addManualLootRecord(record);
+  track('loot_manual_added', 'Loot History');
+  return result;
+});
 ipcMain.handle('lootLog:update', async (_event, id, patch) => updateLootRecord(id, patch));
 ipcMain.handle('lootLog:remove', async (_event, id) => removeLootRecord(id));
 ipcMain.handle('lootLog:removeTrade', async (_event, id) => removeLootTrade(id));
 ipcMain.handle('lootLog:deleteNight', async (_event, startTime, endTime) => deleteLootNight(startTime, endTime));
 ipcMain.handle('itemIcons:get', async (_event, itemIds) => getItemIconUrls(itemIds));
 ipcMain.handle('bossLootTable:get', async () => fetchBossLootTable());
-ipcMain.handle('lootLog:postNightToDiscord', async (_event, messages) => postLootNightToDiscord(messages));
+ipcMain.handle('lootLog:postNightToDiscord', async (_event, messages) => {
+  const result = await postLootNightToDiscord(messages);
+  track('loot_night_posted', 'Loot History');
+  return result;
+});
 ipcMain.handle('lootLog:getWowPath', async () => getWowPathConfig());
 ipcMain.handle('lootLog:setWowPath', async (_event, wowPath) => {
   setWowPath(wowPath);
@@ -174,22 +217,55 @@ ipcMain.handle('lootLog:pickFolder', async () => {
   return result.filePaths[0];
 });
 ipcMain.handle('settings:get', async () => getSettings());
-ipcMain.handle('settings:save', async (_event, settings) => saveSettings(settings));
+ipcMain.handle('settings:save', async (_event, settings) => {
+  const result = await saveSettings(settings);
+  track('settings_saved', 'Settings');
+  return result;
+});
 ipcMain.handle('raidSignups:list', async () => listRaidSignups());
 ipcMain.handle('raidSignups:get', async (_event, id) => getRaidSignup(id));
-ipcMain.handle('raidSignups:create', async (_event, raidName, teamType, signupText) => createRaidSignup(raidName, teamType, signupText));
-ipcMain.handle('raidSignups:setAssignments', async (_event, id, assignments) => setRaidSignupAssignments(id, assignments));
-ipcMain.handle('raidSignups:finalize', async (_event, id) => finalizeRaidSignup(id));
+ipcMain.handle('raidSignups:create', async (_event, raidName, teamType, signupText) => {
+  const result = await createRaidSignup(raidName, teamType, signupText);
+  track('raid_signup_created', 'Raid Signups');
+  return result;
+});
+ipcMain.handle('raidSignups:setAssignments', async (_event, id, assignments) => {
+  const result = await setRaidSignupAssignments(id, assignments);
+  track('raid_signup_assignment_set', 'Raid Signups');
+  return result;
+});
+ipcMain.handle('raidSignups:finalize', async (_event, id) => {
+  const result = await finalizeRaidSignup(id);
+  track('raid_signup_finalized', 'Raid Signups');
+  return result;
+});
 ipcMain.handle('gotm:list', async () => listGotmPosts());
 ipcMain.handle('gotm:get', async (_event, id) => getGotmPost(id));
 ipcMain.handle('gotm:getCurrent', async () => getCurrentGotmPost());
-ipcMain.handle('gotm:create', async (_event, openedBy, introText) => createGotmPost(openedBy, introText));
-ipcMain.handle('gotm:remind', async (_event, id, reminderText) => remindGotmVoters(id, reminderText));
-ipcMain.handle('gotm:close', async (_event, id) => closeGotmVoting(id));
-ipcMain.handle('gotm:announce', async (_event, id, winnerAnnounceText) => announceGotmWinner(id, winnerAnnounceText));
+ipcMain.handle('gotm:create', async (_event, openedBy, introText) => {
+  const result = await createGotmPost(openedBy, introText);
+  track('gotm_created', 'Guildie of the Month');
+  return result;
+});
+ipcMain.handle('gotm:remind', async (_event, id, reminderText) => {
+  const result = await remindGotmVoters(id, reminderText);
+  track('gotm_reminder_sent', 'Guildie of the Month');
+  return result;
+});
+ipcMain.handle('gotm:close', async (_event, id) => {
+  const result = await closeGotmVoting(id);
+  track('gotm_closed', 'Guildie of the Month');
+  return result;
+});
+ipcMain.handle('gotm:announce', async (_event, id, winnerAnnounceText) => {
+  const result = await announceGotmWinner(id, winnerAnnounceText);
+  track('gotm_announced', 'Guildie of the Month');
+  return result;
+});
 ipcMain.handle('lootLog:installAddon', async () => {
   try {
     const dest = installAddon();
+    track('addon_installed', 'Loot History');
     return { ok: true, dest };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };

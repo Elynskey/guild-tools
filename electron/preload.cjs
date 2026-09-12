@@ -5,6 +5,8 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('electronAPI', {
   isTestMode: () => ipcRenderer.invoke('app:isTestMode'),
   sendFeedback: (message, screen, sender) => ipcRenderer.invoke('feedback:send', { message, screen, sender }),
+  trackEvent: (event, screen, meta) => ipcRenderer.invoke('analytics:track', event, screen, meta),
+  listAnalyticsEvents: () => ipcRenderer.invoke('analytics:list'),
   getRoster: () => ipcRenderer.invoke('roster:fetch'),
   getProfessions: () => ipcRenderer.invoke('professions:fetch'),
   getCachedProfessions: () => ipcRenderer.invoke('professions:getCached'),
