@@ -84,11 +84,11 @@ async function create(openedBy, introText) {
   return entry;
 }
 
-/** Re-voting (same Discord user picking a different nominee) replaces their existing vote rather than stacking a duplicate. */
+/** Re-voting (same Discord user picking a different nominee) replaces their existing vote rather than stacking a duplicate. Rejected (treated the same as not-found) once voting is closed -- otherwise a vote whose ephemeral select was still open at the moment an officer closed voting would silently count anyway. */
 function recordVote(id, { voterId, voterUsername, nomineeId, nomineeUsername }) {
   const posts = load();
   const entry = posts.find((p) => p.id === id);
-  if (!entry) return null;
+  if (!entry || entry.closedAt) return null;
 
   entry.votes = entry.votes.filter((v) => v.voterId !== voterId);
   entry.votes.push({ voterId, voterUsername, nomineeId, nomineeUsername, votedAt: new Date().toISOString() });
