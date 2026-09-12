@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { annotateWithTrades, formatNightForDiscord, groupLootByNight, needWinCount } from '../../raid/lootLogic';
+import { annotateWithTrades, formatNightForDiscord, groupLootByNight, itemLabel, needWinCount } from '../../raid/lootLogic';
 import type { LootNight } from '../../raid/lootLogic';
 import { sampleLootRecords, sampleLootTrades } from '../../data/sampleLoot';
 import { getRoster } from '../../data/rosterSource';
@@ -58,16 +58,34 @@ export function useLootHistory() {
     return () => clearInterval(interval);
   }, [load]);
 
+  // Name -> itemId, built from this tier's known loot table -- a fallback for records
+  // whose itemId never got captured. Confirmed live 2026-09-12: C_LootHistory's
+  // itemHyperlink can come back as a plain "[Item Name]" string with no |Hitem: escape
+  // codes at all (root cause still unconfirmed -- likely the item's data hadn't
+  // finished caching client-side yet), so itemIdFromLink has nothing to parse and the
+  // record is stored with itemId: null forever. When the name matches a known
+  // current-tier item, this recovers a real id well enough to still show an icon.
+  const itemIdByName = useMemo(() => {
+    if (!bossLootTable) return {} as Record<string, number>;
+    return Object.fromEntries(Object.entries(bossLootTable.items).map(([id, item]) => [item.name, Number(id)]));
+  }, [bossLootTable]);
+
   // Fetched once per set of item IDs seen -- icons never change, so no need to re-fetch
   // on every load()/poll tick, just when a genuinely new item ID shows up.
   useEffect(() => {
     if (!electron) return;
-    const ids = [...new Set(nights.flatMap((n) => n.entries.map((e) => e.itemId)).filter((id): id is number => id != null))];
+    const ids = [
+      ...new Set(
+        nights
+          .flatMap((n) => n.entries.map((e) => e.itemId ?? itemIdByName[itemLabel(e.itemLink)]))
+          .filter((id): id is number => id != null),
+      ),
+    ];
     const missing = ids.filter((id) => !(id in itemIcons));
     if (missing.length === 0) return;
     electron.getItemIconUrls(missing).then((result) => setItemIcons((prev) => ({ ...prev, ...result })));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [electron, nights]);
+  }, [electron, nights, itemIdByName]);
 
   // Loot table + roster class lookup for the smarter "Add loot entry" form (character
   // -> class -> boss -> class-eligible items -> auto slot). Fetched once, not per dialog
@@ -280,6 +298,7 @@ export function useLootHistory() {
     refreshing,
     empty: nights.length === 0,
     itemIcons,
+    itemIdByName,
     bossLootTable,
     classByName,
     addRecord,

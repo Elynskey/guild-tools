@@ -143,7 +143,7 @@ export function LootHistory() {
                 </Button>
               )}
             </div>
-            <LootLogTable entries={lh.visibleEntries} itemIcons={lh.itemIcons} onEdit={lh.available ? setEditing : undefined} />
+            <LootLogTable entries={lh.visibleEntries} itemIcons={lh.itemIcons} itemIdByName={lh.itemIdByName} onEdit={lh.available ? setEditing : undefined} />
           </>
         )}
       </div>

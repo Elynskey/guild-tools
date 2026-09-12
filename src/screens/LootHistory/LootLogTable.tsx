@@ -8,6 +8,7 @@ import type { LootEntry } from '../../raid/lootLogic';
 interface LootLogTableProps {
   entries: LootEntry[];
   itemIcons?: Record<number, string | null>;
+  itemIdByName?: Record<string, number>;
   onEdit?: (entry: LootEntry) => void;
 }
 
@@ -17,7 +18,7 @@ function formatTime(unixSeconds: number): string {
 
 const GRID_TEMPLATE = '90px 1fr 1.4fr 110px 140px 130px 36px';
 
-export function LootLogTable({ entries, itemIcons, onEdit }: LootLogTableProps) {
+export function LootLogTable({ entries, itemIcons, itemIdByName, onEdit }: LootLogTableProps) {
   if (entries.length === 0) {
     return (
       <div className="crd-card" style={{ padding: '32px 24px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 'var(--text-body-s)' }}>
@@ -38,7 +39,8 @@ export function LootLogTable({ entries, itemIcons, onEdit }: LootLogTableProps) 
         <div />
       </div>
       {entries.map((e, i) => {
-        const iconUrl = e.itemId != null ? itemIcons?.[e.itemId] : null;
+        const resolvedItemId = e.itemId ?? itemIdByName?.[itemLabel(e.itemLink)];
+        const iconUrl = resolvedItemId != null ? itemIcons?.[resolvedItemId] : null;
         return (
           <div
             key={i}
