@@ -101,10 +101,6 @@ local currentEncounterID = nil
 -- until that happens.
 local lootCapturedThisEncounter = false
 
--- rollID -> { link = itemLink, name = itemName }, populated on START_LOOT_ROLL, read
--- when that roll's outcome is announced in chat, then cleared.
-local pendingRolls = {}
-
 local function playerRealmName()
   local name, realm = UnitFullName("player")
   if not realm or realm == "" then realm = GetRealmName() end
@@ -411,7 +407,6 @@ frame:RegisterEvent("PLAYER_LOGIN")
 frame:RegisterEvent("PLAYER_ENTERING_WORLD")
 frame:RegisterEvent("ENCOUNTER_START")
 frame:RegisterEvent("ENCOUNTER_END")
-frame:RegisterEvent("START_LOOT_ROLL")
 frame:RegisterEvent("CHAT_MSG_LOOT")
 frame:RegisterEvent("LOOT_HISTORY_UPDATE_DROP")
 frame:RegisterEvent("TRADE_SHOW")
@@ -481,13 +476,6 @@ frame:SetScript("OnEvent", function(_, event, ...)
       end)
     end
 
-  elseif event == "START_LOOT_ROLL" then
-    local rollID = ...
-    if GetLootRollItemLink then
-      local link = GetLootRollItemLink(rollID)
-      if link then pendingRolls[rollID] = { link = link } end
-    end
-
   elseif event == "CHAT_MSG_LOOT" then
     local message = ...
     local winner, rollType = message:match(WON_ROLL_PATTERN)
@@ -511,16 +499,22 @@ frame:SetScript("OnEvent", function(_, event, ...)
     tradeCompleted = false
 
   elseif event == "TRADE_ACCEPT_UPDATE" then
-    -- Snapshot what's currently offered on the player's side of the trade window --
-    -- both sides accepting is what TRADE_CLOSED-after-acceptance actually means, so
-    -- this just keeps the latest offered items in case the trade completes.
+    -- Snapshot what's currently offered on the player's side of the trade window.
     for slot = 1, 6 do
       if GetTradePlayerItemLink then
         local link = GetTradePlayerItemLink(slot)
         if link then tradePlayerItems[slot] = link end
       end
     end
-    tradeCompleted = true
+    -- This event fires on ANY accept-state change -- either side accepting OR
+    -- un-accepting -- not just the final completion. Unconditionally setting this true
+    -- (the old behavior) meant one side accepting, then the OTHER cancelling the trade
+    -- instead of also accepting, still fired TRADE_CLOSED with tradeCompleted stuck
+    -- true from that single accept -- logging a trade that never actually happened.
+    -- Tracking both sides' current accept state instead means TRADE_CLOSED only ever
+    -- sees true if the trade was genuinely still fully accepted the moment it closed.
+    local playerAccepted, targetAccepted = ...
+    tradeCompleted = playerAccepted and targetAccepted
 
   elseif event == "TRADE_CLOSED" then
     if GuildToolsLootDB.enabled and tradeCompleted and tradeTargetName then
