@@ -145,6 +145,8 @@ export interface RaidSignupEntry {
   role: RaidRole;
   /** Self-reported at signup time (a real class picked from Discord, not a roster lookup) -- null for signups made before this field existed. */
   class: string | null;
+  /** Self-reported alongside class, scoped to specs valid for that class+role (auto-filled with no extra prompt when only one spec is valid there) -- null only for signups made before this field existed. */
+  spec: string | null;
   signedUpAt: string;
 }
 

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { AssignmentTier, RaidAssignment, RaidRole, RaidSignupEntry, RaidSignupPost, TeamType } from '../../electron';
 import { getRoster } from '../../data/rosterSource';
 import type { Raider } from '../../scoring/types';
-import { utilityGainedBy, raidBuffCoverage, dpsRangeForClass } from '../../raid/raidBuffs';
+import { utilityGainedBy, raidBuffCoverage, dpsRangeForSpec } from '../../raid/raidBuffs';
 
 const ROLES: RaidRole[] = ['tank', 'healer', 'dps'];
 
@@ -63,6 +63,9 @@ export function useRaidSignups() {
   /** Class for a signup -- self-reported at signup time (a real Blizzard class picked in Discord), falling back to a roster-name match only for signups made before that field existed. */
   const classFor = useCallback((signup: RaidSignupEntry) => signup.class ?? matchRoster(signup.characterName)?.class ?? null, [matchRoster]);
 
+  /** Spec for a signup -- self-reported alongside class, null for signups made before that field existed (no roster fallback: the roster doesn't track "spec they signed up to raid as," only whatever they're playing right now). */
+  const specFor = useCallback((signup: RaidSignupEntry) => signup.spec ?? null, []);
+
   const primarySignupsFor = useCallback(
     (post: RaidSignupPost, role: RaidRole) =>
       post.assignments[role]
@@ -84,7 +87,7 @@ export function useRaidSignups() {
     [classFor, matchRoster, primarySignupsFor],
   );
 
-  /** Raid-wide snapshot of who's actually going (primary assignments only, across all three roles) -- tank/healer/melee/ranged counts, plus which classes couldn't be bucketed into melee/ranged with confidence (see dpsRangeForClass). */
+  /** Raid-wide snapshot of who's actually going (primary assignments only, across all three roles) -- tank/healer/melee/ranged counts, plus which signups couldn't be bucketed into melee/ranged with confidence (see dpsRangeForSpec -- only signups with no spec recorded at all, on a class where that actually matters, land here now). */
   const compSummary = useMemo(() => {
     if (!selected) return null;
     const primaryTanks = primarySignupsFor(selected, 'tank');
@@ -97,14 +100,14 @@ export function useRaidSignups() {
     for (const s of primaryDps) {
       const cls = classFor(s);
       if (!cls) continue;
-      const range = dpsRangeForClass(cls);
+      const range = dpsRangeForSpec(cls, specFor(s));
       if (range === 'melee') melee++;
       else if (range === 'ranged') ranged++;
       else ambiguous.push(s.characterName);
     }
 
     return { tanks: primaryTanks.length, healers: primaryHealers.length, dps: primaryDps.length, melee, ranged, ambiguous };
-  }, [selected, primarySignupsFor, classFor]);
+  }, [selected, primarySignupsFor, classFor, specFor]);
 
   /** Buff/utility coverage across everyone actually assigned primary, any role -- Bloodlust doesn't care whether it comes from a healer or a DPS. */
   const buffCoverage = useMemo(() => {
@@ -163,6 +166,7 @@ export function useRaidSignups() {
     createError,
     matchRoster,
     classFor,
+    specFor,
     utilityFor,
     compSummary,
     buffCoverage,

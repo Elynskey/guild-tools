@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getRaidUtility, utilityGainedBy, raidBuffCoverage, dpsRangeForClass } from './raidBuffs';
+import { getRaidUtility, utilityGainedBy, raidBuffCoverage, dpsRangeForClass, dpsRangeForSpec } from './raidBuffs';
 
 describe('getRaidUtility', () => {
   it('returns the known tags for a tracked class', () => {
@@ -63,5 +63,31 @@ describe('dpsRangeForClass', () => {
 
   it('treats an unrecognized class as ambiguous rather than throwing', () => {
     expect(dpsRangeForClass('Not A Class')).toBe('ambiguous');
+  });
+});
+
+describe('dpsRangeForSpec', () => {
+  it('resolves the three class-level-ambiguous classes precisely once spec is known', () => {
+    expect(dpsRangeForSpec('Hunter', 'Survival')).toBe('melee');
+    expect(dpsRangeForSpec('Hunter', 'Beast Mastery')).toBe('ranged');
+    expect(dpsRangeForSpec('Hunter', 'Marksmanship')).toBe('ranged');
+    expect(dpsRangeForSpec('Shaman', 'Enhancement')).toBe('melee');
+    expect(dpsRangeForSpec('Shaman', 'Elemental')).toBe('ranged');
+    expect(dpsRangeForSpec('Druid', 'Feral')).toBe('melee');
+    expect(dpsRangeForSpec('Druid', 'Balance')).toBe('ranged');
+  });
+
+  it('does not confuse a spec name that collides across classes (Frost)', () => {
+    expect(dpsRangeForSpec('Death Knight', 'Frost')).toBe('melee');
+    expect(dpsRangeForSpec('Mage', 'Frost')).toBe('ranged');
+  });
+
+  it('falls back to the class-level heuristic when spec is null', () => {
+    expect(dpsRangeForSpec('Warrior', null)).toBe('melee');
+    expect(dpsRangeForSpec('Hunter', null)).toBe('ambiguous');
+  });
+
+  it('falls back to the class-level heuristic when spec is unrecognized', () => {
+    expect(dpsRangeForSpec('Hunter', 'Not A Real Spec')).toBe('ambiguous');
   });
 });

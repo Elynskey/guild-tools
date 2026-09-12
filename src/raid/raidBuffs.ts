@@ -48,14 +48,13 @@ export function raidBuffCoverage(classes: string[]): { tag: string; covered: boo
 export type DpsRange = 'melee' | 'ranged' | 'ambiguous';
 
 /**
- * DPS melee/ranged split, by class -- not spec. The raid-signup flow only captures
- * class (picked from a real list at signup time); asking for spec too would be a
- * second select on top of that for comparatively little gain here. Three classes
- * genuinely split their DPS specs between melee and ranged (Hunter: Survival vs Beast
+ * DPS melee/ranged split, by class -- the fallback used when a signup has no spec
+ * recorded (signups made before that field existed). Three classes genuinely split
+ * their DPS specs between melee and ranged (Hunter: Survival vs Beast
  * Mastery/Marksmanship; Shaman: Enhancement vs Elemental; Druid: Feral vs Balance) --
  * those come back 'ambiguous' rather than a guessed default, since silently picking one
  * would misrepresent the comp to whoever's planning around it. Every other class has
- * exactly one DPS spec, or all of its DPS specs agree, so class alone is enough.
+ * exactly one DPS spec, or all of its DPS specs agree, so class alone is enough for them.
  */
 const DPS_RANGE: Record<string, DpsRange> = {
   Warrior: 'melee',
@@ -76,4 +75,30 @@ const DPS_RANGE: Record<string, DpsRange> = {
 /** 'ambiguous' for an unrecognized class too -- same "don't guess" reasoning as the three classes that are ambiguous on purpose. */
 export function dpsRangeForClass(className: string): DpsRange {
   return DPS_RANGE[className] ?? 'ambiguous';
+}
+
+// Melee/ranged by (class, spec) -- resolves the three class-level 'ambiguous' cases
+// above precisely, now that the Discord signup flow captures real spec. Spec names
+// collide across classes (Frost is a Death Knight melee spec AND a Mage ranged spec),
+// so this has to be keyed by class first, not spec name alone.
+const DPS_SPEC_RANGE: Record<string, Record<string, DpsRange>> = {
+  Warrior: { Arms: 'melee', Fury: 'melee' },
+  Paladin: { Retribution: 'melee' },
+  Hunter: { 'Beast Mastery': 'ranged', Marksmanship: 'ranged', Survival: 'melee' },
+  Rogue: { Assassination: 'melee', Outlaw: 'melee', Subtlety: 'melee' },
+  Priest: { Shadow: 'ranged' },
+  'Death Knight': { Frost: 'melee', Unholy: 'melee' },
+  Shaman: { Elemental: 'ranged', Enhancement: 'melee' },
+  Mage: { Arcane: 'ranged', Fire: 'ranged', Frost: 'ranged' },
+  Warlock: { Affliction: 'ranged', Demonology: 'ranged', Destruction: 'ranged' },
+  Monk: { Windwalker: 'melee' },
+  Druid: { Balance: 'ranged', Feral: 'melee' },
+  'Demon Hunter': { Havoc: 'melee' },
+  Evoker: { Devastation: 'ranged', Augmentation: 'ranged' },
+};
+
+/** Prefers the (class, spec) pair when spec is known and recognized; falls back to the class-only heuristic (which may itself be 'ambiguous') otherwise -- never throws on an unrecognized class or spec, just falls through. */
+export function dpsRangeForSpec(className: string, specName: string | null): DpsRange {
+  const bySpec = specName ? DPS_SPEC_RANGE[className]?.[specName] : undefined;
+  return bySpec ?? dpsRangeForClass(className);
 }

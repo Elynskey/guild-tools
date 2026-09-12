@@ -136,7 +136,7 @@ export function RaidSignups() {
                   <CompStat label="Ranged" value={rs.compSummary.ranged} />
                   {rs.compSummary.ambiguous.length > 0 && (
                     <div style={{ fontSize: 'var(--text-micro)', color: 'var(--text-faint)', maxWidth: 260, paddingTop: 4 }}>
-                      Melee or ranged depends on spec, not shown here: {rs.compSummary.ambiguous.join(', ')}
+                      No spec recorded, can't tell melee from ranged: {rs.compSummary.ambiguous.join(', ')}
                     </div>
                   )}
                   {rs.compSummary.tanks + rs.compSummary.healers + rs.compSummary.dps === 0 && (
@@ -184,7 +184,11 @@ export function RaidSignups() {
                           {raider ? `${raider.perf}% perf` : 'Not on roster'}
                         </div>
                         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                          {rs.classFor(s) && <span style={{ fontSize: 'var(--text-micro)', color: 'var(--text-muted)' }}>{rs.classFor(s)}</span>}
+                          {rs.classFor(s) && (
+                            <span style={{ fontSize: 'var(--text-micro)', color: 'var(--text-muted)' }}>
+                              {rs.specFor(s) ? `${rs.specFor(s)} ${rs.classFor(s)}` : rs.classFor(s)}
+                            </span>
+                          )}
                           {utility.map((tag) => (
                             <Badge key={tag} tone="gold">
                               {tag}
