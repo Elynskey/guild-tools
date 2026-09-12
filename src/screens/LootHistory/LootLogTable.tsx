@@ -56,6 +56,7 @@ export function LootLogTable({ entries, itemIcons, onEdit }: LootLogTableProps) 
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 'var(--text-body-s)', color: 'var(--text-muted)' }}>
               {e.boss && <BossIcon boss={e.boss} size={28} />}
               {e.boss ?? '—'}
+              {e.difficulty && <Badge tone={e.difficulty === 'Heroic' ? 'gold' : 'neutral'}>{e.difficulty}</Badge>}
               {e.source === 'chat-tail' && (
                 <Badge tone="warning" dot title="Captured live -- /reload in-game to fill in the boss/slot">
                   Unverified

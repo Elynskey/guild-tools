@@ -200,12 +200,13 @@ function upgradeRecord(existing, incoming) {
   if (existing.boss == null && incoming.boss != null) existing.boss = incoming.boss;
   if (existing.slot == null && incoming.slot != null) existing.slot = incoming.slot;
   if (existing.itemId == null && incoming.itemId != null) existing.itemId = incoming.itemId;
+  if (existing.difficulty == null && incoming.difficulty != null) existing.difficulty = incoming.difficulty;
   if ((incoming.itemLink?.length ?? 0) > (existing.itemLink?.length ?? 0)) existing.itemLink = incoming.itemLink;
   delete existing.source;
 }
 
 /** Officer-entered record -- no real itemLink available by hand, so the item name is stored as a plain "[Name]" string (the same bracketed shape LootLogTable's display parsing already expects; it just won't carry a real tooltip). itemId, when the app's smart picker supplied one (a real item from this tier's loot table), is kept so getItemIconUrls can still resolve a real icon -- free-text entries just get null, same as before. */
-function manualAdd({ winner, itemName, boss, slot, time: recordTime, itemId }) {
+function manualAdd({ winner, itemName, boss, slot, time: recordTime, itemId, difficulty }) {
   if (!winner || !itemName) throw new Error('winner and itemName are both required.');
   const db = load();
   const time = recordTime ?? Math.floor(Date.now() / 1000);
@@ -225,6 +226,7 @@ function manualAdd({ winner, itemName, boss, slot, time: recordTime, itemId }) {
     boss: boss || null,
     slot: slot || 'Other',
     time,
+    difficulty: difficulty || null,
   };
   db.records.push(record);
   save(db);
@@ -256,6 +258,7 @@ function update(id, patch) {
   }
   if (patch.boss !== undefined) record.boss = patch.boss || null;
   if (patch.slot !== undefined) record.slot = patch.slot || 'Other';
+  if (patch.difficulty !== undefined) record.difficulty = patch.difficulty || null;
   save(db);
   return db.records;
 }

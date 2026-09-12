@@ -10,6 +10,8 @@ export interface RawLootRecord {
   time: number; // unix seconds
   /** Set only while this record has no boss/slot attribution yet -- captured live from WoW's chat log (lootChatTail.cjs) rather than the addon's SavedVariables, which is the only source that knows which boss a win came from. Cleared once the addon's own sync reconciles it (see lootRecordsStore.cjs's upgradeRecord). */
   source?: 'chat-tail';
+  /** "Normal" | "Heroic", or null/undefined for anything captured before this field existed, a manual entry with it unset, or a chat-tail placeholder (no client API access to determine it). The addon itself only ever captures Normal/Heroic -- Mythic and LFR are excluded at the source. */
+  difficulty?: string | null;
 }
 
 /** A Need roll that did NOT win -- see recordNeedLoss in the addon. Deliberately its own shape, not a LootEntry variant: there's no winner/trade lifecycle to it, just "who rolled Need on what and lost." */
@@ -20,6 +22,8 @@ export interface RawNeedLossRecord {
   boss: string | null;
   slot?: string;
   time: number; // unix seconds
+  /** See RawLootRecord's `difficulty` -- same meaning, same caveats. */
+  difficulty?: string | null;
 }
 
 export interface RawTradeRecord {
@@ -51,6 +55,8 @@ export interface LootEntry {
   standaloneTrade: boolean;
   /** See RawLootRecord's `source` -- carried straight through by annotateWithTrades. */
   source?: 'chat-tail';
+  /** See RawLootRecord's `difficulty` -- null for records that predate it, and for standalone trades (a trade isn't a captured win, nothing to attribute a difficulty to). */
+  difficulty?: string | null;
 }
 
 export interface LootNight {

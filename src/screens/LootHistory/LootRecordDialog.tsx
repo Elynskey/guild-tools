@@ -3,6 +3,7 @@ import { Dialog } from '../../design-system/Dialog';
 import { Input } from '../../design-system/Input';
 import { Button } from '../../design-system/Button';
 import { IconSelect } from '../../design-system/IconSelect';
+import { Select } from '../../design-system/Select';
 import { BossIcon } from '../../raid/BossIcon';
 import { classCanEquip } from '../../raid/classArmor';
 import type { BossLootTable } from '../../electron';
@@ -14,7 +15,7 @@ interface LootRecordDialogProps {
   entry?: LootEntry;
   onClose: () => void;
   /** keepOpen: true for "Save & add another" (dialog stays open for the next item on the same night) -- only ever true from the add flow, never from edit. Resolves false on failure (e.g. a duplicate-win rejection) so the dialog knows to stay open and show saveError instead of clearing its fields as if it had succeeded. */
-  onSave: (fields: { winner: string; itemName: string; boss: string; slot: string; time?: number; itemId?: number | null }, keepOpen: boolean) => Promise<boolean>;
+  onSave: (fields: { winner: string; itemName: string; boss: string; slot: string; time?: number; itemId?: number | null; difficulty: string | null }, keepOpen: boolean) => Promise<boolean>;
   onDelete?: () => void;
   saving: boolean;
   /** Set when the most recent save attempt failed (e.g. manualAdd's duplicate-win check) -- cleared automatically on the next attempt. */
@@ -163,6 +164,7 @@ export function LootRecordDialog({ entry, onClose, onSave, onDelete, saving, bos
   const [itemName, setItemName] = useState(entry ? itemLabel(entry.itemLink) : '');
   const [boss, setBoss] = useState(entry?.boss ?? '');
   const [slot, setSlot] = useState(entry?.slot ?? '');
+  const [difficulty, setDifficulty] = useState(entry?.difficulty ?? '');
   // Only ever set via the smart picker (a real item from this tier's loot table) --
   // stays null for the plain-text fallback fields and for editing, same as before this
   // existed. Lets a manual add still resolve a real icon instead of always going iconless.
@@ -211,7 +213,7 @@ export function LootRecordDialog({ entry, onClose, onSave, onDelete, saving, bos
   const commit = async (keepOpen: boolean) => {
     const wasAdded = itemName.trim();
     const wasWinner = winner.trim();
-    const ok = await onSave({ winner: wasWinner, itemName: wasAdded, boss: boss.trim(), slot: slot.trim(), time: entry ? undefined : time, itemId }, keepOpen);
+    const ok = await onSave({ winner: wasWinner, itemName: wasAdded, boss: boss.trim(), slot: slot.trim(), time: entry ? undefined : time, itemId, difficulty: difficulty || null }, keepOpen);
     // A rejected save (e.g. a duplicate-win check) must NOT clear the fields as if it
     // had gone through -- that would just discard what the officer typed with no way
     // to retry it. Only reset for "add another" once the save actually succeeded.
@@ -222,6 +224,7 @@ export function LootRecordDialog({ entry, onClose, onSave, onDelete, saving, bos
       setBoss('');
       setSlot('');
       setItemId(null);
+      setDifficulty('');
       setFormKey((k) => k + 1);
     }
   };
@@ -299,6 +302,17 @@ export function LootRecordDialog({ entry, onClose, onSave, onDelete, saving, bos
             <Input label="Slot" placeholder="Optional -- e.g. Head, Trinket" value={slot} onChange={(e) => setSlot(e.target.value)} />
           </>
         )}
+        <Select
+          label="Difficulty"
+          value={difficulty}
+          onChange={(e) => setDifficulty(e.target.value)}
+          options={[
+            { value: '', label: 'Unknown / not set' },
+            { value: 'Normal', label: 'Normal' },
+            { value: 'Heroic', label: 'Heroic' },
+          ]}
+          hint="Captured automatically going forward -- only needed here for backfilling older entries."
+        />
       </div>
     </Dialog>
   );

@@ -75,6 +75,7 @@ function parseLine(line) {
     winner,
     boss: null,
     slot: null,
+    difficulty: null, // no client API access from a chat-log tail -- filled in once the addon's sync reconciles it (see upgradeRecord)
     source: 'chat-tail',
     time: Math.floor(Date.now() / 1000),
   };

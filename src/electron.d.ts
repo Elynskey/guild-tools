@@ -11,6 +11,8 @@ export interface ManualLootRecordInput {
   time?: number;
   /** Set only when itemName came from the smart picker (a real item in this tier's loot table) -- lets a manual add still resolve a real icon via getItemIconUrls instead of always going iconless. Omitted/null for the free-text fallback fields. */
   itemId?: number | null;
+  /** "Normal" | "Heroic", officer-picked -- optional, since not every manual correction knows or needs one. */
+  difficulty?: string | null;
 }
 
 export interface LootRecordPatch {
@@ -18,6 +20,7 @@ export interface LootRecordPatch {
   itemName?: string;
   boss?: string;
   slot?: string;
+  difficulty?: string | null;
 }
 
 export interface BossLootItem {

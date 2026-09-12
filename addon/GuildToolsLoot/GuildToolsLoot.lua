@@ -93,6 +93,13 @@ local currentBoss = nil
 -- isTrackedEncounter for the chat-text capture path, which has no encounterID of its own.
 local currentEncounterID = nil
 
+-- Same lifecycle as currentBoss/currentEncounterID -- captured once at ENCOUNTER_START
+-- (while definitely still inside the raid instance) rather than re-derived at record
+-- time, since a delayed backfill scan or a chat message arriving after the kill could
+-- otherwise read stale/wrong instance info if the player has already zoned elsewhere.
+-- nil for the Nymrissa Wavecaller Lair exception (a Delve, not a raid difficulty at all).
+local currentDifficulty = nil
+
 -- Set by recordNeedWin whenever it actually inserts something (not on a dedup no-op),
 -- reset at each ENCOUNTER_START -- lets the ENCOUNTER_END handler know, after its
 -- delayed backfill scan settles, whether THIS kill produced anything worth reminding
@@ -151,18 +158,30 @@ end
 -- Blizzard's raw client API directly, a separate namespace. Sourced from Blizzard's
 -- documented DifficultyID list, not a live client read -- same caveat as everywhere
 -- else in this file that can't be tested against a real client from here.
-local TRACKED_RAID_DIFFICULTIES = { [14] = true, [15] = true, [16] = true }
+--
+-- Deliberately Normal/Heroic ONLY -- this guild doesn't run Mythic, and a data-audit
+-- found loot attributed to raid nights that don't match the guild's real Wed(LFR)/
+-- Fri(Alt)/Sat(Heroic) schedule, with no way to tell which difficulty it actually came
+-- from since nothing recorded it (see DIFFICULTY_LABEL below, added to close that
+-- gap). Narrowing this list is belt-and-suspenders against Mythic specifically; it was
+-- never actually the suspected leak (LFR was), but there's no reason to track a
+-- difficulty this guild doesn't run.
+local DIFFICULTY_LABEL = { [14] = "Normal", [15] = "Heroic" }
 
--- Only Normal/Heroic/Mythic raid loot counts -- Raid Finder (and anything that isn't a
--- raid at all) is excluded. Checked live at the moment of each win, not just at the
+-- Only Normal/Heroic raid loot counts -- Raid Finder, Mythic, and anything that isn't
+-- a raid at all are excluded. Checked live at the moment of each win, not just at the
 -- PLAYER_ENTERING_WORLD popup below: GuildToolsLootDB.enabled can already be true from
 -- an earlier Normal/Heroic raid this session, and would otherwise keep capturing into
 -- an LFR run walked into afterward with no fresh prompt to decline.
-local function isTrackedRaidDifficulty()
+local function currentRaidDifficultyLabel()
   local inInstance, instanceType = IsInInstance()
-  if not inInstance or instanceType ~= "raid" then return false end
+  if not inInstance or instanceType ~= "raid" then return nil end
   local _, _, difficultyID = GetInstanceInfo()
-  return TRACKED_RAID_DIFFICULTIES[difficultyID] == true
+  return DIFFICULTY_LABEL[difficultyID]
+end
+
+local function isTrackedRaidDifficulty()
+  return currentRaidDifficultyLabel() ~= nil
 end
 
 -- One deliberate exception to raid-only tracking: Nymrissa Wavecaller's Lair -- a
@@ -198,7 +217,7 @@ local function slotLabel(itemLink)
   return resolved
 end
 
-local function recordNeedWin(winnerName, itemLink, bossOverride, encounterIDOverride)
+local function recordNeedWin(winnerName, itemLink, bossOverride, encounterIDOverride, difficultyOverride)
   if not GuildToolsLootDB.enabled or not winnerName or not itemLink then return end
   if not isTrackedEncounter(encounterIDOverride or currentEncounterID) then return end
   local itemId = itemIdFromLink(itemLink)
@@ -230,6 +249,7 @@ local function recordNeedWin(winnerName, itemLink, bossOverride, encounterIDOver
     boss = bossOverride or currentBoss,
     slot = slotLabel(itemLink),
     time = now,
+    difficulty = difficultyOverride or currentDifficulty,
   })
   lootCapturedThisEncounter = true
 
@@ -244,7 +264,7 @@ end
 -- same as today. Deliberately silent (no chat announce, unlike recordNeedWin) -- this
 -- is officer-app-only, never posted anywhere raid-visible; calling out someone's bad
 -- roll live in raid chat would be a jerk move this addon shouldn't enable.
-local function recordNeedLoss(loserName, itemLink, bossOverride, encounterIDOverride)
+local function recordNeedLoss(loserName, itemLink, bossOverride, encounterIDOverride, difficultyOverride)
   if not GuildToolsLootDB.enabled or not loserName or not itemLink then return end
   if not isTrackedEncounter(encounterIDOverride or currentEncounterID) then return end
   local itemId = itemIdFromLink(itemLink)
@@ -268,6 +288,7 @@ local function recordNeedLoss(loserName, itemLink, bossOverride, encounterIDOver
     boss = bossOverride or currentBoss,
     slot = slotLabel(itemLink),
     time = now,
+    difficulty = difficultyOverride or currentDifficulty,
   })
 end
 
@@ -444,6 +465,7 @@ frame:SetScript("OnEvent", function(_, event, ...)
     local encounterID, encounterName = ...
     currentBoss = encounterName
     currentEncounterID = encounterID
+    currentDifficulty = currentRaidDifficultyLabel()
     lootCapturedThisEncounter = false
     if encounterID then
       GuildToolsLootDB.seenEncounters[tostring(encounterID)] = encounterName
