@@ -74,33 +74,45 @@ function buildEmbed(entry) {
 
 async function create(raidName, teamType, signupText) {
   if (!raidName || !teamType || !signupText) throw new Error('raidName, teamType, and signupText are all required.');
-  const posts = load();
+  const channelId = settingsStore.load().raidSignupsChannelId;
   const entry = {
     id: crypto.randomUUID(),
     raidName,
     teamType,
     signupText,
     createdAt: new Date().toISOString(),
-    discordChannelId: null,
+    discordChannelId: channelId || null,
     discordMessageId: null,
     signups: [],
     assignments: { tank: [], healer: [], dps: [] },
     finalizedAt: null,
   };
 
-  const channelId = settingsStore.load().raidSignupsChannelId;
+  // Saved before the Discord round-trip (an await), not after -- otherwise a second
+  // create() overlapping this one would load() the same pre-await snapshot and its
+  // later save() would silently drop this entry, even though its Discord post (with
+  // live buttons) already went out. The patch below has its own much narrower window
+  // (only collides with another write to this exact brand-new id), not eliminated
+  // entirely but no longer capable of losing an unrelated signup post.
+  const posts = load();
+  posts.unshift(entry);
+  save(posts);
+
   if (channelId) {
-    entry.discordChannelId = channelId;
     try {
       const message = await discordPost.postMessage(channelId, { embeds: [buildEmbed(entry)], components: buildComponents(entry.id) });
-      entry.discordMessageId = message.id;
+      const latest = load();
+      const stored = latest.find((s) => s.id === entry.id);
+      if (stored) {
+        stored.discordMessageId = message.id;
+        save(latest);
+        entry.discordMessageId = message.id;
+      }
     } catch (err) {
       console.error('[raidSignups] Discord post failed:', err);
     }
   }
 
-  posts.unshift(entry);
-  save(posts);
   return entry;
 }
 
@@ -125,10 +137,11 @@ async function addSignup(id, { discordUserId, discordUsername, characterName, ro
   return entry;
 }
 
+/** Rejected once the roster's been finalized -- setAssignments is exactly what finalize() reads to build the Discord post, so changing it after that post already went out would silently desync the two with no way to re-post (finalize() is now idempotent, so it won't re-announce a correction). */
 function setAssignments(id, assignments) {
   const posts = load();
   const entry = posts.find((s) => s.id === id);
-  if (!entry) return null;
+  if (!entry || entry.finalizedAt) return null;
   entry.assignments = assignments;
   save(posts);
   return entry;

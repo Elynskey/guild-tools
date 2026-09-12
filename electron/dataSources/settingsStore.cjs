@@ -22,9 +22,19 @@ function storePath() {
   return path.join(resolveDataDir(), 'settings.json');
 }
 
+/** Raw stored contents, no DEFAULTS/env-fallback resolution applied -- the merge base for save(), so a save() never bakes a resolved fallback value (e.g. minDps's env fallback) permanently into the file. */
+function readStored() {
+  try {
+    return JSON.parse(fs.readFileSync(storePath(), 'utf8'));
+  } catch {
+    return {};
+  }
+}
+
 const DEFAULTS = {
   raidSignupsChannelId: '',
   lootLogChannelId: '',
+  gotmChannelId: '',
   gates: { rio: 1000, ilvl: 285 },
   minDps: 0,
   /** Boss names (exact fight-name match, same names bossIcons.ts/bossLootTable.cjs use) excluded from the DPS check -- deaths, healer/tank percentile, and pull counts are unaffected either way. */
@@ -40,18 +50,25 @@ const DEFAULTS = {
  * @returns {{raidSignupsChannelId: string, lootLogChannelId: string, gates: {rio: number, ilvl: number}, minDps: number, excludedBossesFromDps: string[]}}
  */
 function load() {
-  let stored;
-  try {
-    stored = { ...DEFAULTS, ...JSON.parse(fs.readFileSync(storePath(), 'utf8')) };
-  } catch {
-    stored = { ...DEFAULTS };
-  }
+  const stored = { ...DEFAULTS, ...readStored() };
   if (!stored.minDps) stored.minDps = Number(process.env.MIN_DPS_REQUIREMENT ?? 0);
   return stored;
 }
 
+/**
+ * Merges onto what's already stored (not just DEFAULTS) -- a partial PUT (e.g. just
+ * {minDps: 90000}) used to wipe every other field back to its default, since the old
+ * merge base was DEFAULTS alone. gates is merged one level deep for the same reason:
+ * {gates: {rio: 1200}} alone used to silently drop ilvl.
+ */
 function save(settings) {
-  const next = { ...DEFAULTS, ...settings };
+  const current = readStored();
+  const next = {
+    ...DEFAULTS,
+    ...current,
+    ...settings,
+    gates: { ...DEFAULTS.gates, ...current.gates, ...(settings.gates ?? {}) },
+  };
   fs.writeFileSync(storePath(), JSON.stringify(next, null, 2));
   return next;
 }

@@ -50,14 +50,14 @@ function currentMonth() {
 
 async function create(openedBy, introText) {
   if (!introText) throw new Error('introText is required.');
-  const posts = load();
+  const channelId = settingsStore.load().gotmChannelId;
   const entry = {
     id: crypto.randomUUID(),
     month: currentMonth(),
     openedBy: openedBy ?? null,
     introText,
     createdAt: new Date().toISOString(),
-    discordChannelId: null,
+    discordChannelId: channelId || null,
     discordMessageId: null,
     votes: [],
     closedAt: null,
@@ -68,19 +68,28 @@ async function create(openedBy, introText) {
     winnerAnnounceMessageId: null,
   };
 
-  const channelId = settingsStore.load().gotmChannelId;
+  // Saved before the Discord round-trip (an await), not after -- see the identical
+  // comment in signupsStore.cjs's create() for why (a lost-update race across the
+  // await would otherwise let one create() silently erase another's brand-new entry).
+  const posts = load();
+  posts.unshift(entry);
+  save(posts);
+
   if (channelId) {
-    entry.discordChannelId = channelId;
     try {
       const message = await discordPost.postMessage(channelId, { content: introText, components: buildComponents(entry.id) });
-      entry.discordMessageId = message.id;
+      const latest = load();
+      const stored = latest.find((p) => p.id === entry.id);
+      if (stored) {
+        stored.discordMessageId = message.id;
+        save(latest);
+        entry.discordMessageId = message.id;
+      }
     } catch (err) {
       console.error('[gotm] Discord post failed:', err);
     }
   }
 
-  posts.unshift(entry);
-  save(posts);
   return entry;
 }
 
@@ -108,11 +117,12 @@ function tally(entry) {
   return [...counts.values()].sort((a, b) => b.count - a.count);
 }
 
-/** Resolves (but does not announce) a winner -- random draw among anyone tied for first, so the officer can see who won before writing the announcement post. */
+/** Resolves (but does not announce) a winner -- random draw among anyone tied for first, so the officer can see who won before writing the announcement post. Idempotent: a repeat call (double-click, a race between two officers) must not re-roll the tiebreak and flip the winner after it may have already been announced. */
 function resolveWinner(id) {
   const posts = load();
   const entry = posts.find((p) => p.id === id);
   if (!entry) return null;
+  if (entry.closedAt) return entry;
   const standings = tally(entry);
   if (standings.length === 0) return entry;
 
@@ -128,13 +138,14 @@ function resolveWinner(id) {
   return entry;
 }
 
-/** Posts the officer's own celebration-register text as a new message -- never auto-generated. */
+/** Posts the officer's own celebration-register text as a new message -- never auto-generated. Idempotent: once a winnerAnnounceMessageId exists, a repeat call returns the entry unchanged rather than posting a second announcement. */
 async function announceWinner(id, winnerAnnounceText) {
   if (!winnerAnnounceText) throw new Error('winnerAnnounceText is required.');
   const posts = load();
   const entry = posts.find((p) => p.id === id);
   if (!entry) return null;
   if (!entry.closedAt) throw new Error('Voting must be closed (winner resolved) before announcing.');
+  if (entry.winnerAnnounceMessageId) return entry;
 
   entry.winnerAnnounceText = winnerAnnounceText;
   save(posts);
