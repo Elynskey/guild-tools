@@ -15,7 +15,8 @@
     "icons:build": "node scripts/build-icons.mjs",
     "installer-art:build": "node scripts/build-installer-art.mjs",
     "proxy-config": "node scripts/inject-proxy-config.mjs",
-    "dist:win": "npm run icons:build && npm run installer-art:build && npm run proxy-config && npm run build && electron-builder --win"
+    "dist:win": "npm run icons:build && npm run installer-art:build && npm run proxy-config && npm run build && electron-builder --win",
+    "dist:win:test": "node scripts/dist-test.mjs"
   },
   "dependencies": {
     "dotenv": "^17.4.2",

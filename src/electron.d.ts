@@ -128,6 +128,9 @@ export interface GuildToolsSettings {
   raidSignupsChannelId: string;
   lootLogChannelId: string;
   gotmChannelId: string;
+  /** Where a "Guild Tools (Test)" install posts Raid Signups/GOTM instead of the channels above -- e.g. CRD-TEST. Only ever read by a test-mode build; a normal install ignores these entirely. */
+  testRaidSignupsChannelId: string;
+  testGotmChannelId: string;
   gates: { rio: number; ilvl: number };
   minDps: number;
   /** Boss names excluded from the DPS check this tier -- deaths/healer/tank percentile/pulls are unaffected. */
@@ -206,6 +209,8 @@ export interface GotmPost {
 }
 
 export interface ElectronAPI {
+  /** True only in a "Guild Tools (Test)" build -- Raid Signups/GOTM tag every request as test-mode when this is true. Everything else in the app is unaffected. */
+  isTestMode: () => Promise<boolean>;
   getRoster: () => Promise<LiveRosterResult | null>;
   getProfessions: () => Promise<LiveProfessionsResult | null>;
   getCachedProfessions: () => Promise<LiveProfessionsResult | null>;

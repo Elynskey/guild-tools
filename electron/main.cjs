@@ -2,11 +2,16 @@ const { app, BrowserWindow, ipcMain, shell, clipboard, dialog, session } = requi
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
+const { getProxyConfig } = require('./dataSources/proxyConfig.cjs');
 
 // Without this, Electron derives the app name (and therefore the userData path)
 // from package.json's "name" field ("raider-status"), not the "Guild Tools"
-// branding an officer would actually look for on disk.
-app.setName('Guild Tools');
+// branding an officer would actually look for on disk. A test-mode build gets its own
+// distinct name -- and therefore its own userData directory (addon install path, local
+// .env, everything) -- entirely separate from a real install on the same machine, on
+// top of Raid Signups/GOTM already being data-isolated server-side (see proxyClient.cjs).
+const isTestModeBuild = getProxyConfig().testMode;
+app.setName(isTestModeBuild ? 'Guild Tools (Test)' : 'Guild Tools');
 
 // .env location: prefer the writable userData dir (the app's own install directory
 // becomes a read-only asar archive once packaged, so that's the only place a
@@ -22,7 +27,6 @@ const { fetchRecipeCatalogue, getCachedRecipeCatalogue } = require('./dataSource
 const { fetchRaidNightsList, fetchPullFeedback } = require('./dataSources/fetchPullFeedback.cjs');
 const { fetchNightSnapshotForCode } = require('./dataSources/fetchNightSnapshot.cjs');
 const { checkForUpdate } = require('./dataSources/updateCheck.cjs');
-const { getProxyConfig } = require('./dataSources/proxyConfig.cjs');
 const { listCraftRequests, addCraftRequest, fulfillCraftRequest, removeCraftRequest } = require('./dataSources/fetchCraftRequests.cjs');
 const { signIn: bnetSignIn } = require('./dataSources/bnetAuth.cjs');
 const { signIn: discordSignIn } = require('./dataSources/discordAuth.cjs');
@@ -143,6 +147,7 @@ ipcMain.handle('clipboard:write', async (_event, text) => {
 ipcMain.handle('craftRequests:list', async () => listCraftRequests());
 ipcMain.handle('craftRequests:add', async (_event, requester, profession, description) => addCraftRequest(requester, profession, description));
 ipcMain.handle('craftRequests:fulfill', async (_event, id, fulfilledBy) => fulfillCraftRequest(id, fulfilledBy));
+ipcMain.handle('app:isTestMode', async () => isTestModeBuild);
 ipcMain.handle('craftRequests:remove', async (_event, id) => removeCraftRequest(id));
 ipcMain.handle('lootLog:get', async () => fetchLootLog());
 ipcMain.handle('lootLog:addManual', async (_event, record) => addManualLootRecord(record));

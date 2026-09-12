@@ -10,26 +10,34 @@ const discordPost = require('./discordPost.cjs');
 // assigns primary/backup from the app (never automatic -- see the plan notes), then
 // posts the final roster back. Same JSON-file-in-resolveDataDir() pattern as every other
 // shared store in this pipeline.
+//
+// Every function here takes a `mode` ('prod' | 'test'), defaulting to 'prod' so any
+// existing caller that doesn't pass one keeps behaving exactly as before. 'test' reads/
+// writes a completely separate file (raid-signups.test.json) and posts to a separate
+// Discord channel (settings.testRaidSignupsChannelId) -- real production signups and
+// test-mode ones can never mix, and no manual cleanup is needed after a demo. See
+// server.cjs for how `mode` gets here (an X-Guild-Tools-Mode request header from the
+// app, or interaction.guildId in bot.cjs).
 
-function storePath() {
-  return path.join(resolveDataDir(), 'raid-signups.json');
+function storePath(mode) {
+  return path.join(resolveDataDir(), mode === 'test' ? 'raid-signups.test.json' : 'raid-signups.json');
 }
 
 /** @returns {object[]} */
-function load() {
+function load(mode) {
   try {
-    return JSON.parse(fs.readFileSync(storePath(), 'utf8'));
+    return JSON.parse(fs.readFileSync(storePath(mode), 'utf8'));
   } catch {
     return [];
   }
 }
 
-function save(posts) {
-  fs.writeFileSync(storePath(), JSON.stringify(posts, null, 2));
+function save(posts, mode) {
+  fs.writeFileSync(storePath(mode), JSON.stringify(posts, null, 2));
 }
 
-function get(id) {
-  return load().find((s) => s.id === id) ?? null;
+function get(id, mode) {
+  return load(mode).find((s) => s.id === id) ?? null;
 }
 
 const ROLE_LABEL = { tank: 'Tank', healer: 'Healer', dps: 'DPS' };
@@ -72,9 +80,10 @@ function buildEmbed(entry) {
   };
 }
 
-async function create(raidName, teamType, signupText) {
+async function create(raidName, teamType, signupText, mode = 'prod') {
   if (!raidName || !teamType || !signupText) throw new Error('raidName, teamType, and signupText are all required.');
-  const channelId = settingsStore.load().raidSignupsChannelId;
+  const settings = settingsStore.load();
+  const channelId = mode === 'test' ? settings.testRaidSignupsChannelId : settings.raidSignupsChannelId;
   const entry = {
     id: crypto.randomUUID(),
     raidName,
@@ -94,18 +103,18 @@ async function create(raidName, teamType, signupText) {
   // live buttons) already went out. The patch below has its own much narrower window
   // (only collides with another write to this exact brand-new id), not eliminated
   // entirely but no longer capable of losing an unrelated signup post.
-  const posts = load();
+  const posts = load(mode);
   posts.unshift(entry);
-  save(posts);
+  save(posts, mode);
 
   if (channelId) {
     try {
       const message = await discordPost.postMessage(channelId, { embeds: [buildEmbed(entry)], components: buildComponents(entry.id) });
-      const latest = load();
+      const latest = load(mode);
       const stored = latest.find((s) => s.id === entry.id);
       if (stored) {
         stored.discordMessageId = message.id;
-        save(latest);
+        save(latest, mode);
         entry.discordMessageId = message.id;
       }
     } catch (err) {
@@ -117,14 +126,14 @@ async function create(raidName, teamType, signupText) {
 }
 
 /** Re-signing up (same Discord user, e.g. changing role) replaces their existing entry rather than stacking a duplicate. Rejected once the roster's been finalized -- otherwise the running signup post could silently drift from the final roster Discord already saw. `class`/`specs` are self-reported (picked from a real Blizzard class+spec list in the Discord signup flow, not looked up against the roster) -- there's no other reliable link between a Discord account and a WoW character, and a live roster lookup here would be too slow for Discord's interaction reply window anyway. `specs` can list more than one spec of the same role (someone flexible between Arms and Fury) -- never a mix of roles, since the options offered are already scoped to whichever role was picked first. Null (not just empty) when no spec was recorded at all, for signups made before this field existed. */
-async function addSignup(id, { discordUserId, discordUsername, characterName, role, class: wowClass, specs }) {
-  const posts = load();
+async function addSignup(id, { discordUserId, discordUsername, characterName, role, class: wowClass, specs }, mode = 'prod') {
+  const posts = load(mode);
   const entry = posts.find((s) => s.id === id);
   if (!entry || entry.finalizedAt) return null;
 
   entry.signups = entry.signups.filter((s) => s.discordUserId !== discordUserId);
   entry.signups.push({ discordUserId, discordUsername, characterName, role, class: wowClass ?? null, specs: specs ?? null, signedUpAt: new Date().toISOString() });
-  save(posts);
+  save(posts, mode);
 
   if (entry.discordChannelId && entry.discordMessageId) {
     try {
@@ -138,12 +147,12 @@ async function addSignup(id, { discordUserId, discordUsername, characterName, ro
 }
 
 /** Rejected once the roster's been finalized -- setAssignments is exactly what finalize() reads to build the Discord post, so changing it after that post already went out would silently desync the two with no way to re-post (finalize() is now idempotent, so it won't re-announce a correction). */
-function setAssignments(id, assignments) {
-  const posts = load();
+function setAssignments(id, assignments, mode = 'prod') {
+  const posts = load(mode);
   const entry = posts.find((s) => s.id === id);
   if (!entry || entry.finalizedAt) return null;
   entry.assignments = assignments;
-  save(posts);
+  save(posts, mode);
   return entry;
 }
 
@@ -156,13 +165,13 @@ function characterOrUsername(entry, discordUserId) {
   return `${name} (${specLabel})`;
 }
 
-async function finalize(id) {
-  const posts = load();
+async function finalize(id, mode = 'prod') {
+  const posts = load(mode);
   const entry = posts.find((s) => s.id === id);
   if (!entry) return null;
   if (entry.finalizedAt) return entry; // idempotent -- a second call never re-posts
   entry.finalizedAt = new Date().toISOString();
-  save(posts);
+  save(posts, mode);
 
   if (entry.discordChannelId) {
     const lines = ['tank', 'healer', 'dps'].map((role) => {

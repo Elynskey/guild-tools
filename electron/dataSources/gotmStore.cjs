@@ -12,31 +12,37 @@ const discordPost = require('./discordPost.cjs');
 // what makes "one vote per member per month" true -- re-voting replaces, same pattern
 // as signupsStore.cjs's re-signup handling. Same JSON-file-in-resolveDataDir() pattern
 // as every other shared store in this pipeline.
+//
+// Every function here takes a `mode` ('prod' | 'test'), defaulting to 'prod' so any
+// existing caller that doesn't pass one keeps behaving exactly as before -- same
+// dual-environment scheme as signupsStore.cjs (see its header comment for the full
+// rationale). 'test' reads/writes gotm.test.json and posts to
+// settings.testGotmChannelId instead of the real ones.
 
-function storePath() {
-  return path.join(resolveDataDir(), 'gotm.json');
+function storePath(mode) {
+  return path.join(resolveDataDir(), mode === 'test' ? 'gotm.test.json' : 'gotm.json');
 }
 
 /** @returns {object[]} */
-function load() {
+function load(mode) {
   try {
-    return JSON.parse(fs.readFileSync(storePath(), 'utf8'));
+    return JSON.parse(fs.readFileSync(storePath(mode), 'utf8'));
   } catch {
     return [];
   }
 }
 
-function save(posts) {
-  fs.writeFileSync(storePath(), JSON.stringify(posts, null, 2));
+function save(posts, mode) {
+  fs.writeFileSync(storePath(mode), JSON.stringify(posts, null, 2));
 }
 
-function get(id) {
-  return load().find((p) => p.id === id) ?? null;
+function get(id, mode) {
+  return load(mode).find((p) => p.id === id) ?? null;
 }
 
 /** Most recent record still open for voting -- where bot.cjs records a vote against, and the app's default view. */
-function getCurrent() {
-  return load().find((p) => !p.closedAt) ?? null;
+function getCurrent(mode) {
+  return load(mode).find((p) => !p.closedAt) ?? null;
 }
 
 function buildComponents(id) {
@@ -48,9 +54,10 @@ function currentMonth() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
-async function create(openedBy, introText) {
+async function create(openedBy, introText, mode = 'prod') {
   if (!introText) throw new Error('introText is required.');
-  const channelId = settingsStore.load().gotmChannelId;
+  const settings = settingsStore.load();
+  const channelId = mode === 'test' ? settings.testGotmChannelId : settings.gotmChannelId;
   const entry = {
     id: crypto.randomUUID(),
     month: currentMonth(),
@@ -71,18 +78,18 @@ async function create(openedBy, introText) {
   // Saved before the Discord round-trip (an await), not after -- see the identical
   // comment in signupsStore.cjs's create() for why (a lost-update race across the
   // await would otherwise let one create() silently erase another's brand-new entry).
-  const posts = load();
+  const posts = load(mode);
   posts.unshift(entry);
-  save(posts);
+  save(posts, mode);
 
   if (channelId) {
     try {
       const message = await discordPost.postMessage(channelId, { content: introText, components: buildComponents(entry.id) });
-      const latest = load();
+      const latest = load(mode);
       const stored = latest.find((p) => p.id === entry.id);
       if (stored) {
         stored.discordMessageId = message.id;
-        save(latest);
+        save(latest, mode);
         entry.discordMessageId = message.id;
       }
     } catch (err) {
@@ -94,9 +101,9 @@ async function create(openedBy, introText) {
 }
 
 /** Posts a one-off officer-written reminder to the same channel -- no state change on the record itself, just a nudge. Rejected once voting is closed (nothing left to remind anyone about). */
-async function sendReminder(id, reminderText) {
+async function sendReminder(id, reminderText, mode = 'prod') {
   if (!reminderText) throw new Error('reminderText is required.');
-  const entry = get(id);
+  const entry = get(id, mode);
   if (!entry) return null;
   if (entry.closedAt) throw new Error('Voting is already closed -- nothing to remind anyone about.');
   if (!entry.discordChannelId) throw new Error('No Discord channel configured for this vote.');
@@ -105,14 +112,14 @@ async function sendReminder(id, reminderText) {
 }
 
 /** Re-voting (same Discord user picking a different nominee) replaces their existing vote rather than stacking a duplicate. Rejected (treated the same as not-found) once voting is closed -- otherwise a vote whose ephemeral select was still open at the moment an officer closed voting would silently count anyway. */
-function recordVote(id, { voterId, voterUsername, nomineeId, nomineeUsername }) {
-  const posts = load();
+function recordVote(id, { voterId, voterUsername, nomineeId, nomineeUsername }, mode = 'prod') {
+  const posts = load(mode);
   const entry = posts.find((p) => p.id === id);
   if (!entry || entry.closedAt) return null;
 
   entry.votes = entry.votes.filter((v) => v.voterId !== voterId);
   entry.votes.push({ voterId, voterUsername, nomineeId, nomineeUsername, votedAt: new Date().toISOString() });
-  save(posts);
+  save(posts, mode);
   return entry;
 }
 
@@ -129,8 +136,8 @@ function tally(entry) {
 }
 
 /** Resolves (but does not announce) a winner -- random draw among anyone tied for first, so the officer can see who won before writing the announcement post. Idempotent: a repeat call (double-click, a race between two officers) must not re-roll the tiebreak and flip the winner after it may have already been announced. */
-function resolveWinner(id) {
-  const posts = load();
+function resolveWinner(id, mode = 'prod') {
+  const posts = load(mode);
   const entry = posts.find((p) => p.id === id);
   if (!entry) return null;
   if (entry.closedAt) return entry;
@@ -145,27 +152,27 @@ function resolveWinner(id) {
   entry.winnerUsername = winner.nomineeUsername;
   entry.winnerTieBrokeAmong = tied.length > 1 ? tied.map((t) => ({ id: t.nomineeId, username: t.nomineeUsername })) : null;
   entry.closedAt = new Date().toISOString();
-  save(posts);
+  save(posts, mode);
   return entry;
 }
 
 /** Posts the officer's own celebration-register text as a new message -- never auto-generated. Idempotent: once a winnerAnnounceMessageId exists, a repeat call returns the entry unchanged rather than posting a second announcement. */
-async function announceWinner(id, winnerAnnounceText) {
+async function announceWinner(id, winnerAnnounceText, mode = 'prod') {
   if (!winnerAnnounceText) throw new Error('winnerAnnounceText is required.');
-  const posts = load();
+  const posts = load(mode);
   const entry = posts.find((p) => p.id === id);
   if (!entry) return null;
   if (!entry.closedAt) throw new Error('Voting must be closed (winner resolved) before announcing.');
   if (entry.winnerAnnounceMessageId) return entry;
 
   entry.winnerAnnounceText = winnerAnnounceText;
-  save(posts);
+  save(posts, mode);
 
   if (entry.discordChannelId) {
     try {
       const message = await discordPost.postMessage(entry.discordChannelId, { content: winnerAnnounceText });
       entry.winnerAnnounceMessageId = message.id;
-      save(posts);
+      save(posts, mode);
     } catch (err) {
       console.error('[gotm] Discord announce post failed:', err);
     }

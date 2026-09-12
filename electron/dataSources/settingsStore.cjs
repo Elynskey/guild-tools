@@ -35,6 +35,13 @@ const DEFAULTS = {
   raidSignupsChannelId: '',
   lootLogChannelId: '',
   gotmChannelId: '',
+  // Separate channel config for the test-mode build (see project docs) -- Raid
+  // Signups/GOTM posts made from a "Guild Tools (Test)" install go here instead,
+  // completely independent of the real channels above. Point these at CRD-TEST (or
+  // whatever staging server is in use) once, and every test-mode signup/vote just
+  // works without ever touching production config.
+  testRaidSignupsChannelId: '',
+  testGotmChannelId: '',
   gates: { rio: 1000, ilvl: 285 },
   minDps: 0,
   /** Boss names (exact fight-name match, same names bossIcons.ts/bossLootTable.cjs use) excluded from the DPS check -- deaths, healer/tank percentile, and pull counts are unaffected either way. */
@@ -47,7 +54,7 @@ const DEFAULTS = {
  * Settings screen itself, always sees the actual EFFECTIVE number in use, not a
  * misleading "0" that looks broken while an env fallback is quietly doing the real
  * work underneath. Saving a real value here is what stops relying on the fallback.
- * @returns {{raidSignupsChannelId: string, lootLogChannelId: string, gates: {rio: number, ilvl: number}, minDps: number, excludedBossesFromDps: string[]}}
+ * @returns {{raidSignupsChannelId: string, lootLogChannelId: string, gotmChannelId: string, testRaidSignupsChannelId: string, testGotmChannelId: string, gates: {rio: number, ilvl: number}, minDps: number, excludedBossesFromDps: string[]}}
  */
 function load() {
   const stored = { ...DEFAULTS, ...readStored() };

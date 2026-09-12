@@ -32,7 +32,7 @@ export function Settings() {
     });
   };
 
-  const field = (key: 'raidSignupsChannelId' | 'lootLogChannelId' | 'gotmChannelId', value: string) => {
+  const field = (key: 'raidSignupsChannelId' | 'lootLogChannelId' | 'gotmChannelId' | 'testRaidSignupsChannelId' | 'testGotmChannelId', value: string) => {
     setDraft({ ...draft, [key]: value });
     setDirty(true);
   };
@@ -111,6 +111,40 @@ export function Settings() {
               placeholder="Channel ID"
               value={draft.gotmChannelId}
               onChange={(e) => field('gotmChannelId', e.target.value)}
+            />
+
+            <Button onClick={submit} disabled={saving || !dirty} iconLeft="check">
+              {saving ? 'Saving…' : 'Save'}
+            </Button>
+
+            {!dirty && savedAt !== null && <Toast tone="success" title="Saved" />}
+            {saveError && <Toast tone="danger" title="Couldn't save" message={saveError} />}
+          </div>
+        )}
+
+        {available && !loading && (
+          <div className="crd-card" style={{ padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: 18, marginTop: 20 }}>
+            <div>
+              <div className="crd-eyebrow" style={{ color: 'var(--text-gold)', marginBottom: 4 }}>
+                Test-mode Discord channels
+              </div>
+              <p style={{ margin: 0, fontSize: 'var(--text-body-s)', lineHeight: 1.6, color: 'var(--text-muted)' }}>
+                Only used by a "Guild Tools (Test)" install -- a normal install ignores these completely. Point at a
+                staging server (e.g. CRD-TEST) so demos and testing never touch the real channels above.
+              </p>
+            </div>
+
+            <Input
+              label="Test raid signups channel"
+              placeholder="Channel ID"
+              value={draft.testRaidSignupsChannelId}
+              onChange={(e) => field('testRaidSignupsChannelId', e.target.value)}
+            />
+            <Input
+              label="Test Guildie of the Month channel"
+              placeholder="Channel ID"
+              value={draft.testGotmChannelId}
+              onChange={(e) => field('testGotmChannelId', e.target.value)}
             />
 
             <Button onClick={submit} disabled={saving || !dirty} iconLeft="check">

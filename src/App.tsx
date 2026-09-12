@@ -11,6 +11,7 @@ import { RaidSignups } from './screens/RaidSignups/RaidSignups';
 import { GuildieOfTheMonth } from './screens/GuildieOfTheMonth/GuildieOfTheMonth';
 import { UpdateBanner } from './shared/UpdateBanner';
 import { VersionTag } from './shared/VersionTag';
+import { TestModeBanner } from './shared/TestModeBanner';
 import { LoginScreen } from './shared/LoginScreen';
 import { useAuth } from './shared/useAuth';
 
@@ -27,6 +28,7 @@ export function App() {
 
   return (
     <HashRouter>
+      <TestModeBanner />
       <UpdateBanner />
       <VersionTag />
       <Routes>

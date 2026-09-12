@@ -11,11 +11,20 @@ function isAvailable() {
   return !!(baseUrl && apiKey);
 }
 
+// X-Guild-Tools-Mode is only ever consulted by the proxy's raid-signups/gotm routes
+// (see server.cjs) -- harmless to send on every request. A "Guild Tools (Test)" build
+// (or GUILD_TOOLS_TEST_MODE=1 for local dev) is the only way this is ever 'test'; a
+// normal install always sends 'prod', same as if this header didn't exist at all.
 async function proxyFetch(pathname, options = {}) {
-  const { baseUrl, apiKey } = getProxyConfig();
+  const { baseUrl, apiKey, testMode } = getProxyConfig();
   const res = await fetch(`${baseUrl}${pathname}`, {
     ...options,
-    headers: { 'X-Proxy-Key': apiKey, 'Content-Type': 'application/json', ...(options.headers ?? {}) },
+    headers: {
+      'X-Proxy-Key': apiKey,
+      'Content-Type': 'application/json',
+      'X-Guild-Tools-Mode': testMode ? 'test' : 'prod',
+      ...(options.headers ?? {}),
+    },
   });
   if (!res.ok) throw new Error(`Proxy request to ${pathname} failed: ${res.status} ${res.statusText}`);
   return res;
