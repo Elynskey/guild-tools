@@ -71,6 +71,7 @@ function mergeSources({ wowauditRoster, rio, gearCompletion, portraits, wcl }) {
         nightDeaths: wclData.nightDeaths,
         nightPulls: wclData.nightPulls,
         nightDeathCauses: wclData.nightDeathCauses,
+        nightAttended: wclData.nightAttended,
       };
     });
 }

@@ -116,6 +116,10 @@ const raider = (
   nightDeaths: Math.min(deaths, 1),
   nightPulls: NIGHT_PULLS,
   nightDeathCauses: deathCauses.slice(0, 1),
+  // Every fabricated raider "attended" the sample night -- there's no real absentee
+  // concept to demonstrate here, and the whole point of sample mode is a fully
+  // populated screen to review.
+  nightAttended: true,
 });
 
 export const SAMPLE_ROSTER: Raider[] = [

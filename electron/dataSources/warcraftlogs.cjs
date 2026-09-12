@@ -500,7 +500,7 @@ function computeSeasonPercentiles(aggregates, metricKey, role, roleOf, higherIsB
  * @param {{ name: string, realm: string, region: string }} guild
  * @param {string} tierZoneName — only reports in this raid tier count (config.tier.name)
  * @param {Record<string,'tank'|'healer'|'dps'>} roleByName — from wowaudit, since WCL doesn't know raid role assignment
- * @returns {Promise<{ performance: Record<string, { role: 'tank'|'healer'|'dps', class: string|null, spec: string|null, perf: number, perfRaw: number|null, parseTrend: number, deaths: number, pulls: number, deathCauses: {boss:string,ability:string}[], nightParse: number, nightDeaths: number, nightPulls: number, nightDeathCauses: {boss:string,ability:string}[] }>, heroicBossesKilled: number, observedRealms: Record<string, string[]> }>}
+ * @returns {Promise<{ performance: Record<string, { role: 'tank'|'healer'|'dps', class: string|null, spec: string|null, perf: number, perfRaw: number|null, parseTrend: number, deaths: number, pulls: number, deathCauses: {boss:string,ability:string}[], nightParse: number, nightDeaths: number, nightPulls: number, nightDeathCauses: {boss:string,ability:string}[], nightAttended: boolean }>, heroicBossesKilled: number, observedRealms: Record<string, string[]> }>}
  *   perfRaw is the raw metric behind perf -- dps: damage/s from the same report perf uses; healer: season-average healing/s; tank: season-average damage taken/s (lower is better). Null when unavailable.
  */
 async function fetchWarcraftLogs(guild, tierZoneName, roleByName) {
@@ -630,6 +630,13 @@ async function fetchWarcraftLogs(guild, tierZoneName, roleByName) {
       nightDeaths: 0,
       nightPulls: 0,
       nightDeathCauses: [],
+      // Defaults to false -- see the Object.assign loop below. Confirmed live
+      // 2026-09-12: the Raider Status "Raid Night" view showed everyone on the
+      // roster, including people who weren't at the most recent raid at all, because
+      // nothing distinguished "genuinely 0 pulls/deaths last night" from "wasn't
+      // there" -- an absentee just inherited these zeroed defaults and a stale
+      // season-wide nightParse (seriesLast) that looked like real data.
+      nightAttended: false,
     };
   }
 
@@ -639,7 +646,7 @@ async function fetchWarcraftLogs(guild, tierZoneName, roleByName) {
   const lastAgg = aggregates[aggregates.length - 1];
   const lastNightFields = nightFieldsFromAggregate(lastAgg, roleByName, minDps);
   for (const name of names) {
-    if (lastNightFields[name]) Object.assign(result[name], lastNightFields[name]);
+    if (lastNightFields[name]) Object.assign(result[name], lastNightFields[name], { nightAttended: true });
   }
 
   const heroicBossesKilled = new Set(aggregates.flatMap((agg) => agg.heroicKillEncounterIds)).size;

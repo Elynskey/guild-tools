@@ -167,7 +167,13 @@ export function useRaiderStatus() {
   // there. A specific log view should only ever show who actually attended it.
   const rosterForWindow = useMemo(() => {
     if (win !== 'night' || !roster) return roster;
-    if (!nightSnapshot) return roster; // latest report -- warcraftlogs.cjs only assigns night* fields onto attendees of that report (see the Object.assign loop keyed on lastNightFields[name]), so this at least won't show stale copied data for an absentee the way the bug above did
+    // Latest report: warcraftlogs.cjs stamps nightAttended -- confirmed live
+    // 2026-09-12 that without this filter, everyone on the roster showed up here,
+    // including people who weren't at the most recent raid at all (they just
+    // inherited zeroed night* defaults and a stale season-wide nightParse that
+    // looked like a real number). Same principle as the nightSnapshot filter below,
+    // just keyed on a flag instead of key-presence in a fetched map.
+    if (!nightSnapshot) return roster.filter((r) => r.nightAttended);
     return roster.filter((r) => nightSnapshot[r.name]).map((r) => ({ ...r, ...nightSnapshot[r.name] }));
   }, [roster, win, nightSnapshot]);
 

@@ -44,6 +44,7 @@ const baseDps: Raider = {
   nightDeaths: 0,
   nightPulls: 8,
   nightDeathCauses: [],
+  nightAttended: true,
 };
 
 // healer/tank: perf is a 0-100 percentile within role (no rescale).

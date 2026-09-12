@@ -78,6 +78,8 @@ export interface Raider {
   nightPulls: number;
   /** Death causes from the most recent raid night only. */
   nightDeathCauses: DeathCause[];
+  /** Whether this raider was actually at the most recent raid night -- false means the night* fields above are meaningless defaults (0 pulls/deaths, tier-to-date parse), not real data for a raid they skipped. */
+  nightAttended: boolean;
 }
 
 export interface Gates {

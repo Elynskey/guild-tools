@@ -27,6 +27,7 @@ function scoredRaider(name: string, deathCausesInWindow: { boss: string; ability
     nightDeaths: 0,
     nightPulls: 8,
     nightDeathCauses: [],
+    nightAttended: true,
     window: 'rolled',
     band: 'green',
     bandLabel: 'Green',
