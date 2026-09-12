@@ -211,6 +211,8 @@ export interface GotmPost {
 export interface ElectronAPI {
   /** True only in a "Guild Tools (Test)" build -- Raid Signups/GOTM tag every request as test-mode when this is true. Everything else in the app is unaffected. */
   isTestMode: () => Promise<boolean>;
+  /** Sends feedback as a direct Discord message to the maintainer -- same destination from the real app or a test-mode build, since the whole point is it always reaches the same person. `screen` is whatever the feedback button was open on (e.g. "Raid Signups"), `sender` the signed-in officer's display name if known. */
+  sendFeedback: (message: string, screen: string, sender?: string | null) => Promise<{ ok: true }>;
   getRoster: () => Promise<LiveRosterResult | null>;
   getProfessions: () => Promise<LiveProfessionsResult | null>;
   getCachedProfessions: () => Promise<LiveProfessionsResult | null>;

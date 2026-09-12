@@ -12,6 +12,7 @@ import { GuildieOfTheMonth } from './screens/GuildieOfTheMonth/GuildieOfTheMonth
 import { UpdateBanner } from './shared/UpdateBanner';
 import { VersionTag } from './shared/VersionTag';
 import { TestModeBanner } from './shared/TestModeBanner';
+import { FeedbackButton } from './shared/FeedbackButton';
 import { LoginScreen } from './shared/LoginScreen';
 import { useAuth } from './shared/useAuth';
 
@@ -31,6 +32,7 @@ export function App() {
       <TestModeBanner />
       <UpdateBanner />
       <VersionTag />
+      <FeedbackButton displayName={auth.displayName} />
       <Routes>
         <Route path="/" element={<Landing displayName={auth.displayName} signOut={auth.signOut} />} />
         <Route path="/raider-status" element={<RaiderStatus />} />

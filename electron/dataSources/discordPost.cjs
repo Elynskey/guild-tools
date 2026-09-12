@@ -51,4 +51,23 @@ async function editMessage(channelId, messageId, body) {
   return res.json();
 }
 
-module.exports = { postMessage, editMessage };
+// Opens (or reuses) a DM channel with a specific user and sends a message there --
+// same two-call REST flow Discord always requires for DMs (there's no "send DM
+// directly" endpoint; you get/create the DM channel first, then post to it like any
+// other channel). Only works for a user who shares a server with this bot and hasn't
+// blocked it -- true for an officer using this app, since the bot is already in every
+// server this app cares about.
+async function sendDirectMessage(userId, body) {
+  assertConfigured();
+  if (!userId) throw new Error('No Discord user ID configured to send this to.');
+  const channelRes = await fetch('https://discord.com/api/v10/users/@me/channels', {
+    method: 'POST',
+    headers: botHeaders(),
+    body: JSON.stringify({ recipient_id: userId }),
+  });
+  if (!channelRes.ok) throw new Error(`Discord DM channel open failed: ${channelRes.status} ${channelRes.statusText}`);
+  const channel = await channelRes.json();
+  return postMessage(channel.id, body);
+}
+
+module.exports = { postMessage, editMessage, sendDirectMessage };

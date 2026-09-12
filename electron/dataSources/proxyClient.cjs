@@ -241,6 +241,10 @@ async function postLootNightToDiscord(messages) {
   return proxyFetchJson('/loot-records/post-night', { method: 'POST', body: JSON.stringify({ messages }) });
 }
 
+async function sendFeedback(payload) {
+  return proxyFetchJson('/feedback', { method: 'POST', body: JSON.stringify(payload) });
+}
+
 module.exports = {
   isAvailable,
   fetchRoster,
@@ -281,4 +285,5 @@ module.exports = {
   removeLootRecord,
   removeLootTrade,
   deleteLootNight,
+  sendFeedback,
 };

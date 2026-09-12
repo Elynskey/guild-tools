@@ -4,6 +4,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 // or raw API responses cross this boundary — just the final, already-shaped roster data.
 contextBridge.exposeInMainWorld('electronAPI', {
   isTestMode: () => ipcRenderer.invoke('app:isTestMode'),
+  sendFeedback: (message, screen, sender) => ipcRenderer.invoke('feedback:send', { message, screen, sender }),
   getRoster: () => ipcRenderer.invoke('roster:fetch'),
   getProfessions: () => ipcRenderer.invoke('professions:fetch'),
   getCachedProfessions: () => ipcRenderer.invoke('professions:getCached'),

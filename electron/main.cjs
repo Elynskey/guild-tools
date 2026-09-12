@@ -36,6 +36,7 @@ const { fetchLootLog, addManualLootRecord, updateLootRecord, removeLootRecord, r
 const { getItemIconUrls } = require('./dataSources/fetchItemIcons.cjs');
 const { fetchBossLootTable } = require('./dataSources/fetchBossLootTable.cjs');
 const { postLootNightToDiscord } = require('./dataSources/postLootNight.cjs');
+const { submitFeedback } = require('./dataSources/fetchFeedback.cjs');
 const { getSettings, saveSettings } = require('./dataSources/fetchSettings.cjs');
 const {
   listRaidSignups,
@@ -148,6 +149,9 @@ ipcMain.handle('craftRequests:list', async () => listCraftRequests());
 ipcMain.handle('craftRequests:add', async (_event, requester, profession, description) => addCraftRequest(requester, profession, description));
 ipcMain.handle('craftRequests:fulfill', async (_event, id, fulfilledBy) => fulfillCraftRequest(id, fulfilledBy));
 ipcMain.handle('app:isTestMode', async () => isTestModeBuild);
+ipcMain.handle('feedback:send', async (_event, { message, screen, sender }) =>
+  submitFeedback({ message, screen, sender, appVersion: app.getVersion(), mode: isTestModeBuild ? 'test' : 'prod' }),
+);
 ipcMain.handle('craftRequests:remove', async (_event, id) => removeCraftRequest(id));
 ipcMain.handle('lootLog:get', async () => fetchLootLog());
 ipcMain.handle('lootLog:addManual', async (_event, record) => addManualLootRecord(record));
