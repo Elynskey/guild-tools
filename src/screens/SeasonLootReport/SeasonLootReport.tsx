@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Crest } from '../../design-system/Crest';
 import { Icon } from '../../design-system/Icon';
-import { IconButton } from '../../design-system/IconButton';
+import { RefreshButton } from '../shared/RefreshButton';
 import { BossIcon } from '../../raid/BossIcon';
 import { itemLabel } from '../../raid/lootLogic';
 import { useSeasonLootReport, type SortKey } from './useSeasonLootReport';
@@ -58,7 +58,7 @@ export function SeasonLootReport() {
             </div>
           </Link>
           <div style={{ flex: 1 }} />
-          <IconButton icon="refresh-cw" label={lr.refreshing ? 'Refreshing…' : 'Refresh'} framed disabled={lr.refreshing} onClick={lr.refresh} style={{ opacity: lr.refreshing ? 0.6 : 1 }} />
+          <RefreshButton onRefresh={lr.refresh} refreshing={lr.refreshing} />
         </div>
       </header>
 

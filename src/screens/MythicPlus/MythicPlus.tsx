@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Crest } from '../../design-system/Crest';
 import { Icon } from '../../design-system/Icon';
-import { IconButton } from '../../design-system/IconButton';
+import { RefreshButton } from '../shared/RefreshButton';
 import { specIcon } from '../../scoring/specIcons';
 import type { MythicPlusRun } from '../../scoring/types';
 import { useMythicPlus, type MythicPlusRow } from './useMythicPlus';
@@ -113,7 +113,7 @@ export function MythicPlus() {
             </div>
           </Link>
           <div style={{ flex: 1 }} />
-          <IconButton icon="refresh-cw" label={mp.refreshing ? 'Refreshing…' : 'Refresh'} framed disabled={mp.refreshing} onClick={mp.refresh} style={{ opacity: mp.refreshing ? 0.6 : 1 }} />
+          <RefreshButton onRefresh={mp.refresh} refreshing={mp.refreshing} />
         </div>
       </header>
 

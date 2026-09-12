@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { Crest } from '../../design-system/Crest';
 import { Select } from '../../design-system/Select';
 import { IconButton } from '../../design-system/IconButton';
+import { RefreshButton } from '../shared/RefreshButton';
 import type { LootNight } from '../../raid/lootLogic';
 
 interface LootHistoryHeaderProps {
@@ -44,14 +45,7 @@ export function LootHistoryHeader({ nights, selectedNightKey, onSelect, onRefres
         {onDeleteNight && (
           <IconButton icon="trash-2" label="Delete this raid night" framed onClick={onDeleteNight} />
         )}
-        <IconButton
-          icon="refresh-cw"
-          label={refreshing ? 'Refreshing…' : 'Refresh'}
-          framed
-          disabled={refreshing}
-          onClick={onRefresh}
-          style={{ opacity: refreshing ? 0.6 : 1 }}
-        />
+        <RefreshButton onRefresh={onRefresh} refreshing={refreshing} />
       </div>
     </header>
   );
