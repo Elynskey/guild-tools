@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Crest } from '../../design-system/Crest';
 import { Icon } from '../../design-system/Icon';
 import { RefreshButton } from '../shared/RefreshButton';
+import { HelpTooltip } from '../../design-system/HelpTooltip';
 import { specIcon } from '../../scoring/specIcons';
 import type { MythicPlusRun } from '../../scoring/types';
 import { useMythicPlus, type MythicPlusRow } from './useMythicPlus';
@@ -107,8 +108,9 @@ export function MythicPlus() {
             <Crest size={42} />
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
               <div className="crd-eyebrow">Casual Raid Days · The Scryers · est. 2010</div>
-              <div style={{ fontFamily: 'var(--font-display)', fontSize: 'var(--text-title-l)', fontWeight: 600, letterSpacing: '.06em', color: 'var(--text-strong)', lineHeight: 1.1 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: 'var(--font-display)', fontSize: 'var(--text-title-l)', fontWeight: 600, letterSpacing: '.06em', color: 'var(--text-strong)', lineHeight: 1.1 }}>
                 M+ Keys
+                <HelpTooltip text="Raider.IO score and recent Mythic+ runs, per raider." />
               </div>
             </div>
           </Link>

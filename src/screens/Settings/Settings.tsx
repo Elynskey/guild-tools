@@ -5,6 +5,7 @@ import { Input } from '../../design-system/Input';
 import { Button } from '../../design-system/Button';
 import { Toast } from '../../design-system/Toast';
 import { Icon } from '../../design-system/Icon';
+import { HelpTooltip } from '../../design-system/HelpTooltip';
 import { BossIcon } from '../../raid/BossIcon';
 import { TIER_BOSS_NAMES } from '../../raid/bossIcons';
 import { useSettings } from './useSettings';
@@ -69,8 +70,9 @@ export function Settings() {
             <Crest size={42} />
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
               <div className="crd-eyebrow">Casual Raid Days · The Scryers · est. 2010</div>
-              <div style={{ fontFamily: 'var(--font-display)', fontSize: 'var(--text-title-l)', fontWeight: 600, letterSpacing: '.06em', color: 'var(--text-strong)', lineHeight: 1.1 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: 'var(--font-display)', fontSize: 'var(--text-title-l)', fontWeight: 600, letterSpacing: '.06em', color: 'var(--text-strong)', lineHeight: 1.1 }}>
                 Settings
+                <HelpTooltip text="Discord channel IDs, this tier's gates and DPS bar, and the Discord bot invite -- everything an officer configures without needing a code change and a new release." />
               </div>
             </div>
           </Link>

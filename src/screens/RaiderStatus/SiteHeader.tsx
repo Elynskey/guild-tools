@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { Crest } from '../../design-system/Crest';
 import { Tabs, type TabDef } from '../../design-system/Tabs';
 import { Select } from '../../design-system/Select';
+import { HelpTooltip } from '../../design-system/HelpTooltip';
 import { config } from '../../config';
 import type { RaidNight } from '../../electron';
 
@@ -41,6 +42,9 @@ export function SiteHeader({ windowTabs, windowValue, setWindow, progressionFrac
             <div className="crd-eyebrow">Casual Raid Days · The Scryers · est. 2010</div>
             <div
               style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
                 fontFamily: 'var(--font-display)',
                 fontSize: 'var(--text-title-l)',
                 fontWeight: 600,
@@ -50,6 +54,7 @@ export function SiteHeader({ windowTabs, windowValue, setWindow, progressionFrac
               }}
             >
               Raider Status
+              <HelpTooltip text="Per-raider performance banded Green/Yellow/Red/Ineligible for officer triage -- gear/RIO gates, then a performance percentile within role and spec, with a death cap that can drop a band regardless of performance." />
             </div>
           </div>
         </Link>

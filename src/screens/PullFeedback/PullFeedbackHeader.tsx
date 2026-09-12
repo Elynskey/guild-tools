@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { Crest } from '../../design-system/Crest';
 import { Select } from '../../design-system/Select';
 import { IconButton } from '../../design-system/IconButton';
+import { HelpTooltip } from '../../design-system/HelpTooltip';
 import type { RaidNight } from '../../electron';
 
 interface PullFeedbackHeaderProps {
@@ -33,6 +34,9 @@ export function PullFeedbackHeader({ nights, selectedCode, onSelect }: PullFeedb
             <div className="crd-eyebrow">Casual Raid Days · The Scryers · est. 2010</div>
             <div
               style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
                 fontFamily: 'var(--font-display)',
                 fontSize: 'var(--text-title-l)',
                 fontWeight: 600,
@@ -42,6 +46,7 @@ export function PullFeedbackHeader({ nights, selectedCode, onSelect }: PullFeedb
               }}
             >
               Pull Feedback
+              <HelpTooltip text="Any past raid night, pull by pull -- wipe or kill, deaths, and the mechanics that need the most work." />
             </div>
           </div>
         </Link>

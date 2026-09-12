@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Crest } from '../../design-system/Crest';
 import { Icon } from '../../design-system/Icon';
 import { RefreshButton } from '../shared/RefreshButton';
+import { HelpTooltip } from '../../design-system/HelpTooltip';
 import { BossIcon } from '../../raid/BossIcon';
 import { itemLabel } from '../../raid/lootLogic';
 import { useSeasonLootReport, type SortKey } from './useSeasonLootReport';
@@ -52,8 +53,9 @@ export function SeasonLootReport() {
             <Crest size={42} />
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
               <div className="crd-eyebrow">Casual Raid Days · The Scryers · est. 2010</div>
-              <div style={{ fontFamily: 'var(--font-display)', fontSize: 'var(--text-title-l)', fontWeight: 600, letterSpacing: '.06em', color: 'var(--text-strong)', lineHeight: 1.1 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: 'var(--font-display)', fontSize: 'var(--text-title-l)', fontWeight: 600, letterSpacing: '.06em', color: 'var(--text-strong)', lineHeight: 1.1 }}>
                 Season Loot Report
+                <HelpTooltip text="Every Need win this tier, per raider -- who's behind, who's kept what, and when they last won something." />
               </div>
             </div>
           </Link>

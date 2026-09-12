@@ -10,6 +10,7 @@ import { Badge } from '../../design-system/Badge';
 import { Toast } from '../../design-system/Toast';
 import { useRaidSignups } from './useRaidSignups';
 import { specIcon, specIconFallback } from '../../scoring/specIcons';
+import { HelpTooltip } from '../../design-system/HelpTooltip';
 import type { AssignmentTier, RaidRole, TeamType } from '../../electron';
 
 const ROLE_LABEL: Record<RaidRole, string> = { tank: 'Tank', healer: 'Healer', dps: 'DPS' };
@@ -102,8 +103,9 @@ export function RaidSignups() {
             <Crest size={42} />
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
               <div className="crd-eyebrow">Casual Raid Days · The Scryers · est. 2010</div>
-              <div style={{ fontFamily: 'var(--font-display)', fontSize: 'var(--text-title-l)', fontWeight: 600, letterSpacing: '.06em', color: 'var(--text-strong)', lineHeight: 1.1 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: 'var(--font-display)', fontSize: 'var(--text-title-l)', fontWeight: 600, letterSpacing: '.06em', color: 'var(--text-strong)', lineHeight: 1.1 }}>
                 Raid Signups
+                <HelpTooltip text="Post Heroic Progression and Alt Raid signups to Discord, assign primary/backup by hand, then post the final roster." />
               </div>
             </div>
           </Link>
@@ -167,7 +169,10 @@ export function RaidSignups() {
                 </div>
                 {rs.buffCoverage && rs.buffCoverage.length > 0 && (
                   <>
-                    <div className="crd-eyebrow" style={{ marginBottom: 10 }}>Raid buffs</div>
+                    <div className="crd-eyebrow" style={{ marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
+                      Raid buffs
+                      <HelpTooltip text="Coverage across everyone assigned Primary in any role -- a class can fill a gap even from a non-Primary-DPS role." />
+                    </div>
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                       {rs.buffCoverage.map(({ tag, covered }) => (
                         <Badge key={tag} tone={covered ? 'success' : 'danger'}>

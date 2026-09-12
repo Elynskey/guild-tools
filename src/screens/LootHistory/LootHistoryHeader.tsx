@@ -3,6 +3,7 @@ import { Crest } from '../../design-system/Crest';
 import { Select } from '../../design-system/Select';
 import { IconButton } from '../../design-system/IconButton';
 import { RefreshButton } from '../shared/RefreshButton';
+import { HelpTooltip } from '../../design-system/HelpTooltip';
 import type { LootNight } from '../../raid/lootLogic';
 
 interface LootHistoryHeaderProps {
@@ -27,8 +28,9 @@ export function LootHistoryHeader({ nights, selectedNightKey, onSelect, onRefres
           <Crest size={42} />
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             <div className="crd-eyebrow">Casual Raid Days · The Scryers · est. 2010</div>
-            <div style={{ fontFamily: 'var(--font-display)', fontSize: 'var(--text-title-l)', fontWeight: 600, letterSpacing: '.06em', color: 'var(--text-strong)', lineHeight: 1.1 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: 'var(--font-display)', fontSize: 'var(--text-title-l)', fontWeight: 600, letterSpacing: '.06em', color: 'var(--text-strong)', lineHeight: 1.1 }}>
               Loot History
+              <HelpTooltip text="Who won what on Need rolls, which boss it dropped from, and where it ended up if it got traded." />
             </div>
           </div>
         </Link>

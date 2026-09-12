@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { Crest } from '../../design-system/Crest';
 import { Tabs } from '../../design-system/Tabs';
 import { RefreshButton } from '../shared/RefreshButton';
+import { HelpTooltip } from '../../design-system/HelpTooltip';
 import { isGatheringProfession } from '../../professions/professionCatalog';
 import type { MemberProfessions } from '../../professions/types';
 import type { ProfessionsTab } from './Professions';
@@ -47,7 +48,10 @@ export function ProfessionsHeader({ members, freshness, freshnessJustSynced, ref
           <Crest size={42} />
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             <div className="crd-eyebrow">Casual Raid Days · The Scryers · Officer Tools</div>
-            <div style={{ fontFamily: 'var(--font-display)', fontWeight: 600, letterSpacing: '.06em', fontSize: 26, color: 'var(--text-gold)', lineHeight: 1.1 }}>Professions</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: 'var(--font-display)', fontWeight: 600, letterSpacing: '.06em', fontSize: 26, color: 'var(--text-gold)', lineHeight: 1.1 }}>
+              Professions
+              <HelpTooltip text="Who can craft what, skill and recipe knowledge across the guild, and open crafting requests." />
+            </div>
           </div>
         </Link>
 

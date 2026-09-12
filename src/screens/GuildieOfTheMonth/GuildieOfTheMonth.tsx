@@ -7,6 +7,7 @@ import { Button } from '../../design-system/Button';
 import { Dialog } from '../../design-system/Dialog';
 import { Badge } from '../../design-system/Badge';
 import { Toast } from '../../design-system/Toast';
+import { HelpTooltip } from '../../design-system/HelpTooltip';
 import { useGuildieOfTheMonth } from './useGuildieOfTheMonth';
 import { useAuth } from '../../shared/useAuth';
 
@@ -77,8 +78,9 @@ export function GuildieOfTheMonth() {
             <Crest size={42} />
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
               <div className="crd-eyebrow">Casual Raid Days · The Scryers · est. 2010</div>
-              <div style={{ fontFamily: 'var(--font-display)', fontSize: 'var(--text-title-l)', fontWeight: 600, letterSpacing: '.06em', color: 'var(--text-strong)', lineHeight: 1.1 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: 'var(--font-display)', fontSize: 'var(--text-title-l)', fontWeight: 600, letterSpacing: '.06em', color: 'var(--text-strong)', lineHeight: 1.1 }}>
                 Guildie of the Month
+                <HelpTooltip text="Open this month's vote, watch the tally live, and announce the winner to Discord." />
               </div>
             </div>
           </Link>
@@ -193,9 +195,12 @@ export function GuildieOfTheMonth() {
 
             {!g.selected.closedAt ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'flex-start' }}>
-                <Button onClick={g.closeVoting} disabled={g.closing || g.selected.votes.length === 0} iconLeft="check">
-                  {g.closing ? 'Closing…' : 'Close voting'}
-                </Button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <Button onClick={g.closeVoting} disabled={g.closing || g.selected.votes.length === 0} iconLeft="check">
+                    {g.closing ? 'Closing…' : 'Close voting'}
+                  </Button>
+                  <HelpTooltip text="Locks in the winner from the current tally -- a tie is broken with a random draw among everyone tied for first." />
+                </div>
                 {g.closeError && <Toast tone="danger" title="Couldn't close voting" message={g.closeError} />}
               </div>
             ) : !g.selected.winnerAnnounceMessageId ? (
