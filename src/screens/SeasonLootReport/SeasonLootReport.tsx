@@ -117,7 +117,7 @@ export function SeasonLootReport() {
                   >
                     <div style={{ fontFamily: 'var(--font-display)', fontWeight: 600, letterSpacing: '.03em', color: 'var(--text-strong)' }}>{r.name}</div>
                     <div
-                      title={r.maxNeedWinsInNight > 2 ? `Broke the 2-win cap on at least one raid night (${r.maxNeedWinsInNight} that night)` : undefined}
+                      title={r.maxNeedWinsInNight > 2 ? `Broke the 2-win cap (counted per difficulty) on at least one raid night (${r.maxNeedWinsInNight} at one difficulty)` : undefined}
                       style={{
                         textAlign: 'right',
                         fontFamily: 'var(--font-mono)',

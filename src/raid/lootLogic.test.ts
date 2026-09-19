@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { annotateWithTrades, buildSeasonLootReport, filterByRaider, formatNightForDiscord, groupLootByNight, needWinCount, type RawLootRecord, type RawNeedLossRecord, type RawTradeRecord } from './lootLogic';
+import { annotateWithTrades, buildSeasonLootReport, filterByRaider, formatNightForDiscord, groupLootByNight, needWinCount, needWinTally, type RawLootRecord, type RawNeedLossRecord, type RawTradeRecord } from './lootLogic';
 
 function record(overrides: Partial<RawLootRecord> & Pick<RawLootRecord, 'time'>): RawLootRecord {
   return { itemId: 1, itemLink: '[Item]', winner: 'Grimsyl', boss: 'Vashnik the Malignant', ...overrides };
@@ -128,6 +128,54 @@ describe('needWinCount', () => {
     const entries = annotateWithTrades([], [{ itemId: 1, itemLink: '[Item]', from: 'Grimsyl', to: 'Zalanto', time: 1000 }]);
     expect(needWinCount(entries, 'Zalanto')).toBe(0);
     expect(needWinCount(entries, 'Grimsyl')).toBe(0);
+  });
+});
+
+describe('the 2-win Need cap is per difficulty', () => {
+  const win = (time: number, itemId: number, difficulty: string | null, winner = 'Thundoor') => record({ time, itemId, itemLink: `[Item ${itemId}]`, winner, difficulty });
+  const entriesFor = (records: RawLootRecord[]) => annotateWithTrades(records, []);
+
+  it('2 Normal + 1 Heroic in one night is 3 wins but within the cap (the real Thundoor case)', () => {
+    const tally = needWinTally(entriesFor([win(1000, 1, 'Normal'), win(2000, 2, 'Normal'), win(3000, 3, 'Heroic')]), 'Thundoor');
+    expect(tally.total).toBe(3);
+    expect(tally.capCount).toBe(2);
+    expect(tally.byDifficulty).toEqual([
+      { difficulty: 'Normal', count: 2 },
+      { difficulty: 'Heroic', count: 1 },
+    ]);
+  });
+
+  it('3 wins at the same difficulty is over the cap', () => {
+    expect(needWinTally(entriesFor([win(1000, 1, 'Heroic'), win(2000, 2, 'Heroic'), win(3000, 3, 'Heroic')]), 'Thundoor').capCount).toBe(3);
+  });
+
+  it('a win with no recorded difficulty counts against the busiest known difficulty, so a possible breach is never hidden', () => {
+    const tally = needWinTally(entriesFor([win(1000, 1, 'Normal'), win(2000, 2, 'Normal'), win(3000, 3, null)]), 'Thundoor');
+    expect(tally.capCount).toBe(3);
+    expect(tally.byDifficulty[tally.byDifficulty.length - 1]).toEqual({ difficulty: null, count: 1 });
+  });
+
+  it('old nights with no difficulty at all keep the plain per-night count', () => {
+    expect(needWinTally(entriesFor([win(1000, 1, null), win(2000, 2, null), win(3000, 3, null)]), 'Thundoor').capCount).toBe(3);
+    expect(needWinTally(entriesFor([win(1000, 1, null), win(2000, 2, null)]), 'Thundoor').capCount).toBe(2);
+  });
+
+  it('still leaves out traded-away items and other raiders', () => {
+    const entries = annotateWithTrades(
+      [win(1000, 1, 'Normal'), win(2000, 2, 'Normal'), win(2500, 9, 'Normal', 'Ranikina')],
+      [{ itemId: 2, itemLink: '[Item 2]', from: 'Thundoor', to: 'Ranikina', time: 2600 }],
+    );
+    const tally = needWinTally(entries, 'Thundoor');
+    expect(tally.total).toBe(1);
+    expect(tally.capCount).toBe(1);
+  });
+
+  it('the season report does not flag 2 Normal + 1 Heroic on one night, but does flag 3 Normal', () => {
+    const fine = buildSeasonLootReport(entriesFor([win(1000, 1, 'Normal'), win(2000, 2, 'Normal'), win(3000, 3, 'Heroic')]), ['Thundoor']);
+    expect(fine[0].needWinCount).toBe(3);
+    expect(fine[0].maxNeedWinsInNight).toBe(2);
+    const breach = buildSeasonLootReport(entriesFor([win(1000, 1, 'Normal'), win(2000, 2, 'Normal'), win(3000, 3, 'Normal')]), ['Thundoor']);
+    expect(breach[0].maxNeedWinsInNight).toBe(3);
   });
 });
 

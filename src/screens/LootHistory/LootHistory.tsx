@@ -9,7 +9,7 @@ import { Badge } from '../../design-system/Badge';
 import { Switch } from '../../design-system/Switch';
 import { HelpTooltip } from '../../design-system/HelpTooltip';
 import { useLootHistory } from './useLootHistory';
-import type { LootEntry } from '../../raid/lootLogic';
+import { NEED_WIN_CAP, type LootEntry } from '../../raid/lootLogic';
 
 function timeAgo(ms: number | null): string {
   if (ms == null) return 'never';
@@ -370,25 +370,37 @@ export function LootHistory() {
               Need wins this night
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 24 }}>
-              {[...lh.winCounts.entries()].map(([name, count]) => (
-                <span
-                  key={name}
-                  title={count > 2 ? `${count} Need wins -- over the guild's 2-win cap` : `${count} Need win${count === 1 ? '' : 's'}`}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 6,
-                    padding: '4px 10px',
-                    border: `1px solid ${count > 2 ? 'rgba(168,50,50,.5)' : 'var(--border-hairline)'}`,
-                    borderRadius: 'var(--radius-sm)',
-                    background: count > 2 ? 'rgba(168,50,50,.12)' : 'var(--surface-raised)',
-                    fontSize: 'var(--text-body-s)',
-                  }}
-                >
-                  <span style={{ color: 'var(--text-body)' }}>{name}</span>
-                  <span style={{ fontFamily: 'var(--font-mono)', color: count > 2 ? 'var(--status-danger)' : 'var(--text-gold)' }}>{count}</span>
-                </span>
-              ))}
+              {[...lh.winCounts.entries()].map(([name, tally]) => {
+                const over = tally.capCount > NEED_WIN_CAP;
+                const parts = tally.byDifficulty.map((d) => `${d.count} ${d.difficulty ?? 'unknown difficulty'}`);
+                const split = tally.byDifficulty.length > 1;
+                return (
+                  <span
+                    key={name}
+                    title={
+                      over
+                        ? `${tally.total} Need win${tally.total === 1 ? '' : 's'} (${parts.join(', ')}) -- over the guild's ${NEED_WIN_CAP}-win cap at one difficulty`
+                        : split
+                          ? `${tally.total} Need wins (${parts.join(', ')}) -- within the ${NEED_WIN_CAP}-win cap, which is counted per difficulty`
+                          : `${tally.total} Need win${tally.total === 1 ? '' : 's'}${parts.length ? ` (${parts.join(', ')})` : ''}`
+                    }
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      padding: '4px 10px',
+                      border: `1px solid ${over ? 'rgba(168,50,50,.5)' : 'var(--border-hairline)'}`,
+                      borderRadius: 'var(--radius-sm)',
+                      background: over ? 'rgba(168,50,50,.12)' : 'var(--surface-raised)',
+                      fontSize: 'var(--text-body-s)',
+                    }}
+                  >
+                    <span style={{ color: 'var(--text-body)' }}>{name}</span>
+                    <span style={{ fontFamily: 'var(--font-mono)', color: over ? 'var(--status-danger)' : 'var(--text-gold)' }}>{tally.total}</span>
+                    {split && <span style={{ fontSize: 'var(--text-micro)', color: 'var(--text-faint)' }}>{parts.join(' · ')}</span>}
+                  </span>
+                );
+              })}
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 20, flexWrap: 'wrap' }}>

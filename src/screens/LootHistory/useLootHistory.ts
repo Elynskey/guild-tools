@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { annotateWithTrades, formatNightForDiscord, groupLootByNight, itemLabel, needWinCount } from '../../raid/lootLogic';
+import { annotateWithTrades, formatNightForDiscord, groupLootByNight, itemLabel, needWinTally, type NeedWinTally } from '../../raid/lootLogic';
 import type { LootNight } from '../../raid/lootLogic';
 import { sampleLootRecords, sampleLootTrades } from '../../data/sampleLoot';
 import { getRoster } from '../../data/rosterSource';
@@ -191,9 +191,9 @@ export function useLootHistory() {
   }, [selectedNight, query]);
 
   const winCounts = useMemo(() => {
-    if (!selectedNight) return new Map<string, number>();
+    if (!selectedNight) return new Map<string, NeedWinTally>();
     const names = new Set(selectedNight.entries.map((e) => e.winner));
-    return new Map([...names].map((name) => [name, needWinCount(selectedNight.entries, name)]));
+    return new Map([...names].map((name) => [name, needWinTally(selectedNight.entries, name)]));
   }, [selectedNight]);
 
   // Captured live via chat-log tailing but not yet reconciled with the addon's

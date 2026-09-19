@@ -128,6 +128,38 @@ export function needWinCount(entries: LootEntry[], name: string): number {
   return entries.filter((e) => e.winner === name && !e.standaloneTrade && !e.tradedTo).length;
 }
 
+/** The guild's Need-win cap: 2 per raider per raid night, counted separately at each difficulty (2 on Normal and 1 on Heroic is fine). */
+export const NEED_WIN_CAP = 2;
+
+export interface NeedWinTally {
+  /** Every Need win still counted this night (see needWinCount), all difficulties together. */
+  total: number;
+  /** What the cap judges: the most wins at any one difficulty. A win with no recorded difficulty (old data, or a capture the combat log hasn't matched yet) could belong to any of them, so it counts against the busiest known difficulty -- worst case, never a silent pass. */
+  capCount: number;
+  /** Wins per difficulty, in Normal/Heroic order; `difficulty` is null for wins with none recorded. */
+  byDifficulty: { difficulty: string | null; count: number }[];
+}
+
+const DIFFICULTY_ORDER = ['Normal', 'Heroic'];
+
+/** Need-win breakdown for this raider across the given entries (one raid night, normally) -- what the guild's cap is judged on. Same win-counting rule as needWinCount. */
+export function needWinTally(entries: LootEntry[], name: string): NeedWinTally {
+  const counts = new Map<string | null, number>();
+  for (const e of entries) {
+    if (e.winner !== name || e.standaloneTrade || e.tradedTo) continue;
+    const key = e.difficulty ?? null;
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  const unknown = counts.get(null) ?? 0;
+  const known = [...counts].filter(([d]) => d !== null) as [string, number][];
+  const capCount = known.length ? Math.max(...known.map(([, n]) => n)) + unknown : unknown;
+  const byDifficulty = [
+    ...known.sort((a, b) => DIFFICULTY_ORDER.indexOf(a[0]) - DIFFICULTY_ORDER.indexOf(b[0])).map(([difficulty, count]) => ({ difficulty: difficulty as string | null, count })),
+    ...(unknown ? [{ difficulty: null, count: unknown }] : []),
+  ];
+  return { total: known.reduce((sum, [, n]) => sum + n, 0) + unknown, capCount, byDifficulty };
+}
+
 /** Real item links are the |Hitem:...|h[Name]|h|r escape sequence -- pulls just the bracketed display name back out; sample/manual entries already store plain "[Name]" text, so this handles both the same way. */
 export function itemLabel(link: string): string {
   const match = link.match(/\[(.+)\]/);
@@ -147,7 +179,7 @@ export interface SeasonLootItem {
 
 export interface SeasonLootRow {
   name: string;
-  /** Season-wide Need-win total, same rule as needWinCount -- excludes anything traded away. Informational only; NOT what the guild's cap judges (the cap is per raid night -- see maxNeedWinsInNight), so this can legitimately exceed 2 without ever breaching it. */
+  /** Season-wide Need-win total, same rule as needWinCount -- excludes anything traded away. Informational only; NOT what the guild's cap judges (the cap is per raid night and per difficulty -- see maxNeedWinsInNight), so this can legitimately exceed 2 without ever breaching it. */
   needWinCount: number;
   /** Every item this raider was the original Need-roll winner of, this tier, regardless of whether they kept it -- the fuller picture behind needWinCount. */
   totalWon: number;
@@ -155,7 +187,7 @@ export interface SeasonLootRow {
   items: SeasonLootItem[];
   /** Most recent win's timestamp, or null if they haven't won anything this tier -- what "who hasn't won anything in a while" sorts on. */
   lastWonAt: number | null;
-  /** Highest Need-win count this raider hit on any single raid night this tier -- what the guild's 2-win cap actually judges (see needWinCount in LootHistory, which is scoped the same way). */
+  /** Highest Need-win count this raider hit at any single difficulty on any single raid night this tier -- what the guild's 2-win cap actually judges (see needWinTally, which Loot History's per-night chips use too). */
   maxNeedWinsInNight: number;
   /** How many Need rolls this raider lost this tier -- rolling and not winning, as distinct from just not rolling (which stays invisible, same as always). */
   lossCount: number;
@@ -195,7 +227,7 @@ export function buildSeasonLootReport(entries: LootEntry[], rosterNames: string[
   return [...allNames].map((name) => {
     const won = byName.get(name) ?? [];
     const sorted = [...won].sort((a, b) => b.time - a.time);
-    const maxNeedWinsInNight = nights.reduce((max, night) => Math.max(max, needWinCount(night.entries, name)), 0);
+    const maxNeedWinsInNight = nights.reduce((max, night) => Math.max(max, needWinTally(night.entries, name).capCount), 0);
     const losses = [...(lossesByName.get(name) ?? [])].sort((a, b) => b.time - a.time);
     return {
       name,
