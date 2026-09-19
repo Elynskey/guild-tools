@@ -41,19 +41,96 @@ function saveConfiguredPath(wowPath) {
   saveConfig({ wowPath });
 }
 
-// This PC's raiding character name, as typed by the officer in Loot History's setup
-// card -- exists purely to resolve chat-tail's "You" quirk (see lootChatTail.cjs):
-// WoW's on-disk chat log substitutes the literal word "You" for the local player's own
-// name on a self-win, and there's no client API reachable from Node to recover the
-// real one. Per-PC, not per-character -- deliberately simple (one text field, not an
-// auto-detected/multi-character setup) since this only ever needs to be right for
-// whoever raids on this specific machine.
-function getCharacterName() {
+// This PC's raiding character -- needed to resolve chat-tail's "You" quirk (see
+// lootChatTail.cjs): WoW's chat log calls the local player's own wins "You". It used
+// to be typed in by hand; now it's pulled from the client, best source first:
+//   1. a manual override (only set if detection gets it wrong),
+//   2. what the addon recorded at login (GuildToolsLootDB.character), and
+//   3. the most recently written character folder under WTF/Account/<acct>/<realm>/.
+// 2 and 3 both come from the client flushing to disk (on /reload or logout), so
+// neither can know a character the officer JUST logged into before that flush --
+// the UI says so, and a self-win captured in that window is reconciled against the
+// addon's own record later (see lootRecordsStore.cjs's `selfWin`).
+function getCharacterOverride() {
   return loadConfig().characterName ?? null;
 }
 
 function setCharacterName(name) {
   saveConfig({ characterName: name || null });
+}
+
+function readAddonDb() {
+  const wowPath = resolveWowPath();
+  if (!isRealWowPath(wowPath)) return null;
+  const svFile = findSavedVariablesFile(wowPath);
+  if (!svFile) return null;
+  try {
+    return readLuaVariable(fs.readFileSync(svFile, 'utf8'), 'GuildToolsLootDB');
+  } catch {
+    return null;
+  }
+}
+
+function detectCharacterFromAddon() {
+  const c = readAddonDb()?.character;
+  if (!c || typeof c.name !== 'string' || !c.name) return null;
+  return { name: c.name, at: Number(c.at) > 0 ? Number(c.at) * 1000 : 0 };
+}
+
+// The client writes every per-character cache file for a character together when that
+// character logs out or reloads, so the newest of them stamps "last character flushed".
+const CHARACTER_STAMP_FILES = ['chat-cache.txt', 'layout-local.txt', 'config-cache.wtf'];
+
+function dirsIn(dir) {
+  try {
+    return fs.readdirSync(dir, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name);
+  } catch {
+    return [];
+  }
+}
+
+/** Newest character folder under WTF/Account/<account>/<realm>/<character>/ by file mtime, across every account on this PC. @returns {{ name: string, realm: string, at: number } | null} */
+function detectCharacterFromWtf(wowPath) {
+  const accountsDir = path.join(wowPath, 'WTF', 'Account');
+  let best = null;
+  for (const account of dirsIn(accountsDir)) {
+    for (const realm of dirsIn(path.join(accountsDir, account))) {
+      if (realm === 'SavedVariables') continue;
+      for (const character of dirsIn(path.join(accountsDir, account, realm))) {
+        for (const file of CHARACTER_STAMP_FILES) {
+          let at;
+          try {
+            at = fs.statSync(path.join(accountsDir, account, realm, character, file)).mtimeMs;
+          } catch {
+            continue;
+          }
+          if (!best || at > best.at) best = { name: character, realm, at };
+        }
+      }
+    }
+  }
+  return best;
+}
+
+/** @returns {{ name: string | null, source: 'manual' | 'addon' | 'wtf' | null }} */
+function resolveCharacter() {
+  const override = getCharacterOverride();
+  if (override) return { name: override, source: 'manual' };
+
+  const fromAddon = detectCharacterFromAddon();
+  const wowPath = resolveWowPath();
+  const fromWtf = isRealWowPath(wowPath) ? detectCharacterFromWtf(wowPath) : null;
+  // Both are last-flush stamps, so they normally agree. When they don't (an older addon
+  // build that never recorded a character, or a character played with the addon off),
+  // the newer flush is the more recent character.
+  if (fromAddon && fromWtf) return fromWtf.at > fromAddon.at + 60_000 ? { name: fromWtf.name, source: 'wtf' } : { name: fromAddon.name, source: 'addon' };
+  if (fromAddon) return { name: fromAddon.name, source: 'addon' };
+  if (fromWtf) return { name: fromWtf.name, source: 'wtf' };
+  return { name: null, source: null };
+}
+
+function getCharacterName() {
+  return resolveCharacter().name;
 }
 
 function isRealWowPath(candidate) {
@@ -103,7 +180,15 @@ function getLootRecords() {
 }
 
 function getWowPathConfig() {
-  return { configured: loadConfiguredPath(), resolved: resolveWowPath(), valid: isRealWowPath(resolveWowPath()), characterName: getCharacterName() };
+  const character = resolveCharacter();
+  return {
+    configured: loadConfiguredPath(),
+    resolved: resolveWowPath(),
+    valid: isRealWowPath(resolveWowPath()),
+    characterName: character.name,
+    characterSource: character.source,
+    characterOverride: getCharacterOverride(),
+  };
 }
 
 function setWowPath(wowPath) {
@@ -129,4 +214,54 @@ function installAddon() {
   return destDir;
 }
 
-module.exports = { getLootRecords, getWowPathConfig, setWowPath, installAddon, resolveWowPath, isRealWowPath, getCharacterName, setCharacterName };
+function readTocVersion(file) {
+  try {
+    return fs.readFileSync(file, 'utf8').match(/^##\s*Version:\s*(.+?)\s*$/m)?.[1] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Numeric, segment-by-segment ("1.10" > "1.9"); missing segments count as 0. */
+function compareVersions(a, b) {
+  const pa = String(a).split('.').map((n) => parseInt(n, 10) || 0);
+  const pb = String(b).split('.').map((n) => parseInt(n, 10) || 0);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const d = (pa[i] ?? 0) - (pb[i] ?? 0);
+    if (d !== 0) return d < 0 ? -1 : 1;
+  }
+  return 0;
+}
+
+/**
+ * The addon copy this build of the app carries vs the one actually installed in WoW --
+ * lets Loot History say "your addon is out of date" instead of an officer finding out
+ * from a missing feature. Compares the on-disk TOC only: what's running IN the game is
+ * whatever it loaded last, so an update still needs a /reload to take effect.
+ * @returns {{ bundled: string | null, installed: string | null, status: 'current' | 'outdated' | 'not_installed' | 'no_wow' }}
+ */
+function getAddonVersionInfo(bundledTocOverride) {
+  const bundled = readTocVersion(bundledTocOverride ?? path.join(__dirname, '..', '..', 'addon', 'GuildToolsLoot', 'GuildToolsLoot.toc'));
+  const wowPath = resolveWowPath();
+  if (!isRealWowPath(wowPath)) return { bundled, installed: null, status: 'no_wow' };
+  const installed = readTocVersion(path.join(wowPath, 'Interface', 'AddOns', 'GuildToolsLoot', 'GuildToolsLoot.toc'));
+  if (!installed) return { bundled, installed: null, status: 'not_installed' };
+  if (bundled && compareVersions(installed, bundled) < 0) return { bundled, installed, status: 'outdated' };
+  return { bundled, installed, status: 'current' };
+}
+
+module.exports = {
+  getLootRecords,
+  getWowPathConfig,
+  setWowPath,
+  installAddon,
+  resolveWowPath,
+  isRealWowPath,
+  getCharacterName,
+  getCharacterOverride,
+  setCharacterName,
+  resolveCharacter,
+  detectCharacterFromWtf,
+  getAddonVersionInfo,
+  compareVersions,
+};

@@ -180,6 +180,26 @@ local function playerRealmName()
   return name, realm
 end
 
+-- Which character is logged in right now, written into SavedVariables so the Guild
+-- Tools app can read it instead of making the officer type their name (it needs it to
+-- resolve WoW's chat log calling their own wins "You"). Only reaches disk on /reload
+-- or logout like everything else here -- so it's the CURRENT character once a reload
+-- has happened this session, and the previous session's until then (the app labels
+-- that caveat). Recorded at login AND every loading screen, since an officer who swaps
+-- alts and /reloads should update it without a full relog.
+local function recordCharacter()
+  local name, realm = playerRealmName()
+  if name then GuildToolsLootDB.character = { name = name, realm = realm, at = time() } end
+end
+
+-- True when the winner is this very character. The app pairs the chat log's anonymous
+-- "You" win (which can't say WHO) with this addon's own record of it by matching on
+-- this flag -- exact even if the app guessed the wrong character name before a reload.
+local function isSelf(winnerName)
+  local me = UnitName("player")
+  return me ~= nil and winnerName ~= nil and winnerName:match("^[^-]+") == me
+end
+
 -- "[Loot]: <name> (<roll type> - <roll value>) Won: " -- captures (1) the winner's name
 -- and (2) the roll-type word, leaving the item link for extractItemLink() to pull from
 -- the same message separately (it carries the full |Hitem:...|h escape sequence, not
@@ -328,6 +348,7 @@ local function recordNeedWin(winnerName, itemLink, bossOverride, encounterIDOver
     slot = slotLabel(itemLink),
     time = now,
     difficulty = difficultyOverride or currentDifficulty,
+    self = isSelf(winnerName) or nil,
   })
   capturedInGeneration = encounterGeneration
 
@@ -641,6 +662,7 @@ local tradeCompleted = false
 frame:SetScript("OnEvent", function(_, event, ...)
   ensureDB()
   if event == "PLAYER_LOGIN" then
+    recordCharacter()
     if GuildToolsLootDB.enabled then
       announce('logging Need wins (type /gtloot off to stop for this run).')
     else
@@ -660,6 +682,7 @@ frame:SetScript("OnEvent", function(_, event, ...)
     end)
 
   elseif event == "PLAYER_ENTERING_WORLD" then
+    recordCharacter()
     -- Never prompts for Raid Finder -- recordNeedWin's own isTrackedRaidDifficulty()
     -- check would block it from logging anyway even if answered "Yes", but asking at
     -- all for a difficulty that can never actually log invites exactly the confusion

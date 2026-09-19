@@ -83,14 +83,13 @@ function parseLine(line) {
   const [, rawWinner, rollType, rawItemName] = wonMatch;
   if (!rollType.toLowerCase().includes('need')) return null;
 
-  // Dropped rather than recorded under the literal name "You" if no character name is
-  // configured yet -- a record like that could never reconcile with the addon's own
-  // authoritative sync (which always has the real name), so it would just sit as a
-  // permanent phantom entry. The app should be telling the officer to set this (see
-  // the Loot History screen's live-capture status card), not silently mis-attributing
-  // their own wins.
+  // Dropped rather than recorded under the literal name "You" if no character can be
+  // worked out at all (nothing detected from the client and no manual override -- see
+  // lootLog.cjs's resolveCharacter) -- a record like that would just sit as a permanent
+  // phantom entry. The Loot History status card tells the officer when that's the case.
   const winner = resolveWinnerName(rawWinner);
   if (!winner) return null;
+  const selfWin = rawWinner === 'You';
 
   const itemName = rawItemName.trim();
   if (!itemName) return null;
@@ -103,6 +102,11 @@ function parseLine(line) {
     slot: null,
     difficulty: null, // no client API access from a chat-log tail -- filled in once the addon's sync reconciles it (see upgradeRecord)
     source: 'chat-tail',
+    // The name above is a best guess (detected from the client's last flush, see
+    // lootLog.cjs) -- right unless the officer swapped characters without a /reload
+    // since. Flagged so the addon's own record of the same win (which carries
+    // `self: true`) can be paired with this one exactly and correct the name.
+    ...(selfWin ? { selfWin: true } : {}),
     time: Math.floor(Date.now() / 1000),
   };
 }

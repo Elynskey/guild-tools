@@ -32,7 +32,7 @@ const { listCraftRequests, addCraftRequest, fulfillCraftRequest, removeCraftRequ
 const { signIn: bnetSignIn } = require('./dataSources/bnetAuth.cjs');
 const { signIn: discordSignIn } = require('./dataSources/discordAuth.cjs');
 const { loadSession, saveSession, clearSession } = require('./dataSources/authSession.cjs');
-const { getWowPathConfig, setWowPath, installAddon, setCharacterName } = require('./dataSources/lootLog.cjs');
+const { getWowPathConfig, setWowPath, installAddon, setCharacterName, getAddonVersionInfo } = require('./dataSources/lootLog.cjs');
 const { getChatLogStatus } = require('./dataSources/lootChatTail.cjs');
 const { fetchLootLog, addManualLootRecord, updateLootRecord, removeLootRecord, removeLootTrade, deleteLootNight, syncChatTailCapture } = require('./dataSources/fetchLootLog.cjs');
 
@@ -221,6 +221,7 @@ ipcMain.handle('lootLog:setCharacterName', async (_event, name) => {
   setCharacterName(name);
   return getWowPathConfig();
 });
+ipcMain.handle('lootLog:getAddonVersion', async () => getAddonVersionInfo());
 ipcMain.handle('lootLog:getChatTailStatus', async () => ({ ...chatTailStatus, chatLog: getChatLogStatus() }));
 ipcMain.handle('lootLog:getCaptureHeartbeats', async () => {
   if (!proxyClient.isAvailable()) return { heartbeats: [] };

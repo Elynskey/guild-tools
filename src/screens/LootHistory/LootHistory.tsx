@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { LootHistoryHeader } from './LootHistoryHeader';
 import { LootLogTable } from './LootLogTable';
 import { LootRecordDialog } from './LootRecordDialog';
@@ -6,6 +6,8 @@ import { PostToDiscordDialog } from './PostToDiscordDialog';
 import { DeleteNightDialog } from './DeleteNightDialog';
 import { Button } from '../../design-system/Button';
 import { Badge } from '../../design-system/Badge';
+import { Switch } from '../../design-system/Switch';
+import { HelpTooltip } from '../../design-system/HelpTooltip';
 import { useLootHistory } from './useLootHistory';
 import type { LootEntry } from '../../raid/lootLogic';
 
@@ -56,12 +58,137 @@ function RaidCoverageRow({ heartbeats }: { heartbeats: { officerName: string; ch
   );
 }
 
-function LiveCaptureCard({ lh }: { lh: ReturnType<typeof useLootHistory> }) {
-  const [nameDraft, setNameDraft] = useState(lh.wowPath?.characterName ?? '');
-  useEffect(() => {
-    setNameDraft(lh.wowPath?.characterName ?? '');
-  }, [lh.wowPath?.characterName]);
+const CHARACTER_SOURCE_LABEL = { manual: 'set by you', addon: 'from the addon', wtf: 'from your WoW folder' } as const;
 
+// Which character this PC plays -- needed because WoW's chat log calls your OWN wins
+// "You". Read from the client instead of typed in: what the addon recorded at login,
+// else the last character the client saved (see lootLog.cjs). Manual entry only exists
+// as an override for when that's wrong.
+function CharacterRow({ lh }: { lh: ReturnType<typeof useLootHistory> }) {
+  const cfg = lh.wowPath;
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState('');
+  const detected = !!cfg?.characterName;
+  const showInput = editing || !detected;
+
+  const save = () => {
+    lh.setCharacterName(draft.trim());
+    setEditing(false);
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', fontSize: 'var(--text-body-s)', color: 'var(--text-muted)' }}>
+        {detected ? (
+          <>
+            <span>
+              Playing as <strong style={{ color: 'var(--text-strong)' }}>{cfg!.characterName}</strong>
+              {cfg!.characterSource && <span style={{ color: 'var(--text-faint)' }}> ({CHARACTER_SOURCE_LABEL[cfg!.characterSource]})</span>}
+            </span>
+            {cfg!.characterSource === 'manual' ? (
+              <Button variant="ghost" size="sm" onClick={() => lh.setCharacterName('')} disabled={lh.savingCharacterName}>
+                Use detected instead
+              </Button>
+            ) : (
+              !editing && (
+                <Button variant="ghost" size="sm" onClick={() => { setDraft(''); setEditing(true); }}>
+                  Not the character you're raiding on?
+                </Button>
+              )
+            )}
+          </>
+        ) : (
+          <span>Couldn't tell which character you play from your WoW folder -- type it here:</span>
+        )}
+        {showInput && (
+          <>
+            <input
+              aria-label="Your character name"
+              type="text"
+              placeholder="e.g. Elishaunt"
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter' && draft.trim()) save(); }}
+              style={{
+                padding: '6px 10px',
+                border: '1px solid var(--border-hairline)',
+                borderRadius: 'var(--radius-sm)',
+                background: 'var(--surface-raised)',
+                color: 'var(--text-body)',
+                fontFamily: 'var(--font-ui)',
+                fontSize: 'var(--text-body-s)',
+                minWidth: 160,
+              }}
+            />
+            <Button variant="secondary" size="sm" onClick={save} disabled={!draft.trim() || lh.savingCharacterName}>
+              {lh.savingCharacterName ? 'Saving…' : 'Save'}
+            </Button>
+            {detected && (
+              <Button variant="ghost" size="sm" onClick={() => setEditing(false)}>
+                Cancel
+              </Button>
+            )}
+          </>
+        )}
+      </div>
+      {detected && cfg!.characterSource !== 'manual' && (
+        <div style={{ fontSize: 'var(--text-micro)', color: 'var(--text-faint)', lineHeight: 1.5 }}>
+          Read from the last time WoW saved (a logout or /reload). If you've switched characters this session, /reload in game to update it -- your own wins still get matched to the right
+          character once the addon syncs.
+        </div>
+      )}
+    </div>
+  );
+}
+
+// The installed addon is older than the copy this build of Guild Tools carries. Compared on
+// disk, so it can't see what the running game has loaded -- hence "then /reload".
+function AddonUpdateBanner({ lh }: { lh: ReturnType<typeof useLootHistory> }) {
+  const v = lh.addonVersion;
+  if (!v || v.status !== 'outdated') return null;
+  return (
+    <div className="crd-card" style={{ padding: '14px 20px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', borderColor: 'rgba(192,144,47,.5)' }}>
+      <Badge tone="warning" dot>
+        Addon out of date
+      </Badge>
+      <span style={{ fontSize: 'var(--text-body-s)', color: 'var(--text-body)', flex: 1, minWidth: 260 }}>
+        Your Guild Tools Loot addon is v{v.installed}; this version of Guild Tools includes v{v.bundled}. Update it, then type /reload in game so WoW loads the new one.
+      </span>
+      <Button size="sm" onClick={lh.installAddon} disabled={lh.installing} iconLeft="download">
+        {lh.installing ? 'Updating…' : 'Update addon now'}
+      </Button>
+    </div>
+  );
+}
+
+// One shared setting for every officer (settings.autoPostLoot on the proxy) -- see
+// lootAutoPost.cjs for exactly what gets posted and what never does.
+function AutoPostRow({ lh }: { lh: ReturnType<typeof useLootHistory> }) {
+  if (!lh.available || !lh.autoPostReady) return null;
+  const on = lh.autoPostLoot;
+  return (
+    <div className="crd-card" style={{ padding: '14px 20px', marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <Switch checked={on} onChange={lh.setAutoPostLoot} disabled={lh.savingAutoPost} aria-label="Auto-post new wins to Discord" />
+        <span style={{ fontWeight: 600, color: 'var(--text-strong)', fontSize: 'var(--text-body-s)', display: 'flex', alignItems: 'center', gap: 6 }}>
+          Auto-post new wins to Discord
+          <HelpTooltip text="Posts each Need win to the loot channel on its own, one message per boss headed by the difficulty, once the addon has confirmed the boss and difficulty. Never posts unverified live captures, wins older than 6 hours, or the same win twice." />
+        </span>
+        <Badge tone={on ? 'gold' : 'neutral'}>{on ? 'On for all officers' : 'Off'}</Badge>
+      </div>
+      <div style={{ fontSize: 'var(--text-micro)', color: 'var(--text-faint)', lineHeight: 1.5 }}>
+        Shared by every officer. Wins show up in Discord after the addon syncs (a /reload in game), not the instant they roll -- that's what lets the post say which boss and difficulty. Off by default; the
+        "Post to Discord" button below still works either way.
+      </div>
+      {on && !lh.autoPostChannelSet && (
+        <div style={{ fontSize: 'var(--text-micro)', color: 'var(--status-warning)' }}>No loot channel is set yet -- add one in Settings or nothing will be posted.</div>
+      )}
+      {lh.autoPostError && <div style={{ fontSize: 'var(--text-micro)', color: 'var(--status-danger)' }}>{lh.autoPostError}</div>}
+    </div>
+  );
+}
+
+function LiveCaptureCard({ lh }: { lh: ReturnType<typeof useLootHistory> }) {
   const chatLog = lh.chatTailStatus?.chatLog;
   const nameSet = !!lh.wowPath?.characterName;
 
@@ -76,7 +203,7 @@ function LiveCaptureCard({ lh }: { lh: ReturnType<typeof useLootHistory> }) {
       statusText = 'Chat log found, but nothing written to it recently -- is WoW open and running on this PC?';
     } else if (!nameSet) {
       statusTone = 'warning';
-      statusText = 'Watching your chat log, but your own wins need a character name below to be captured live.';
+      statusText = "Watching your chat log, but I can't tell which character you play yet -- set it below so your own wins are captured live.";
     } else {
       statusTone = 'success';
       statusText = `Watching your chat log for live loot -- last checked ${timeAgo(lh.chatTailStatus?.lastPollAt ?? null)}.`;
@@ -107,32 +234,7 @@ function LiveCaptureCard({ lh }: { lh: ReturnType<typeof useLootHistory> }) {
         )}
       </div>
       <RaidCoverageRow heartbeats={lh.captureHeartbeats} />
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-        <label style={{ fontSize: 'var(--text-body-s)', color: 'var(--text-muted)' }} htmlFor="gtloot-character-name">
-          Your character name (for your own live wins):
-        </label>
-        <input
-          id="gtloot-character-name"
-          type="text"
-          placeholder="e.g. Vitaezra"
-          value={nameDraft}
-          onChange={(e) => setNameDraft(e.target.value)}
-          onBlur={() => {
-            if (nameDraft.trim() !== (lh.wowPath?.characterName ?? '')) lh.setCharacterName(nameDraft.trim());
-          }}
-          style={{
-            padding: '6px 10px',
-            border: '1px solid var(--border-hairline)',
-            borderRadius: 'var(--radius-sm)',
-            background: 'var(--surface-raised)',
-            color: 'var(--text-body)',
-            fontFamily: 'var(--font-ui)',
-            fontSize: 'var(--text-body-s)',
-            minWidth: 160,
-          }}
-        />
-        {lh.savingCharacterName && <span style={{ fontSize: 'var(--text-micro)', color: 'var(--text-faint)' }}>Saving…</span>}
-      </div>
+      <CharacterRow lh={lh} />
     </div>
   );
 }
@@ -187,7 +289,9 @@ export function LootHistory() {
       />
 
       <div style={{ maxWidth: 1160, margin: '0 auto', padding: 32 }}>
+        {lh.status === 'ok' && <AddonUpdateBanner lh={lh} />}
         {lh.status === 'ok' && <LiveCaptureCard lh={lh} />}
+        {lh.status === 'ok' && <AutoPostRow lh={lh} />}
         {lh.status === 'ok' && (
           <div
             style={{
@@ -223,7 +327,11 @@ export function LootHistory() {
             <Button variant="ghost" size="sm" onClick={lh.installAddon} disabled={lh.installing} iconLeft="download">
               {lh.installing ? 'Updating…' : 'Update addon'}
             </Button>
-            {lh.installMessage ? lh.installMessage : 'Re-copies the addon bundled in this build of Guild Tools -- run this after updating the app to pick up addon fixes.'}
+            {lh.installMessage
+              ? lh.installMessage
+              : lh.addonVersion?.status === 'current'
+                ? `Addon v${lh.addonVersion.installed} is up to date with this version of Guild Tools.`
+                : 'Re-copies the addon bundled in this build of Guild Tools -- run this after updating the app to pick up addon fixes.'}
           </div>
         )}
         {lh.status !== 'ok' ? (

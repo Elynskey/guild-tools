@@ -103,6 +103,12 @@ function sync(newRecords, newTrades, newNeedLosses) {
   const addedRecords = [];
   const addedTrades = [];
   const addedNeedLosses = [];
+  // Records that BECAME addon-verified in this call -- newly added from the addon, or a
+  // chat-tail placeholder upgraded in place -- which is what auto-post-to-Discord acts
+  // on (see lootAutoPost.cjs). Deliberately separate from addedRecords: an upgraded
+  // record isn't "new" (it must not re-announce as a fresh win in any other consumer),
+  // but it IS the first moment its boss/difficulty are known.
+  const verifiedRecords = [];
 
   for (const r of newRecords ?? []) {
     if (removed.has(recordKey(r))) continue;
@@ -112,12 +118,16 @@ function sync(newRecords, newTrades, newNeedLosses) {
       // placeholder isn't a new win -- it's the SAME win becoming fully attributed --
       // so it's deliberately excluded from addedRecords, otherwise postLootNight.cjs's
       // Discord-announce caller would re-announce a win that already went out live.
-      if (match.source === 'chat-tail' && r.source !== 'chat-tail') upgradeRecord(match, r);
+      if (match.source === 'chat-tail' && r.source !== 'chat-tail') {
+        upgradeRecord(match, r);
+        verifiedRecords.push(match);
+      }
       continue;
     }
     const withId = { id: crypto.randomUUID(), ...r };
     db.records.push(withId);
     addedRecords.push(withId);
+    if (withId.source !== 'chat-tail') verifiedRecords.push(withId);
   }
   for (const t of newTrades ?? []) {
     const k = tradeKey(t);
@@ -139,7 +149,16 @@ function sync(newRecords, newTrades, newNeedLosses) {
   }
 
   save(db);
-  return { records: db.records, trades: db.trades, needLosses: db.needLosses, addedRecords, addedTrades, addedNeedLosses };
+  return { records: db.records, trades: db.trades, needLosses: db.needLosses, addedRecords, addedTrades, addedNeedLosses, verifiedRecords };
+}
+
+/** Stamps records as announced to Discord so auto-post never announces the same win twice. */
+function markPosted(ids) {
+  const db = load();
+  const wanted = new Set(ids);
+  const stamp = new Date().toISOString();
+  for (const r of db.records) if (wanted.has(r.id)) r.discordPostedAt = stamp;
+  save(db);
 }
 
 // Real item links are the |Hitem:...|h[Name]|h|r escape sequence -- same extraction
@@ -176,7 +195,12 @@ function findSyncDuplicate(existingRecords, candidate) {
   const candidateName = extractItemName(candidate.itemLink)?.toLowerCase();
   return (
     existingRecords.find((r) => {
-      if (r.winner.toLowerCase() !== candidate.winner.toLowerCase()) return false;
+      // A chat-tail self-win only knows its winner as a best guess (see lootChatTail.cjs);
+      // the addon's own record of the same win carries `self: true`, which pairs them
+      // exactly even when the guess was a different character (an alt swap with no
+      // /reload in between).
+      const selfPair = (r.selfWin && r.source === 'chat-tail' && candidate.self === true) || (candidate.selfWin && candidate.source === 'chat-tail' && r.self === true);
+      if (!selfPair && r.winner.toLowerCase() !== candidate.winner.toLowerCase()) return false;
       if (extractItemName(r.itemLink)?.toLowerCase() !== candidateName) return false;
       // A chat-tail placeholder's authoritative (addon-sourced) counterpart might not
       // land until the officer's next reload -- possibly hours later, at the very end
@@ -206,6 +230,9 @@ function upgradeRecord(existing, incoming) {
   if (existing.itemId == null && incoming.itemId != null) existing.itemId = incoming.itemId;
   if (existing.difficulty == null && incoming.difficulty != null) existing.difficulty = incoming.difficulty;
   if ((incoming.itemLink?.length ?? 0) > (existing.itemLink?.length ?? 0)) existing.itemLink = incoming.itemLink;
+  // The addon knows who it really was; a guessed self-win name gives way to it.
+  if (existing.selfWin && incoming.self === true) existing.winner = incoming.winner;
+  delete existing.selfWin;
   delete existing.source;
 }
 
@@ -337,4 +364,4 @@ function deleteNight(startTime, endTime) {
   };
 }
 
-module.exports = { load, sync, manualAdd, update, remove, removeTrade, deleteNight };
+module.exports = { load, sync, markPosted, manualAdd, update, remove, removeTrade, deleteNight };

@@ -71,6 +71,24 @@ export interface LiveRecipeCatalogueResult {
   fetchedAt: string;
 }
 
+export interface WowPathConfig {
+  configured: string | null;
+  resolved: string | null;
+  valid: boolean;
+  /** The character this PC plays, used to resolve the chat log's anonymous "You" wins. Detected from the client (see lootLog.cjs) unless `characterOverride` is set. */
+  characterName: string | null;
+  characterSource: 'manual' | 'addon' | 'wtf' | null;
+  characterOverride: string | null;
+}
+
+export interface AddonVersionInfo {
+  /** The addon copy carried by this build of the app. */
+  bundled: string | null;
+  /** What's installed in this PC's WoW folder right now (on disk -- the game only loads it on /reload or login). */
+  installed: string | null;
+  status: 'current' | 'outdated' | 'not_installed' | 'no_wow';
+}
+
 export interface RaidNight {
   code: string;
   date: string;
@@ -136,6 +154,8 @@ export interface GuildToolsSettings {
   testGotmChannelId: string;
   gates: { rio: number; ilvl: number };
   minDps: number;
+  /** Officer-wide: post addon-verified Need wins to the loot channel automatically as they sync in. Off by default. */
+  autoPostLoot: boolean;
   /** Boss names excluded from the DPS check this tier -- deaths/healer/tank percentile/pulls are unaffected. */
   excludedBossesFromDps: string[];
 }
@@ -258,9 +278,11 @@ export interface ElectronAPI {
   getItemIconUrls: (itemIds: number[]) => Promise<Record<number, string | null>>;
   getBossLootTable: () => Promise<BossLootTable | null>;
   postLootNightToDiscord: (messages: string[]) => Promise<{ posted: number }>;
-  getWowPathConfig: () => Promise<{ configured: string | null; resolved: string | null; valid: boolean; characterName: string | null }>;
-  setWowPath: (wowPath: string) => Promise<{ configured: string | null; resolved: string | null; valid: boolean; characterName: string | null }>;
-  setCharacterName: (name: string) => Promise<{ configured: string | null; resolved: string | null; valid: boolean; characterName: string | null }>;
+  getWowPathConfig: () => Promise<WowPathConfig>;
+  setWowPath: (wowPath: string) => Promise<WowPathConfig>;
+  /** Sets (or, with an empty string, clears) the manual override -- detection from the client is the default. */
+  setCharacterName: (name: string) => Promise<WowPathConfig>;
+  getAddonVersionInfo: () => Promise<AddonVersionInfo>;
   getChatTailStatus: () => Promise<{
     lastPollAt: number | null;
     lastStatus: 'ok' | 'not_configured' | 'error' | null;
