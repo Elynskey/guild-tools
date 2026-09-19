@@ -1,5 +1,7 @@
 const { getLootRecords } = require('./lootLog.cjs');
 const { pollChatLog } = require('./lootChatTail.cjs');
+const { pollCombatLog, recentKills } = require('./lootCombatLog.cjs');
+const { enrichWin } = require('./lootLiveEnrich.cjs');
 const { fetchBossLootTable } = require('./fetchBossLootTable.cjs');
 const proxyClient = require('./proxyClient.cjs');
 const lootRecordsStore = require('./lootRecordsStore.cjs');
@@ -45,15 +47,6 @@ async function getCachedBossLootTable() {
   return table ?? cachedLootTable;
 }
 
-// Real item links are the |Hitem:...|h[Name]|h|r escape sequence, or (chat-tail's own
-// records, which never have one -- see lootChatTail.cjs) a plain "[Name]" string. Same
-// extraction every other data source in this pipeline duplicates locally rather than
-// sharing (this file has no access to the renderer's lootLogic.ts).
-function itemNameFromLink(itemLink) {
-  const match = typeof itemLink === 'string' && itemLink.match(/\[(.+)\]/);
-  return match ? match[1] : null;
-}
-
 // Called on an interval from main.cjs -- tails WoW's live chat log (see
 // lootChatTail.cjs) so a Need win reaches the shared loot log within one poll interval
 // instead of waiting on the addon's SavedVariables, which only flush to disk on
@@ -66,28 +59,21 @@ function itemNameFromLink(itemLink) {
 // actually working" status for the Loot History screen's live-capture card -- see
 // lootChatTail.cjs's getChatLogStatus for the file-freshness half of that same signal.
 async function syncChatTailCapture() {
+  // Every tick, not just when a win shows up: keeps "which boss died last" current and the
+  // Loot History status card honest, and each poll only reads the bytes appended since.
+  pollCombatLog();
   const { status, newRecords } = pollChatLog();
   if (status !== 'ok' || newRecords.length === 0) return { status, added: 0 };
 
   const lootTable = await getCachedBossLootTable();
-  let filtered = newRecords;
-  if (lootTable) {
-    // chat-tail records never carry a real itemId (the on-disk chat log has no item
-    // link, just plain text -- see lootChatTail.cjs) -- resolved by name against this
-    // tier's known loot table where possible, purely so an icon and the membership
-    // filter below have something to work with immediately, instead of only after the
-    // addon's own sync reconciles it. Deliberately NOT used to drop an unresolved
-    // record (a name genuinely missing from this table stays in, same as before this
-    // resolution existed) -- this table can be incomplete or stale, and silently
-    // dropping a real win because of that would be worse than an occasional off-tier
-    // item slipping through as "Unverified" for an officer to catch by eye.
-    const idByName = new Map(Object.entries(lootTable.items).map(([id, item]) => [item.name, Number(id)]));
-    filtered = newRecords.map((r) => {
-      if (r.itemId != null) return r;
-      const resolvedId = idByName.get(itemNameFromLink(r.itemLink));
-      return resolvedId != null ? { ...r, itemId: resolvedId } : r;
-    });
-  }
+  // Which boss just died (from the combat log, if this PC is running one) + the tier's
+  // loot table lets a win be given its item, slot, boss and difficulty right now -- see
+  // lootLiveEnrich.cjs. That's what lets auto-post announce it without a /reload. Never
+  // used to DROP a record: a win that can't be attributed (no combat log, an item not in
+  // the table, no matching kill) stays in as an unverified chat-tail capture and waits
+  // for the addon's authoritative sync, same as before.
+  const kills = recentKills(Date.now());
+  const filtered = newRecords.map((r) => enrichWin(r, { lootTable, kills }));
   if (filtered.length === 0) return { status, added: 0 };
 
   if (proxyClient.isAvailable()) {

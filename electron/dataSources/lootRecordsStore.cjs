@@ -55,6 +55,12 @@ function load() {
   return db;
 }
 
+// Records the app made itself from the chat log (no addon involved yet): 'chat-tail' with
+// nothing attributed, or 'live' with boss/slot/difficulty worked out from the combat log
+// and loot table (lootLiveEnrich.cjs). Either way the addon's own record of the same win
+// is still the authority, and gets paired with these by findSyncDuplicate below.
+const isPlaceholder = (r) => r.source === 'chat-tail' || r.source === 'live';
+
 const recordKey = (r) => `${r.itemId}::${r.winner}::${r.time}`;
 const tradeKey = (t) => `${t.itemId}::${t.from}::${t.to}::${t.time}`;
 const needLossKey = (r) => `${r.itemId}::${r.name}::${r.time}`;
@@ -118,7 +124,7 @@ function sync(newRecords, newTrades, newNeedLosses) {
       // placeholder isn't a new win -- it's the SAME win becoming fully attributed --
       // so it's deliberately excluded from addedRecords, otherwise postLootNight.cjs's
       // Discord-announce caller would re-announce a win that already went out live.
-      if (match.source === 'chat-tail' && r.source !== 'chat-tail') {
+      if (isPlaceholder(match) && !isPlaceholder(r)) {
         upgradeRecord(match, r);
         verifiedRecords.push(match);
       }
@@ -127,6 +133,8 @@ function sync(newRecords, newTrades, newNeedLosses) {
     const withId = { id: crypto.randomUUID(), ...r };
     db.records.push(withId);
     addedRecords.push(withId);
+    // 'live' counts as verified: boss and difficulty are known (from the combat log), which
+    // is what lets auto-post announce a win with no /reload. Bare chat-tail captures don't.
     if (withId.source !== 'chat-tail') verifiedRecords.push(withId);
   }
   for (const t of newTrades ?? []) {
@@ -199,7 +207,7 @@ function findSyncDuplicate(existingRecords, candidate) {
       // the addon's own record of the same win carries `self: true`, which pairs them
       // exactly even when the guess was a different character (an alt swap with no
       // /reload in between).
-      const selfPair = (r.selfWin && r.source === 'chat-tail' && candidate.self === true) || (candidate.selfWin && candidate.source === 'chat-tail' && r.self === true);
+      const selfPair = (r.selfWin && isPlaceholder(r) && candidate.self === true) || (candidate.selfWin && isPlaceholder(candidate) && r.self === true);
       if (!selfPair && r.winner.toLowerCase() !== candidate.winner.toLowerCase()) return false;
       if (extractItemName(r.itemLink)?.toLowerCase() !== candidateName) return false;
       // A chat-tail placeholder's authoritative (addon-sourced) counterpart might not
@@ -208,7 +216,7 @@ function findSyncDuplicate(existingRecords, candidate) {
       // full DUPLICATE_WINDOW_SECONDS, same as a manual-placeholder match. Two chat-tail
       // records for the same winner+item still use the tight window (two officers'
       // clients both tailing the same broadcast land within seconds, never hours).
-      const wide = r.source === 'chat-tail' || candidate.source === 'chat-tail';
+      const wide = isPlaceholder(r) || isPlaceholder(candidate);
       const window = wide || r.itemId == null || candidate.itemId == null ? DUPLICATE_WINDOW_SECONDS : SYNC_DUPLICATE_WINDOW_SECONDS;
       return Math.abs(r.time - candidate.time) <= window;
     }) ?? null
@@ -225,10 +233,13 @@ function findSyncDuplicate(existingRecords, candidate) {
 // near-real-time chat-tail stamp is arguably the better one, and keeping it avoids
 // reshuffling which raid-night bucket the record lands in.
 function upgradeRecord(existing, incoming) {
-  if (existing.boss == null && incoming.boss != null) existing.boss = incoming.boss;
-  if (existing.slot == null && incoming.slot != null) existing.slot = incoming.slot;
+  // A 'live' record's boss/slot/difficulty were worked out by the app (combat log + loot
+  // table); the addon read them from the game itself, so where they differ the addon wins.
+  const authoritative = existing.source === 'live';
+  if (incoming.boss != null && (authoritative || existing.boss == null)) existing.boss = incoming.boss;
+  if (incoming.slot != null && (authoritative || existing.slot == null)) existing.slot = incoming.slot;
   if (existing.itemId == null && incoming.itemId != null) existing.itemId = incoming.itemId;
-  if (existing.difficulty == null && incoming.difficulty != null) existing.difficulty = incoming.difficulty;
+  if (incoming.difficulty != null && (authoritative || existing.difficulty == null)) existing.difficulty = incoming.difficulty;
   if ((incoming.itemLink?.length ?? 0) > (existing.itemLink?.length ?? 0)) existing.itemLink = incoming.itemLink;
   // The addon knows who it really was; a guessed self-win name gives way to it.
   if (existing.selfWin && incoming.self === true) existing.winner = incoming.winner;

@@ -3,8 +3,10 @@ import type { AssignmentTier, RaidAssignment, RaidRole, RaidSignupEntry, RaidSig
 import { getRoster } from '../../data/rosterSource';
 import type { Raider } from '../../scoring/types';
 import { utilityGainedBy, raidBuffCoverage, dpsRangeForSpecs } from '../../raid/raidBuffs';
+import { createAssignmentSaver } from './assignmentSaver';
 
 const ROLES: RaidRole[] = ['tank', 'healer', 'dps'];
+type Assignments = Record<RaidRole, RaidAssignment[]>;
 
 export function useRaidSignups() {
   const electron = window.electronAPI;
@@ -18,13 +20,27 @@ export function useRaidSignups() {
   const [finalizing, setFinalizing] = useState(false);
   const [finalizeError, setFinalizeError] = useState<string | null>(null);
 
+  // Serializes assignment saves and keeps the latest intended state -- see assignmentSaver.ts
+  // for the lost-click bug this replaces.
+  const saver = useMemo(
+    () =>
+      createAssignmentSaver<Assignments, RaidSignupPost>({
+        send: (postId, assignments) => (electron ? electron.setRaidSignupAssignments(postId, assignments) : Promise.resolve(null)),
+        onSaved: (updated) => setPosts((prev) => prev.map((p) => (p.id === updated.id ? updated : p))),
+        onError: (err) => setAssignmentError(err.message || 'Could not save this assignment -- refresh before assuming it stuck.'),
+        onBusy: setSavingAssignments,
+      }),
+    [electron],
+  );
+
   const refresh = useCallback(() => {
     if (!electron) return;
     electron.listRaidSignups().then((list) => {
+      saver.reset(); // the server's copy is the truth again (ignored if a save is still in flight)
       setPosts(list);
       setSelectedId((current) => current ?? list[0]?.id ?? null);
     });
-  }, [electron]);
+  }, [electron, saver]);
 
   useEffect(() => {
     refresh();
@@ -120,32 +136,31 @@ export function useRaidSignups() {
   const setAssignment = useCallback(
     (role: RaidRole, discordUserId: string, tier: AssignmentTier | null) => {
       if (!electron || !selected) return;
-      const next: Record<RaidRole, RaidAssignment[]> = { tank: [...selected.assignments.tank], healer: [...selected.assignments.healer], dps: [...selected.assignments.dps] };
-      next[role] = next[role].filter((a) => a.discordUserId !== discordUserId);
-      if (tier) next[role].push({ discordUserId, tier });
-
-      setPosts((prev) => prev.map((p) => (p.id === selected.id ? { ...p, assignments: next } : p)));
-      setSavingAssignments(true);
       setAssignmentError(null);
-      electron
-        .setRaidSignupAssignments(selected.id, next)
-        .then((updated) => {
-          if (updated) setPosts((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
-        })
-        .catch((err: Error) => {
-          setAssignmentError(err.message || 'Could not save this assignment -- refresh before assuming it stuck.');
-        })
-        .finally(() => setSavingAssignments(false));
+      const next = saver.edit(selected.id, selected.assignments, (current) => {
+        const updated: Assignments = { tank: [...current.tank], healer: [...current.healer], dps: [...current.dps] };
+        updated[role] = updated[role].filter((a) => a.discordUserId !== discordUserId);
+        if (tier) updated[role].push({ discordUserId, tier });
+        return updated;
+      });
+      setPosts((prev) => prev.map((p) => (p.id === selected.id ? { ...p, assignments: next } : p)));
     },
-    [electron, selected],
+    [electron, selected, saver],
   );
 
   const finalize = useCallback(() => {
     if (!electron || !selected) return;
     setFinalizing(true);
     setFinalizeError(null);
-    electron
-      .finalizeRaidSignup(selected.id)
+    // The final roster is built on the server from whatever assignments it has stored, so
+    // every pending save has to land first -- and if one failed, posting would announce a
+    // roster missing recent changes, so stop and say so instead.
+    saver
+      .flush()
+      .then(() => {
+        if (saver.hasFailed()) throw new Error("A recent assignment change didn't save -- refresh and check the assignments before posting the final roster.");
+        return electron.finalizeRaidSignup(selected.id);
+      })
       .then((updated) => {
         if (updated) setPosts((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
       })
@@ -153,7 +168,7 @@ export function useRaidSignups() {
         setFinalizeError(err.message || 'Could not post the final roster to Discord.');
       })
       .finally(() => setFinalizing(false));
-  }, [electron, selected]);
+  }, [electron, selected, saver]);
 
   return {
     available: !!electron,

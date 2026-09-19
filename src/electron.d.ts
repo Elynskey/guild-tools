@@ -289,6 +289,8 @@ export interface ElectronAPI {
     capturedThisSession: number;
     lastCaptureAt: number | null;
     chatLog: { path: string | null; exists: boolean; active: boolean };
+    /** The combat log is what tells Guild Tools which boss was just killed, so a win can be attributed (and auto-posted) with no /reload. */
+    combatLog: { exists: boolean; active: boolean; lastKill: { boss: string; difficultyId: number; endedAt: number } | null };
   }>;
   getLootCaptureHeartbeats: () => Promise<{ heartbeats: { officerName: string; chatLogActive: boolean; lastSeenAt: number }[] }>;
   pickWowFolder: () => Promise<string | null>;

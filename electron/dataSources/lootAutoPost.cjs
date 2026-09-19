@@ -11,9 +11,11 @@ const lootRecordsStore = require('./lootRecordsStore.cjs');
 // newly captured win individually, live, with no officer in the loop and no check that
 // the loot came from a guild raid (it posted a non-guild run's drops). The guardrails
 // that make it safe to bring back as an opt-in:
-//   - only records the ADDON has verified (boss AND difficulty known, source no longer
-//     'chat-tail'). The addon itself only records the guild's tracked raid at
-//     Normal/Heroic, so a chat-tail capture from some other run can never post.
+//   - only records whose boss AND difficulty are known and whose source isn't a bare
+//     'chat-tail' capture: either the addon's own record, or a 'live' one the app
+//     attributed from the combat log + the tier's loot table (lootLiveEnrich.cjs), which
+//     only ever matches this tier's bosses at Normal/Heroic -- so a capture from some
+//     other run can never post. 'live' is what lets this fire with no /reload.
 //   - only fresh wins (last 6 hours) -- an officer's very first sync offers the addon's
 //     whole history back, and none of that should suddenly hit the channel.
 //   - at most once per record (discordPostedAt), even across repeated syncs.

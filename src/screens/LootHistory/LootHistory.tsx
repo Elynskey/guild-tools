@@ -163,23 +163,47 @@ function AddonUpdateBanner({ lh }: { lh: ReturnType<typeof useLootHistory> }) {
 
 // One shared setting for every officer (settings.autoPostLoot on the proxy) -- see
 // lootAutoPost.cjs for exactly what gets posted and what never does.
+const DIFFICULTY_NAME: Record<number, string> = { 14: 'Normal', 15: 'Heroic' };
+
+// This PC's half of live posting: is a combat log being written, and what boss kill was last
+// seen in it? (The combat log is how Guild Tools learns which boss a win came from.)
+function combatLogLine(lh: ReturnType<typeof useLootHistory>): { text: string; ok: boolean } | null {
+  const c = lh.chatTailStatus?.combatLog;
+  if (!c) return null;
+  if (!c.exists || !c.active) {
+    return {
+      ok: false,
+      text: `${c.exists ? "Combat log on this PC isn't being written right now" : 'No combat log found on this PC'} -- turn on combat logging (the Warcraft Logs / Archon logger does this for raids) so wins can post live. Until then they post after the addon syncs (a /reload).`,
+    };
+  }
+  const k = c.lastKill;
+  return {
+    ok: true,
+    text: k
+      ? `Combat log on this PC is live -- last boss kill seen: ${k.boss}${DIFFICULTY_NAME[k.difficultyId] ? ` (${DIFFICULTY_NAME[k.difficultyId]})` : ''}, ${timeAgo(k.endedAt)}.`
+      : 'Combat log on this PC is live -- no boss kill seen yet this session.',
+  };
+}
+
 function AutoPostRow({ lh }: { lh: ReturnType<typeof useLootHistory> }) {
   if (!lh.available || !lh.autoPostReady) return null;
   const on = lh.autoPostLoot;
+  const combat = combatLogLine(lh);
   return (
     <div className="crd-card" style={{ padding: '14px 20px', marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
         <Switch checked={on} onChange={lh.setAutoPostLoot} disabled={lh.savingAutoPost} aria-label="Auto-post new wins to Discord" />
         <span style={{ fontWeight: 600, color: 'var(--text-strong)', fontSize: 'var(--text-body-s)', display: 'flex', alignItems: 'center', gap: 6 }}>
           Auto-post new wins to Discord
-          <HelpTooltip text="Posts each Need win to the loot channel on its own, one message per boss headed by the difficulty, once the addon has confirmed the boss and difficulty. Never posts unverified live captures, wins older than 6 hours, or the same win twice." />
+          <HelpTooltip text="Posts each Need win to the loot channel on its own, one message per boss headed by the difficulty. Live (within about 10 seconds) when an officer's PC has chat logging and combat logging on; otherwise once the addon syncs. Never posts wins it can't tie to this tier's boss and a Normal/Heroic kill, wins older than 6 hours, or the same win twice." />
         </span>
         <Badge tone={on ? 'gold' : 'neutral'}>{on ? 'On for all officers' : 'Off'}</Badge>
       </div>
       <div style={{ fontSize: 'var(--text-micro)', color: 'var(--text-faint)', lineHeight: 1.5 }}>
-        Shared by every officer. Wins show up in Discord after the addon syncs (a /reload in game), not the instant they roll -- that's what lets the post say which boss and difficulty. Off by default; the
-        "Post to Discord" button below still works either way.
+        Shared by every officer. A win posts within about 10 seconds of the roll as long as at least one officer's PC is running both chat logging and combat logging -- the combat log is how Guild Tools
+        knows which boss you just killed and the difficulty. Otherwise it posts after the addon syncs (a /reload in game). Off by default; the "Post to Discord" button below still works either way.
       </div>
+      {combat && <div style={{ fontSize: 'var(--text-micro)', color: combat.ok ? 'var(--text-faint)' : 'var(--status-warning)', lineHeight: 1.5 }}>{combat.text}</div>}
       {on && !lh.autoPostChannelSet && (
         <div style={{ fontSize: 'var(--text-micro)', color: 'var(--status-warning)' }}>No loot channel is set yet -- add one in Settings or nothing will be posted.</div>
       )}
