@@ -213,19 +213,25 @@ export function buildSeasonLootReport(entries: LootEntry[], rosterNames: string[
 const NO_BOSS_LABEL = 'No boss recorded';
 
 /**
- * One Discord message per boss for an officer's manual "Post to Discord" -- winner +
- * item (+ slot, + where it ended up if traded), headed by the boss name. Entries with
- * no boss (an old capture from before boss attribution was fixed, or a standalone
- * trade -- see annotateWithTrades, which never gives those a boss) are grouped under
- * one shared heading instead of being silently dropped from the post.
+ * One Discord message per boss (per difficulty -- see below) for an officer's manual
+ * "Post to Discord" -- winner + item (+ slot, + where it ended up if traded), headed by
+ * the boss name. Entries with no boss (an old capture from before boss attribution was
+ * fixed, or a standalone trade -- see annotateWithTrades, which never gives those a
+ * boss) are grouped under one shared heading instead of being silently dropped from the
+ * post.
+ *
+ * Grouped by boss+difficulty, not boss alone, so a boss killed on both Normal and
+ * Heroic within the same grouped night (e.g. an Alt run and a Heroic run close enough
+ * together to fall in one 6-hour window) gets separate headings instead of merging two
+ * different difficulties' loot under one boss name with no way to tell them apart.
  */
 export function formatNightForDiscord(entries: LootEntry[]): string[] {
-  const byBoss = new Map<string, LootEntry[]>();
+  const byBossAndDifficulty = new Map<string, LootEntry[]>();
   for (const e of entries) {
-    const key = e.boss ?? NO_BOSS_LABEL;
-    const list = byBoss.get(key) ?? [];
+    const key = `${e.boss ?? NO_BOSS_LABEL}||${e.difficulty ?? ''}`;
+    const list = byBossAndDifficulty.get(key) ?? [];
     list.push(e);
-    byBoss.set(key, list);
+    byBossAndDifficulty.set(key, list);
   }
 
   const formatLine = (e: LootEntry): string => {
@@ -236,5 +242,10 @@ export function formatNightForDiscord(entries: LootEntry[]): string[] {
     return `🎲 ${e.winner} won ${item}${slot}${trade}`;
   };
 
-  return [...byBoss.entries()].map(([boss, bossEntries]) => `**${boss}**\n${bossEntries.map(formatLine).join('\n')}`);
+  return [...byBossAndDifficulty.values()].map((bossEntries) => {
+    const boss = bossEntries[0].boss ?? NO_BOSS_LABEL;
+    const difficulty = bossEntries[0].difficulty;
+    const heading = difficulty ? `${boss} (${difficulty})` : boss;
+    return `**${heading}**\n${bossEntries.map(formatLine).join('\n')}`;
+  });
 }

@@ -170,6 +170,20 @@ describe('formatNightForDiscord', () => {
   it('returns one message per boss, none empty, for an empty night', () => {
     expect(formatNightForDiscord([])).toEqual([]);
   });
+
+  it('splits the same boss into separate messages per difficulty and labels the heading', () => {
+    const entries = annotateWithTrades(
+      [
+        record({ time: 1000, itemId: 1, itemLink: '[Sword]', winner: 'Grimsyl', boss: 'Sszorak', difficulty: 'Normal' }),
+        record({ time: 2000, itemId: 2, itemLink: '[Shield]', winner: 'Thornwick', boss: 'Sszorak', difficulty: 'Heroic' }),
+      ],
+      [],
+    );
+    const messages = formatNightForDiscord(entries);
+    expect(messages).toHaveLength(2);
+    expect(messages.find((m) => m.startsWith('**Sszorak (Normal)**'))).toContain('Grimsyl won Sword');
+    expect(messages.find((m) => m.startsWith('**Sszorak (Heroic)**'))).toContain('Thornwick won Shield');
+  });
 });
 
 describe('buildSeasonLootReport', () => {
