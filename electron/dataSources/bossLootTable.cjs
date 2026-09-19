@@ -31,8 +31,66 @@ async function getToken() {
 
 async function bnetGet(url, token) {
   const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-  if (!res.ok) throw new Error(`Boss loot table fetch failed: ${url} -- ${res.status} ${res.statusText}`);
+  if (!res.ok) {
+    const err = new Error(`Boss loot table fetch failed: ${url} -- ${res.status} ${res.statusText}`);
+    err.status = res.status;
+    err.retryAfterMs = res.headers.get('retry-after') ? Number(res.headers.get('retry-after')) * 1000 : null;
+    throw err;
+  }
   return res.json();
+}
+
+// Blizzard caps an API client at roughly 100 requests/second. The table used to fetch every
+// item's details at once (131 concurrent requests) -- confirmed 2026-09-19 that exactly the
+// first ~88 succeeded and the rest (all of Ula'tek's 18 items, all 17 of The Coiled Altar's,
+// 8 of The Twin Fangs') failed, each failure swallowed as "one bad item shouldn't take down
+// the table", and the incomplete table was then cached for a week. Item details are now
+// fetched a few at a time, retrying transient failures (429/5xx) with backoff, and anything
+// that still fails is REPORTED (missingItemIds) instead of silently dropped.
+// Blizzard's inventory_type.name for something you can't wear is "Non-equippable"; the addon
+// records the same thing as "Other" (GuildToolsLoot.lua's slotLabel). One vocabulary, so a
+// manually-picked item and the addon's own record of it agree (found via the 2026-09-19
+// replay: Slumbering Coil Curio came back "Non-equippable" from here, "Other" from the addon).
+function normalizeSlot(name) {
+  return !name || name === 'Non-equippable' ? 'Other' : name;
+}
+
+const ITEM_CONCURRENCY = 6;
+const MAX_ATTEMPTS = 4;
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * @param {number[]} ids
+ * @param {{ get: (id: number) => Promise<any>, concurrency?: number, maxAttempts?: number, sleep?: (ms: number) => Promise<void> }} deps  get() throws an Error with .status (and optionally .retryAfterMs)
+ * @returns {Promise<{ details: Map<number, any>, failedIds: number[] }>}
+ */
+async function fetchItemDetails(ids, { get, concurrency = ITEM_CONCURRENCY, maxAttempts = MAX_ATTEMPTS, sleep: wait = sleep }) {
+  const details = new Map();
+  const failedIds = [];
+  let next = 0;
+
+  async function fetchOne(id) {
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        details.set(id, await get(id));
+        return;
+      } catch (err) {
+        const transient = err.status === 429 || (err.status >= 500 && err.status < 600) || err.status === undefined;
+        if (!transient || attempt === maxAttempts) {
+          failedIds.push(id);
+          return;
+        }
+        await wait(err.retryAfterMs ?? 400 * 2 ** (attempt - 1));
+      }
+    }
+  }
+
+  async function worker() {
+    while (next < ids.length) await fetchOne(ids[next++]);
+  }
+  await Promise.all(Array.from({ length: Math.min(concurrency, ids.length) }, worker));
+  return { details, failedIds: failedIds.sort((a, b) => a - b) };
 }
 
 /**
@@ -57,27 +115,25 @@ async function fetchBossLootTable(region = 'us') {
     ids.forEach((id) => itemIds.add(id));
   });
 
-  const itemDetails = await Promise.all(
-    [...itemIds].map(async (id) => {
-      try {
-        return [id, await bnetGet(`${base}/data/wow/item/${id}?namespace=static-${region}&locale=en_US`, token)];
-      } catch {
-        return [id, null]; // one bad item shouldn't take down the whole table
-      }
-    }),
-  );
+  const { details, failedIds } = await fetchItemDetails([...itemIds], {
+    get: (id) => bnetGet(`${base}/data/wow/item/${id}?namespace=static-${region}&locale=en_US`, token),
+  });
 
   const items = {};
-  for (const [id, detail] of itemDetails) {
-    if (!detail) continue;
+  for (const [id, detail] of details) {
     items[id] = {
       name: detail.name,
-      slot: detail.inventory_type?.name ?? 'Other',
+      slot: normalizeSlot(detail.inventory_type?.name),
       armorWeight: detail.item_class?.name === 'Armor' ? (detail.item_subclass?.name ?? null) : null,
     };
   }
 
-  return { bosses, lootByBoss, items, instanceIds: INSTANCE_IDS, fetchedAt: new Date().toISOString() };
+  // One bad item still doesn't take the table down -- but it's no longer invisible: the ids
+  // that never resolved are listed so the caller can fill them from an earlier table and
+  // retry soon instead of trusting (and caching) a partial result for a week.
+  if (failedIds.length > 0) console.error(`[bossLootTable] ${failedIds.length} of ${itemIds.size} item lookups failed after retries: ${failedIds.join(', ')}`);
+
+  return { bosses, lootByBoss, items, instanceIds: INSTANCE_IDS, missingItemIds: failedIds, fetchedAt: new Date().toISOString() };
 }
 
-module.exports = { fetchBossLootTable, INSTANCE_IDS };
+module.exports = { fetchBossLootTable, fetchItemDetails, normalizeSlot, INSTANCE_IDS };

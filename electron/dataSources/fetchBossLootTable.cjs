@@ -36,7 +36,9 @@ async function fetchBossLootTable() {
   }
 
   try {
-    const result = await fetchFromBlizzard(process.env.GUILD_REGION);
+    // If some item lookups still failed after retries, borrow their details from the
+    // previous table where it had them so a rebuild is never worse than what was cached.
+    const result = cache.fillGapsFrom(await fetchFromBlizzard(process.env.GUILD_REGION), cached);
     cache.save(result);
     return result;
   } catch (err) {
