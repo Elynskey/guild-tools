@@ -8,6 +8,14 @@ function isConfigured() {
   return REQUIRED_ENV.every((key) => !!process.env[key]);
 }
 
+// True while a live scan is running in this process, so the proxy's hourly sync
+// (professionsSync.cjs) never starts a second multi-minute scan on top of one an
+// officer triggered by hand, or its own.
+let scanning = false;
+function isScanning() {
+  return scanning;
+}
+
 /**
  * @returns {{ members: object[], fetchedAt: string } | null}
  */
@@ -38,6 +46,7 @@ async function fetchProfessions(onProgress) {
 
   const guild = { name: process.env.GUILD_NAME, realm: process.env.GUILD_REALM, region: process.env.GUILD_REGION };
 
+  scanning = true;
   try {
     const members = await fetchActiveMembersWithProfessions(guild, onProgress);
     const result = { members, fetchedAt: new Date().toISOString() };
@@ -47,7 +56,9 @@ async function fetchProfessions(onProgress) {
     console.error('[professions] Live fetch failed:', err);
     // Prefer a stale-but-real cached scan over sample data if we have one.
     return cache.load();
+  } finally {
+    scanning = false;
   }
 }
 
-module.exports = { fetchProfessions, getCachedProfessions, isConfigured };
+module.exports = { fetchProfessions, getCachedProfessions, isConfigured, isScanning };
