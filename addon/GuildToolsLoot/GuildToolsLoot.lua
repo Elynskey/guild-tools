@@ -86,6 +86,10 @@ local function announce(msg)
   DEFAULT_CHAT_FRAME:AddMessage('|cffd4b358Guild Tools Loot:|r ' .. msg)
 end
 
+-- Assigned once sampleChatLogging exists further down -- the raid-entry popup's OnAccept
+-- (defined well above it) needs to call this at click time, not at file load.
+local ensureChatLogging
+
 -- Confirmed live 2026-09-12: an officer had this addon capturing wins correctly (the
 -- in-game "Need win captured" announcement fired every time) but Guild Tools never
 -- updated live -- because the app's live-loot path doesn't read anything this addon
@@ -138,7 +142,7 @@ end
 local function remindChatLoggingIfOff()
   local line, isOn = chatLoggingStatusLine()
   if isOn == false then
-    announce('chat logging ' .. line .. ' -- Guild Tools needs it for live loot updates. Type /chatlog once, then go ALL THE WAY BACK to the character select screen (Log Out) and log back in -- /reload is NOT enough. Confirmed live: it only starts actually writing after a real login, not mid-session.')
+    announce('chat logging ' .. line .. ' -- Guild Tools needs it for live loot updates. Type /chatlog -- it starts working right away, no need to log out. It switches itself off every time you log out to the character screen, so it has to be on again each session.')
   end
 end
 
@@ -495,6 +499,7 @@ StaticPopupDialogs["GUILDTOOLSLOOT_CONFIRM"] = {
   OnAccept = function()
     GuildToolsLootDB.enabled = true
     announce("logging Need wins for this raid. /gtloot off any time to stop.")
+    ensureChatLogging(true)
   end,
   -- Deliberately no OnCancel that touches `enabled`. Blizzard's StaticPopup calls
   -- OnCancel for an explicit button2 click AND for the player just hitting Escape AND
@@ -540,6 +545,41 @@ local function sampleChatLogging(callback)
   end)
 end
 
+-- Turns chat logging on when logging is being switched on (/gtloot on, answering Yes
+-- to the raid-entry popup, or automatically a few seconds after login -- chat logging
+-- resets on every logout to the character screen), so an officer doesn't have to
+-- remember /chatlog separately. Only ever acts while chat logging reads OFF: the /chatlog slash handler
+-- TOGGLES, so calling it while already on would switch it back off. LoggingChat(true)
+-- is tried first (the setter twin of LoggingCombat, which other current addons on this
+-- client still call -- its chat counterpart is by analogy, not confirmed), then the
+-- slash handler. Either way the result is re-read afterward and reported honestly
+-- rather than assumed, since this whole feature has already failed silently once.
+ensureChatLogging = function(explicit)
+  if not isChatLoggingAPI() then return end
+  if C_ChatInfo.IsLoggingChat() then
+    chatLoggingSeenOnThisSession = true
+    return
+  end
+  if LoggingChat then
+    LoggingChat(true)
+  elseif explicit and SlashCmdList and SlashCmdList["CHATLOG"] then
+    SlashCmdList["CHATLOG"]("")
+  elseif explicit then
+    announce("couldn't turn chat logging on by itself on this client -- type /chatlog yourself.")
+    return
+  else
+    return -- automatic (login) path never uses the toggle; the reminder that follows covers this
+  end
+  C_Timer.After(0.5, function()
+    if C_ChatInfo.IsLoggingChat() then
+      chatLoggingSeenOnThisSession = true
+      announce("chat logging turned ON for you -- live updates to Guild Tools should start now.")
+    elseif explicit then
+      announce("tried to turn chat logging on but it still reads OFF -- type /chatlog yourself.")
+    end
+  end)
+end
+
 -- chatLoggingResult is true/false/nil, already resolved by sampleChatLogging above --
 -- kept as a plain parameter (not re-sampled in here) so this stays synchronous and
 -- StaticPopup_Show can be called directly from the sampleChatLogging callback.
@@ -553,7 +593,7 @@ local function buildStatusText(chatLoggingResult)
   elseif chatLoggingSeenOnThisSession then
     chatLogging = "|cffc0902fReads OFF right now, but was ON earlier this session|r -- possibly a stale read. Trust Interface Options if it disagrees."
   else
-    chatLogging = "|cffa83232Chat logging is OFF|r -- type /chatlog once, then go ALL THE WAY BACK to the character select screen (Log Out) and log back in. /reload is NOT enough."
+    chatLogging = "|cffa83232Chat logging is OFF|r -- type /chatlog (works right away, no logout needed). It resets whenever you log out to the character screen."
   end
   -- The check time is there so a Refresh visibly did something even when nothing changed.
   return logging .. "\n" .. chatLogging .. "\n\n/gtloot on|off to change -- /gtloot scan to pull in anything missed\n|cff8a8a8aChecked " .. date("%H:%M:%S") .. "|r"
@@ -606,7 +646,18 @@ frame:SetScript("OnEvent", function(_, event, ...)
     else
       announce('NOT logging (type /gtloot on to resume).')
     end
-    remindChatLoggingIfOff()
+    -- Chat logging switches itself off every time a character logs out to the character
+    -- screen (confirmed live 2026-09-19), so it has to be turned back on each session --
+    -- done here for the officer instead of relying on them to remember /chatlog. Delayed
+    -- a few seconds so the client has settled (this exact reading was flaky right at
+    -- login before), and automatic (not explicit): it only ever uses the idempotent
+    -- LoggingChat(true) setter, never the /chatlog toggle, so a transient wrong "OFF"
+    -- reading can't flip a genuinely-on setting off. The reminder runs after it, so it
+    -- only nags if that didn't work.
+    C_Timer.After(5, function()
+      if GuildToolsLootDB.enabled then ensureChatLogging(false) end
+      C_Timer.After(1, remindChatLoggingIfOff)
+    end)
 
   elseif event == "PLAYER_ENTERING_WORLD" then
     -- Never prompts for Raid Finder -- recordNeedWin's own isTrackedRaidDifficulty()
@@ -730,6 +781,7 @@ SlashCmdList["GUILDTOOLSLOOT"] = function(msg)
   if arg == "on" then
     GuildToolsLootDB.enabled = true
     announce("logging Need wins.")
+    ensureChatLogging(true)
   elseif arg == "off" then
     GuildToolsLootDB.enabled = false
     announce("NOT logging -- use this for old-content or off-progression runs. /gtloot on to resume.")
