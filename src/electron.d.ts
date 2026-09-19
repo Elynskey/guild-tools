@@ -301,7 +301,8 @@ export interface ElectronAPI {
   openDiscordInvite: () => Promise<void>;
   listRaidSignups: () => Promise<RaidSignupPost[]>;
   getRaidSignup: (id: string) => Promise<RaidSignupPost | null>;
-  createRaidSignup: (raidName: string, teamType: TeamType, signupText: string) => Promise<RaidSignupPost>;
+  /** `channelId` blank/omitted = the raid signups channel from Settings; a Discord channel ID posts this signup there instead. */
+  createRaidSignup: (raidName: string, teamType: TeamType, signupText: string, channelId?: string) => Promise<RaidSignupPost>;
   setRaidSignupAssignments: (id: string, assignments: Record<RaidRole, RaidAssignment[]>) => Promise<RaidSignupPost | null>;
   finalizeRaidSignup: (id: string) => Promise<RaidSignupPost | null>;
   listGotmPosts: () => Promise<GotmPost[]>;

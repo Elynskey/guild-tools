@@ -16,9 +16,9 @@ async function getRaidSignup(id) {
   return store.get(id);
 }
 
-async function createRaidSignup(raidName, teamType, signupText) {
-  if (proxyClient.isAvailable()) return proxyClient.createRaidSignup(raidName, teamType, signupText);
-  return store.create(raidName, teamType, signupText);
+async function createRaidSignup(raidName, teamType, signupText, channelId) {
+  if (proxyClient.isAvailable()) return proxyClient.createRaidSignup(raidName, teamType, signupText, channelId);
+  return store.create(raidName, teamType, signupText, 'prod', channelId);
 }
 
 async function setRaidSignupAssignments(id, assignments) {

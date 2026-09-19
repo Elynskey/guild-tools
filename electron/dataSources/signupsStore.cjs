@@ -80,10 +80,21 @@ function buildEmbed(entry) {
   };
 }
 
-async function create(raidName, teamType, signupText, mode = 'prod') {
+/** A Discord channel ID (a snowflake): 17-20 digits in practice, 15-25 accepted. */
+const CHANNEL_ID_PATTERN = /^\d{15,25}$/;
+
+/** Each post picks its own channel; blank means "use the one from Settings". A non-blank value that isn't a channel ID is rejected rather than silently posting somewhere else. */
+function resolveChannelId(override, settingsDefault) {
+  const wanted = typeof override === 'string' ? override.trim() : '';
+  if (!wanted) return settingsDefault || null;
+  if (!CHANNEL_ID_PATTERN.test(wanted)) throw new Error('That does not look like a Discord channel ID (a long number). Right-click the channel in Discord with Developer Mode on and choose "Copy Channel ID".');
+  return wanted;
+}
+
+async function create(raidName, teamType, signupText, mode = 'prod', channelOverride) {
   if (!raidName || !teamType || !signupText) throw new Error('raidName, teamType, and signupText are all required.');
   const settings = settingsStore.load();
-  const channelId = mode === 'test' ? settings.testRaidSignupsChannelId : settings.raidSignupsChannelId;
+  const channelId = resolveChannelId(channelOverride, mode === 'test' ? settings.testRaidSignupsChannelId : settings.raidSignupsChannelId);
   const entry = {
     id: crypto.randomUUID(),
     raidName,
@@ -156,6 +167,16 @@ function setAssignments(id, assignments, mode = 'prod') {
   return entry;
 }
 
+/** One role's block of the final roster. Backups are a call-up queue, so with more than one they are numbered in the order the officer set. */
+function formatRoleBlock(entry, role) {
+  const list = entry.assignments[role] ?? [];
+  const primary = list.filter((a) => a.tier === 'primary').map((a) => characterOrUsername(entry, a.discordUserId));
+  const backups = list.filter((a) => a.tier === 'backup').map((a) => characterOrUsername(entry, a.discordUserId));
+  const backupText = backups.length > 1 ? backups.map((name, i) => `${i + 1}. ${name}`).join(', ') : backups.join(', ');
+  const backupLabel = backups.length > 1 ? 'Backup (call-up order)' : 'Backup';
+  return `**${ROLE_LABEL[role]}**\nPrimary: ${primary.join(', ') || '—'}\n${backupLabel}: ${backupText || '—'}`;
+}
+
 function characterOrUsername(entry, discordUserId) {
   const signup = entry.signups.find((s) => s.discordUserId === discordUserId);
   if (!signup) return discordUserId;
@@ -174,11 +195,7 @@ async function finalize(id, mode = 'prod') {
   save(posts, mode);
 
   if (entry.discordChannelId) {
-    const lines = ['tank', 'healer', 'dps'].map((role) => {
-      const primary = entry.assignments[role].filter((a) => a.tier === 'primary').map((a) => characterOrUsername(entry, a.discordUserId));
-      const backup = entry.assignments[role].filter((a) => a.tier === 'backup').map((a) => characterOrUsername(entry, a.discordUserId));
-      return `**${ROLE_LABEL[role]}**\nPrimary: ${primary.join(', ') || '—'}\nBackup: ${backup.join(', ') || '—'}`;
-    });
+    const lines = ['tank', 'healer', 'dps'].map((role) => formatRoleBlock(entry, role));
     try {
       await discordPost.postMessage(entry.discordChannelId, {
         content: `📋 **${entry.raidName} — final roster**`,
@@ -192,4 +209,4 @@ async function finalize(id, mode = 'prod') {
   return entry;
 }
 
-module.exports = { load, get, create, addSignup, setAssignments, finalize };
+module.exports = { load, get, create, addSignup, setAssignments, finalize, resolveChannelId, formatRoleBlock };

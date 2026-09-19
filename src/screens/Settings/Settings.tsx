@@ -97,7 +97,7 @@ export function Settings() {
             </div>
 
             <Input
-              label="Raid signups channel"
+              label="Default raid signups channel"
               placeholder="Channel ID"
               value={draft.raidSignupsChannelId}
               onChange={(e) => field('raidSignupsChannelId', e.target.value)}

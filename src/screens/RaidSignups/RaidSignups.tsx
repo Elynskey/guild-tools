@@ -9,6 +9,8 @@ import { Tabs } from '../../design-system/Tabs';
 import { Badge } from '../../design-system/Badge';
 import { Toast } from '../../design-system/Toast';
 import { useRaidSignups } from './useRaidSignups';
+import { backupRank, backupsInOrder } from './backupOrder';
+import { channelIdError } from './channelId';
 import { specIcon, specIconFallback } from '../../scoring/specIcons';
 import { HelpTooltip } from '../../design-system/HelpTooltip';
 import type { AssignmentTier, RaidRole, TeamType } from '../../electron';
@@ -53,18 +55,20 @@ function CreateDialog({
   createError,
 }: {
   onClose: () => void;
-  onCreate: (raidName: string, teamType: TeamType, signupText: string) => Promise<boolean>;
+  onCreate: (raidName: string, teamType: TeamType, signupText: string, channelId: string) => Promise<boolean>;
   creating: boolean;
   createError: string | null;
 }) {
   const [raidName, setRaidName] = useState('');
   const [teamType, setTeamType] = useState<TeamType>('heroic');
   const [signupText, setSignupText] = useState('');
+  const [channelId, setChannelId] = useState('');
 
   // Stays open on failure (createError renders below) so the officer sees what went
   // wrong and can retry -- only closes once the post actually succeeded.
+  const channelProblem = channelIdError(channelId);
   const submit = () => {
-    void onCreate(raidName.trim(), teamType, signupText.trim()).then((ok) => {
+    void onCreate(raidName.trim(), teamType, signupText.trim(), channelId.trim()).then((ok) => {
       if (ok) onClose();
     });
   };
@@ -75,14 +79,22 @@ function CreateDialog({
       eyebrow="Post to Discord"
       onClose={onClose}
       footer={
-        <Button variant="primary" disabled={!raidName.trim() || creating} onClick={submit}>
+        <Button variant="primary" disabled={!raidName.trim() || !!channelProblem || creating} onClick={submit}>
           {creating ? 'Posting…' : 'Post to Discord'}
         </Button>
       }
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-        <Input label="Raid name" placeholder="e.g. Liberation of Undermine" value={raidName} onChange={(e) => setRaidName(e.target.value)} autoFocus />
+        <Input label="Raid name" placeholder="e.g. The Venomous Abyss — Season 1" value={raidName} onChange={(e) => setRaidName(e.target.value)} autoFocus />
         <Select label="Team" value={teamType} onChange={(e) => setTeamType(e.target.value as TeamType)} options={[{ value: 'heroic', label: 'Heroic Progression' }, { value: 'alt', label: 'Alt Raid' }]} />
+        <Input
+          label="Discord channel (optional)"
+          placeholder="Channel ID -- blank uses the raid signups channel from Settings"
+          value={channelId}
+          onChange={(e) => setChannelId(e.target.value)}
+          error={channelProblem ?? undefined}
+          hint="Posts this signup, its role buttons and its final roster in that channel. Right-click the channel in Discord (Developer Mode on) and choose Copy Channel ID."
+        />
         <Input multiline label="Signup announcement" placeholder="What raiders should know before signing up" value={signupText} onChange={(e) => setSignupText(e.target.value)} />
         {createError && <Toast tone="danger" title="Couldn't post" message={createError} />}
       </div>
@@ -105,7 +117,7 @@ export function RaidSignups() {
               <div className="crd-eyebrow">Casual Raid Days · The Scryers · est. 2010</div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: 'var(--font-display)', fontSize: 'var(--text-title-l)', fontWeight: 600, letterSpacing: '.06em', color: 'var(--text-strong)', lineHeight: 1.1 }}>
                 Raid Signups
-                <HelpTooltip text="Post Heroic Progression and Alt Raid signups to Discord, assign primary/backup by hand, then post the final roster." />
+                <HelpTooltip text="Post Heroic Progression and Alt Raid signups to Discord for the season, assign primaries and put the backups in call-up order by hand, then post the final roster." />
               </div>
             </div>
           </Link>
@@ -233,7 +245,7 @@ export function RaidSignups() {
                               size="sm"
                               onClick={() => rs.setAssignment(role, s.discordUserId, assignment?.tier === tier ? null : tier)}
                             >
-                              {tier === 'primary' ? 'Primary' : 'Backup'}
+                              {tier === 'primary' ? 'Primary' : assignment?.tier === 'backup' ? `Backup #${backupRank(rs.selected!.assignments[role], s.discordUserId)}` : 'Backup'}
                             </Button>
                           ))}
                         </div>
@@ -242,6 +254,30 @@ export function RaidSignups() {
                   })
               )}
             </div>
+
+            {backupsInOrder(rs.selected.assignments[role]).length > 0 && (
+              <div className="crd-card" style={{ marginTop: 16, padding: '16px 20px' }}>
+                <div className="crd-eyebrow" style={{ marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  {ROLE_LABEL[role]} backup order
+                  <HelpTooltip text="The season's call-up order. When a primary can't make it, ask the first backup first, then the next. Someone newly marked Backup goes to the end of the line." />
+                </div>
+                <div style={{ fontSize: 'var(--text-micro)', color: 'var(--text-faint)', marginBottom: 10 }}>First in the list is asked first. Use the arrows to reorder.</div>
+                {backupsInOrder(rs.selected.assignments[role]).map((a, i, all) => {
+                  const signup = rs.selected!.signups.find((x) => x.discordUserId === a.discordUserId);
+                  return (
+                    <div key={a.discordUserId} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 0', borderTop: i === 0 ? 'none' : '1px solid var(--border-hairline)' }}>
+                      <div style={{ width: 28, fontFamily: 'var(--font-mono)', color: 'var(--text-gold)' }}>#{i + 1}</div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <span style={{ fontWeight: 600, color: 'var(--text-strong)' }}>{signup?.characterName ?? a.discordUserId}</span>
+                        {signup && rs.classFor(signup) && <span style={{ marginLeft: 8, fontSize: 'var(--text-micro)', color: 'var(--text-muted)' }}>{rs.specsFor(signup)?.length ? `${rs.specsFor(signup)!.join('/')} ${rs.classFor(signup)}` : rs.classFor(signup)}</span>}
+                      </div>
+                      <Button variant="secondary" size="sm" iconLeft="chevron-up" disabled={i === 0} aria-label={`Move ${signup?.characterName ?? 'backup'} earlier`} title="Move earlier" onClick={() => rs.moveBackup(role, a.discordUserId, 'up')} />
+                      <Button variant="secondary" size="sm" iconLeft="chevron-down" disabled={i === all.length - 1} aria-label={`Move ${signup?.characterName ?? 'backup'} later`} title="Move later" onClick={() => rs.moveBackup(role, a.discordUserId, 'down')} />
+                    </div>
+                  );
+                })}
+              </div>
+            )}
 
             <div style={{ marginTop: 20, display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'flex-start' }}>
               <Button onClick={rs.finalize} disabled={rs.finalizing || !!rs.selected.finalizedAt} iconLeft="send">

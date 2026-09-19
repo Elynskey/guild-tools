@@ -4,6 +4,7 @@ import { getRoster } from '../../data/rosterSource';
 import type { Raider } from '../../scoring/types';
 import { utilityGainedBy, raidBuffCoverage, dpsRangeForSpecs } from '../../raid/raidBuffs';
 import { createAssignmentSaver } from './assignmentSaver';
+import { moveBackup as moveBackupIn } from './backupOrder';
 
 const ROLES: RaidRole[] = ['tank', 'healer', 'dps'];
 type Assignments = Record<RaidRole, RaidAssignment[]>;
@@ -51,12 +52,12 @@ export function useRaidSignups() {
 
   /** Returns whether it succeeded so the "New" dialog can stay open and show the error on failure, instead of closing immediately and discarding it. */
   const create = useCallback(
-    (raidName: string, teamType: TeamType, signupText: string): Promise<boolean> => {
+    (raidName: string, teamType: TeamType, signupText: string, channelId: string): Promise<boolean> => {
       if (!electron) return Promise.resolve(false);
       setCreating(true);
       setCreateError(null);
       return electron
-        .createRaidSignup(raidName, teamType, signupText)
+        .createRaidSignup(raidName, teamType, signupText, channelId || undefined)
         .then((post) => {
           setPosts((prev) => [post, ...prev]);
           setSelectedId(post.id);
@@ -148,6 +149,17 @@ export function useRaidSignups() {
     [electron, selected, saver],
   );
 
+  /** Moves a backup one place earlier/later in the call-up order for this role. */
+  const moveBackup = useCallback(
+    (role: RaidRole, discordUserId: string, direction: 'up' | 'down') => {
+      if (!electron || !selected) return;
+      setAssignmentError(null);
+      const next = saver.edit(selected.id, selected.assignments, (current) => ({ ...current, [role]: moveBackupIn(current[role], discordUserId, direction) }));
+      setPosts((prev) => prev.map((p) => (p.id === selected.id ? { ...p, assignments: next } : p)));
+    },
+    [electron, selected, saver],
+  );
+
   const finalize = useCallback(() => {
     if (!electron || !selected) return;
     setFinalizing(true);
@@ -186,6 +198,7 @@ export function useRaidSignups() {
     compSummary,
     buffCoverage,
     setAssignment,
+    moveBackup,
     savingAssignments,
     assignmentError,
     finalize,

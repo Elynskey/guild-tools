@@ -247,8 +247,8 @@ ipcMain.handle('settings:save', async (_event, settings) => {
 });
 ipcMain.handle('raidSignups:list', async () => listRaidSignups());
 ipcMain.handle('raidSignups:get', async (_event, id) => getRaidSignup(id));
-ipcMain.handle('raidSignups:create', async (_event, raidName, teamType, signupText) => {
-  const result = await createRaidSignup(raidName, teamType, signupText);
+ipcMain.handle('raidSignups:create', async (_event, raidName, teamType, signupText, channelId) => {
+  const result = await createRaidSignup(raidName, teamType, signupText, channelId);
   track('raid_signup_created', 'Raid Signups');
   return result;
 });

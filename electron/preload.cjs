@@ -49,7 +49,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openDiscordInvite: () => ipcRenderer.invoke('discordBot:openInvite'),
   listRaidSignups: () => ipcRenderer.invoke('raidSignups:list'),
   getRaidSignup: (id) => ipcRenderer.invoke('raidSignups:get', id),
-  createRaidSignup: (raidName, teamType, signupText) => ipcRenderer.invoke('raidSignups:create', raidName, teamType, signupText),
+  createRaidSignup: (raidName, teamType, signupText, channelId) => ipcRenderer.invoke('raidSignups:create', raidName, teamType, signupText, channelId),
   setRaidSignupAssignments: (id, assignments) => ipcRenderer.invoke('raidSignups:setAssignments', id, assignments),
   finalizeRaidSignup: (id) => ipcRenderer.invoke('raidSignups:finalize', id),
   listGotmPosts: () => ipcRenderer.invoke('gotm:list'),

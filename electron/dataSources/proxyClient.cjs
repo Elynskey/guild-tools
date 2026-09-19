@@ -153,8 +153,8 @@ async function getRaidSignup(id) {
   return proxyFetchJson(`/raid-signups/${encodeURIComponent(id)}`);
 }
 
-async function createRaidSignup(raidName, teamType, signupText) {
-  return proxyFetchJson('/raid-signups', { method: 'POST', body: JSON.stringify({ raidName, teamType, signupText }) });
+async function createRaidSignup(raidName, teamType, signupText, channelId) {
+  return proxyFetchJson('/raid-signups', { method: 'POST', body: JSON.stringify({ raidName, teamType, signupText, channelId }) });
 }
 
 async function setRaidSignupAssignments(id, assignments) {
