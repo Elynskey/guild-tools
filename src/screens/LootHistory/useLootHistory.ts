@@ -8,6 +8,7 @@ import type { BossLootTable, LootRecordPatch, ManualLootRecordInput } from '../.
 type LogStatus = 'ok' | 'not_configured' | 'addon_not_installed';
 type WowPathConfig = { configured: string | null; resolved: string | null; valid: boolean; characterName: string | null };
 type ChatTailStatus = Awaited<ReturnType<NonNullable<typeof window.electronAPI>['getChatTailStatus']>>;
+type CaptureHeartbeat = Awaited<ReturnType<NonNullable<typeof window.electronAPI>['getLootCaptureHeartbeats']>>['heartbeats'][number];
 
 export function useLootHistory() {
   const electron = window.electronAPI;
@@ -17,6 +18,7 @@ export function useLootHistory() {
   const [query, setQuery] = useState('');
   const [wowPath, setWowPathState] = useState<WowPathConfig | null>(null);
   const [chatTailStatus, setChatTailStatus] = useState<ChatTailStatus | null>(null);
+  const [captureHeartbeats, setCaptureHeartbeats] = useState<CaptureHeartbeat[]>([]);
   const [savingCharacterName, setSavingCharacterName] = useState(false);
   const [installing, setInstalling] = useState(false);
   const [installMessage, setInstallMessage] = useState<string | null>(null);
@@ -73,6 +75,21 @@ export function useLootHistory() {
     const interval = setInterval(loadChatTailStatus, 10_000);
     return () => clearInterval(interval);
   }, [loadChatTailStatus]);
+
+  // Raid-wide view of the same signal -- "am I logging" only answers half the real
+  // question, which is "is the RAID covered by at least one officer's app right now."
+  // Only meaningful with a shared proxy (see lootCaptureHeartbeats.cjs); resolves to an
+  // empty list with no electron/no proxy, same graceful-degradation as everywhere else.
+  const loadCaptureHeartbeats = useCallback(() => {
+    if (!electron) return;
+    electron.getLootCaptureHeartbeats().then((result) => setCaptureHeartbeats(result.heartbeats));
+  }, [electron]);
+
+  useEffect(() => {
+    loadCaptureHeartbeats();
+    const interval = setInterval(loadCaptureHeartbeats, 10_000);
+    return () => clearInterval(interval);
+  }, [loadCaptureHeartbeats]);
 
   // Name -> itemId, built from this tier's known loot table -- a fallback for records
   // whose itemId never got captured. Confirmed live 2026-09-12: C_LootHistory's
@@ -322,6 +339,7 @@ export function useLootHistory() {
     setCharacterName,
     savingCharacterName,
     chatTailStatus,
+    captureHeartbeats,
     installAddon,
     installing,
     installMessage,

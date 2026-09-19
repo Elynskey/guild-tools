@@ -265,6 +265,7 @@ export interface ElectronAPI {
     lastCaptureAt: number | null;
     chatLog: { path: string | null; exists: boolean; active: boolean };
   }>;
+  getLootCaptureHeartbeats: () => Promise<{ heartbeats: { officerName: string; chatLogActive: boolean; lastSeenAt: number }[] }>;
   pickWowFolder: () => Promise<string | null>;
   installLootAddon: () => Promise<{ ok: true; dest: string } | { ok: false; error: string }>;
   getSettings: () => Promise<GuildToolsSettings>;

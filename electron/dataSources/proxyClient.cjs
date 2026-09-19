@@ -241,6 +241,14 @@ async function postLootNightToDiscord(messages) {
   return proxyFetchJson('/loot-records/post-night', { method: 'POST', body: JSON.stringify({ messages }) });
 }
 
+async function sendLootCaptureHeartbeat(officerName, chatLogActive) {
+  return proxyFetchJson('/loot-capture/heartbeat', { method: 'POST', body: JSON.stringify({ officerName, chatLogActive }) });
+}
+
+async function getLootCaptureHeartbeats() {
+  return proxyFetchJson('/loot-capture/heartbeats');
+}
+
 async function sendFeedback(payload) {
   return proxyFetchJson('/feedback', { method: 'POST', body: JSON.stringify(payload) });
 }
@@ -272,6 +280,8 @@ module.exports = {
   getSharedLootRecords,
   syncLootRecords,
   postLootNightToDiscord,
+  sendLootCaptureHeartbeat,
+  getLootCaptureHeartbeats,
   getSettings,
   saveSettings,
   listRaidSignups,

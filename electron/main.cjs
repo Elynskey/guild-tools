@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { getProxyConfig } = require('./dataSources/proxyConfig.cjs');
+const proxyClient = require('./dataSources/proxyClient.cjs');
 
 // Without this, Electron derives the app name (and therefore the userData path)
 // from package.json's "name" field ("raider-status"), not the "Guild Tools"
@@ -221,6 +222,15 @@ ipcMain.handle('lootLog:setCharacterName', async (_event, name) => {
   return getWowPathConfig();
 });
 ipcMain.handle('lootLog:getChatTailStatus', async () => ({ ...chatTailStatus, chatLog: getChatLogStatus() }));
+ipcMain.handle('lootLog:getCaptureHeartbeats', async () => {
+  if (!proxyClient.isAvailable()) return { heartbeats: [] };
+  try {
+    return await proxyClient.getLootCaptureHeartbeats();
+  } catch (err) {
+    console.error('[lootCaptureHeartbeats] Fetch failed:', err);
+    return { heartbeats: [] };
+  }
+});
 ipcMain.handle('lootLog:pickFolder', async () => {
   const win = BrowserWindow.getFocusedWindow();
   const result = await dialog.showOpenDialog(win, { properties: ['openDirectory'], title: 'Select your World of Warcraft folder (the one containing "_retail_")' });
@@ -350,6 +360,12 @@ app.whenReady().then(() => {
   // above) -- the whole point of that card is to make "is this actually working right
   // now" observable from inside the app, after this exact mechanism silently captured
   // nothing for a full raid night with no error anywhere pointing at why.
+  //
+  // Also reports a heartbeat to the proxy (when configured) so an officer can see
+  // whether ANYONE's Guild Tools app is actively watching a live chat log right now --
+  // a single officer's own local status only answers "am I logging," not "is the raid
+  // covered at all." Fire-and-forget: a failed heartbeat just means this officer drops
+  // out of everyone else's list for a beat, never worth surfacing as an error here.
   const runChatTailPoll = () => {
     syncChatTailCapture()
       .then((result) => {
@@ -365,6 +381,10 @@ app.whenReady().then(() => {
         chatTailStatus.lastPollAt = Date.now();
         chatTailStatus.lastStatus = 'error';
       });
+
+    if (proxyClient.isAvailable() && authState?.displayName) {
+      proxyClient.sendLootCaptureHeartbeat(authState.displayName, getChatLogStatus().active).catch(() => {});
+    }
   };
   runChatTailPoll();
   const chatTailInterval = setInterval(runChatTailPoll, 10_000);

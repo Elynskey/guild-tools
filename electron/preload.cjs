@@ -39,6 +39,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setWowPath: (wowPath) => ipcRenderer.invoke('lootLog:setWowPath', wowPath),
   setCharacterName: (name) => ipcRenderer.invoke('lootLog:setCharacterName', name),
   getChatTailStatus: () => ipcRenderer.invoke('lootLog:getChatTailStatus'),
+  getLootCaptureHeartbeats: () => ipcRenderer.invoke('lootLog:getCaptureHeartbeats'),
   pickWowFolder: () => ipcRenderer.invoke('lootLog:pickFolder'),
   installLootAddon: () => ipcRenderer.invoke('lootLog:installAddon'),
   getSettings: () => ipcRenderer.invoke('settings:get'),

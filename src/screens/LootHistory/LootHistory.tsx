@@ -25,6 +25,37 @@ function timeAgo(ms: number | null): string {
 // lootChatTail.cjs). Previously the only signals were an in-game popup and chat lines
 // that scroll away; this makes the same fact checkable from the app itself, updating
 // every 10s to match main.cjs's own poll cadence.
+// "Am I logging" only answers half the real question during a raid -- Group Loot
+// broadcasts to everyone, so capture works as long as AT LEAST ONE officer's app has
+// chat logging active, not necessarily this one. Reads the proxy-aggregated heartbeat
+// list (lootCaptureHeartbeats.cjs, one entry per officer whose app checked in within
+// the last ~30s) so that's answerable from any officer's screen, not just "for me."
+function RaidCoverageRow({ heartbeats }: { heartbeats: { officerName: string; chatLogActive: boolean; lastSeenAt: number }[] }) {
+  if (heartbeats.length === 0) {
+    return (
+      <div style={{ fontSize: 'var(--text-micro)', color: 'var(--text-faint)' }}>
+        No other officers' Guild Tools apps have reported in yet -- can't confirm raid-wide coverage from here.
+      </div>
+    );
+  }
+
+  const activeOfficers = heartbeats.filter((h) => h.chatLogActive);
+  const covered = activeOfficers.length > 0;
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+      <Badge tone={covered ? 'gold' : 'warning'} dot>
+        {covered ? 'Raid covered' : 'No one logging'}
+      </Badge>
+      <span style={{ fontSize: 'var(--text-body-s)', color: 'var(--text-body)' }}>
+        {covered
+          ? `${activeOfficers.length} of ${heartbeats.length} officer app${heartbeats.length === 1 ? '' : 's'} reporting in has chat logging active (${activeOfficers.map((h) => h.officerName).join(', ')}).`
+          : `${heartbeats.length} officer app${heartbeats.length === 1 ? '' : 's'} reporting in, but none have chat logging active -- live capture won't work for anyone until someone runs /chatlog.`}
+      </span>
+    </div>
+  );
+}
+
 function LiveCaptureCard({ lh }: { lh: ReturnType<typeof useLootHistory> }) {
   const [nameDraft, setNameDraft] = useState(lh.wowPath?.characterName ?? '');
   useEffect(() => {
@@ -75,6 +106,7 @@ function LiveCaptureCard({ lh }: { lh: ReturnType<typeof useLootHistory> }) {
           </span>
         )}
       </div>
+      <RaidCoverageRow heartbeats={lh.captureHeartbeats} />
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
         <label style={{ fontSize: 'var(--text-body-s)', color: 'var(--text-muted)' }} htmlFor="gtloot-character-name">
           Your character name (for your own live wins):
