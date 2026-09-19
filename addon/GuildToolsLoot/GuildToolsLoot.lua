@@ -92,14 +92,22 @@ end
 -- writes at all. It tails WoW's own chat LOG FILE on disk instead (continuous, unlike
 -- SavedVariables), which Blizzard's client only writes if chat logging is turned on
 -- via /chatlog -- a one-time, easy-to-forget setting with no in-game indicator of its
--- own. IsChatLogging() is the same check the default UI's own "Log all chat" option
--- reads, guarded like every other less-than-certain API in this file.
+-- own. This is the same check the default UI's own "Log all chat" option reads,
+-- guarded like every other less-than-certain API in this file.
 --
--- IsChatLogging() itself isn't fully trustworthy either -- confirmed live 2026-09-12,
--- same day: it read OFF for an officer who had chat logging genuinely on. Root cause
--- unconfirmed (possibly a CVar that hasn't settled yet at the moment this happens to be
--- called). Two mitigations, not a real fix (there's no file access from in-game Lua to
--- verify against directly):
+-- The underlying API moved: confirmed live 2026-09-19 that the global IsChatLogging()
+-- this used to call no longer exists at all on this client (`_G.IsChatLogging` reads
+-- nil) -- a real officer report of "Chat logging status unavailable on this client"
+-- traced back to that, not a guess. A live scan of C_ChatInfo's own keys (not
+-- documentation, an actual `for k in pairs(C_ChatInfo)` on a real client) found the
+-- replacement: C_ChatInfo.IsLoggingChat(). Wrapped in isChatLoggingAPI() rather than
+-- called directly everywhere so a future rename only needs updating in one place.
+--
+-- The underlying reading still isn't fully trustworthy even with the right function --
+-- confirmed live 2026-09-12 (back when it was still the global): it read OFF for an
+-- officer who had chat logging genuinely on. Root cause unconfirmed (possibly a CVar
+-- that hasn't settled yet at the moment this happens to be called). Two mitigations,
+-- not a real fix (there's no file access from in-game Lua to verify against directly):
 --   1. Once a true reading is ever seen this session, remembered -- a later false
 --      reading is reported as "reads off, but was on earlier" rather than a flat
 --      contradiction of something the officer already confirmed with their own eyes.
@@ -107,9 +115,13 @@ end
 --      apart, before reporting -- cheap insurance against a one-off transient read.
 local chatLoggingSeenOnThisSession = false
 
+local function isChatLoggingAPI()
+  return C_ChatInfo and C_ChatInfo.IsLoggingChat
+end
+
 local function chatLoggingStatusLine()
-  if not IsChatLogging then return 'unavailable on this client', nil end
-  local isOn = IsChatLogging()
+  if not isChatLoggingAPI() then return 'unavailable on this client', nil end
+  local isOn = C_ChatInfo.IsLoggingChat()
   if isOn then
     chatLoggingSeenOnThisSession = true
     return 'ON', true
@@ -504,25 +516,25 @@ StaticPopupDialogs["GUILDTOOLSLOOT_CONFIRM"] = {
 -- /gtloot with no argument (the "just checking" case) shows this instead of only
 -- printing to chat; /gtloot on|off|scan stay chat-only since those are already
 -- confirming an action the player just took, not something they need to go verify.
--- Samples IsChatLogging() twice, ~0.5s apart, before this on-demand check reports --
--- cheap insurance against the one-off transient false read confirmed live 2026-09-12
--- (an officer had chat logging genuinely on and this read it as off). Not a fix for a
--- wrong reading that persists across both samples -- there's no way to check the
--- actual log file from in-game Lua -- just narrows the window a truly transient hiccup
--- could land in. Only used here, not in the passive login/raid-entry reminder or the
--- capture-time warning -- those fire automatically and shouldn't add a delay.
+-- Samples C_ChatInfo.IsLoggingChat() twice, ~0.5s apart, before this on-demand check
+-- reports -- cheap insurance against the one-off transient false read confirmed live
+-- 2026-09-12 (an officer had chat logging genuinely on and this read it as off). Not a
+-- fix for a wrong reading that persists across both samples -- there's no way to check
+-- the actual log file from in-game Lua -- just narrows the window a truly transient
+-- hiccup could land in. Only used here, not in the passive login/raid-entry reminder or
+-- the capture-time warning -- those fire automatically and shouldn't add a delay.
 local function sampleChatLogging(callback)
-  if not IsChatLogging then
+  if not isChatLoggingAPI() then
     callback(nil)
     return
   end
-  if IsChatLogging() then
+  if C_ChatInfo.IsLoggingChat() then
     chatLoggingSeenOnThisSession = true
     callback(true)
     return
   end
   C_Timer.After(0.5, function()
-    local second = IsChatLogging()
+    local second = C_ChatInfo.IsLoggingChat()
     if second then chatLoggingSeenOnThisSession = true end
     callback(second)
   end)
