@@ -80,7 +80,10 @@ export interface PullRaider {
   name: string;
   role: 'tank' | 'healer' | 'dps' | null;
   metric: 'dps' | 'hps' | 'survivalPercent' | null;
+  /** DPS/HPS: damage or healing per second over the fight time this raider was ALIVE (time after a death doesn't count; a battle rez brings them back). Survivability: a within-role percentile. */
   value: number | null;
+  /** DPS/HPS only: the same total over time actually spent dealing it -- drops idle gaps while alive too, so it always reads higher than `value`. */
+  activeValue?: number | null;
 }
 
 export interface PullDeath {

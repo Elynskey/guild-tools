@@ -46,7 +46,7 @@ export function PullFeedbackHeader({ nights, selectedCode, onSelect }: PullFeedb
               }}
             >
               Pull Feedback
-              <HelpTooltip text="Any past raid night, pull by pull -- wipe or kill, deaths, and the mechanics that need the most work." />
+              <HelpTooltip text="Any past raid night, pull by pull -- wipe or kill, deaths, and the mechanics that need the most work. Open a pull to see each raider's DPS/HPS: the big number is per second of fight time they were alive; 'active' is per second of time they were actually dealing it." />
             </div>
           </div>
         </Link>

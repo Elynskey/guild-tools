@@ -1,8 +1,15 @@
 // Warcraft Logs API v2 (GraphQL), OAuth client-credentials.
 //
 // Verified live against real reports for "Casual Raid Days" / The Scryers:
-//   - table(dataType: DamageDone) entries: { name, total, activeTime, ... } — total
+//   - table(dataType: DamageDone) entries: { name, id, total, activeTime, ... } — total
 //     is damage, activeTime is ms of uptime (NOT full fight duration), confirmed real.
+//     DPS everywhere in this app (scoring AND the pull view's headline number) is over
+//     TIME ALIVE instead -- see throughputOverTimeAlive; activeTime is only shown as a
+//     secondary "active" figure in the pull view.
+//   - table(dataType: Deaths) rows carry { id, fight, timestamp } (timestamp is ms on
+//     the same report-relative clock as a fight's startTime/endTime), and resurrects
+//     come from events(filterExpression: "type = 'resurrect'") -- there's no
+//     Resurrects event type -- both confirmed live 2026-09-19.
 //   - table(dataType: Deaths) entries: one row per death event, { name, fight,
 //     damage: { abilities: [{ name, total }, ...] }, ... } — abilities sorted
 //     descending by total, scoped tightly around the death itself (not the whole
@@ -173,6 +180,73 @@ function sumThroughputByName(entries) {
   return dps;
 }
 
+/**
+ * Milliseconds each actor spent dead in ONE fight -- from a death until their next
+ * resurrect (battle rez, soulstone, ...), or until the fight ended if they never got
+ * one. Keyed by WCL actor id (Deaths rows carry `id`, resurrect events carry
+ * `targetID`). Confirmed live 2026-09-19 against a real report: two raiders died twice
+ * and were battle-rezzed in between (one was dead 114s before the rez), so "time until
+ * first death" would badly undercount them -- and there's no Resurrects event type in
+ * WCL's schema, only a `type = 'resurrect'` filter over the all-events stream.
+ */
+function deadMsByActorId(deathEntries, resurrectEvents, fightEndTime) {
+  const rezByTarget = new Map();
+  for (const ev of [...resurrectEvents].sort((a, b) => a.timestamp - b.timestamp)) {
+    const list = rezByTarget.get(ev.targetID) ?? [];
+    list.push(ev.timestamp);
+    rezByTarget.set(ev.targetID, list);
+  }
+
+  const dead = new Map();
+  for (const death of [...deathEntries].sort((a, b) => a.timestamp - b.timestamp)) {
+    const rezzes = rezByTarget.get(death.id) ?? [];
+    const rezIdx = rezzes.findIndex((t) => t > death.timestamp);
+    const end = rezIdx >= 0 ? Math.min(rezzes.splice(rezIdx, 1)[0], fightEndTime) : fightEndTime;
+    dead.set(death.id, (dead.get(death.id) ?? 0) + Math.max(0, end - death.timestamp));
+  }
+  return dead;
+}
+
+/**
+ * Per-second throughput over TIME ALIVE: total damage/healing divided by the fight
+ * time the player was actually alive for, summed only over fights they appear in (so
+ * sitting a boss out doesn't drag their number down). This is what "total fight, not
+ * counting time after death" means -- the same thing Warcraft Logs' "Ignore Events
+ * After Player Deaths" toggle approximates, and what the Minimum DPS setting's own
+ * hint ("damage/time-alive") has always described. NOT sumThroughputByName's
+ * `activeTime` denominator, which also drops idle gaps while alive (movement, stuns)
+ * and so reads ~30-60% higher than a WCL Summary screen for the same fight.
+ *
+ * @param {Array<{ durationMs: number, entries: object[], deadMsById: Map<number, number> }>} perFight
+ */
+function throughputOverTimeAlive(perFight) {
+  const totals = new Map();
+  for (const { durationMs, entries, deadMsById } of perFight) {
+    const aliveCounted = new Set(); // one alive-time credit per name per fight, even if a name has 2+ rows (e.g. same-named pets)
+    for (const e of entries) {
+      const prev = totals.get(e.name) ?? { total: 0, aliveMs: 0 };
+      prev.total += e.total ?? 0;
+      if (!aliveCounted.has(e.name)) {
+        aliveCounted.add(e.name);
+        prev.aliveMs += Math.max(0, durationMs - (deadMsById.get(e.id) ?? 0));
+      }
+      totals.set(e.name, prev);
+    }
+  }
+  const perSecond = new Map();
+  for (const [name, { total, aliveMs }] of totals) perSecond.set(name, aliveMs > 0 ? total / (aliveMs / 1000) : 0);
+  return perSecond;
+}
+
+async function fetchResurrects(code, fightIds) {
+  if (fightIds.length === 0) return [];
+  const data = await graphql(
+    `query($code: String!, $fightIDs: [Int]!, $filter: String!) { reportData { report(code: $code) { events(fightIDs: $fightIDs, dataType: All, filterExpression: $filter, hostilityType: Friendlies, limit: 10000) { data } } } }`,
+    { code, fightIDs: fightIds, filter: "type = 'resurrect'" },
+  );
+  return data.reportData.report.events?.data ?? [];
+}
+
 function countDeathsByName(entries) {
   const counts = new Map();
   for (const e of entries) counts.set(e.name, (counts.get(e.name) ?? 0) + 1);
@@ -306,7 +380,6 @@ function extractActualIdentity(ranking) {
 async function fetchReportAggregate(code, excludedBossNames = new Set()) {
   const fights = await fetchFights(code);
   const killFightIds = fights.filter((f) => f.kill).map((f) => f.id);
-  const dpsFightIds = fights.filter((f) => f.kill && !excludedBossNames.has(f.name)).map((f) => f.id);
   const heroicKillEncounterIds = fights.filter((f) => f.kill && f.difficulty === HEROIC_DIFFICULTY).map((f) => f.encounterID);
   const fightNameById = new Map(fights.map((f) => [f.id, f.name]));
 
@@ -314,11 +387,17 @@ async function fetchReportAggregate(code, excludedBossNames = new Set()) {
     return { dps: new Map(), hps: new Map(), damageTaken: new Map(), deaths: new Map(), deathCauses: new Map(), pullCount: 0, healerPercent: new Map(), tankPercent: new Map(), actualIdentity: new Map(), heroicKillEncounterIds, actorServers: new Map() };
   }
 
-  const [damageEntries, healingEntries, damageTakenEntries, deathEntries, ranking, actorServers] = await Promise.all([
-    fetchTable(code, dpsFightIds, 'DamageDone'),
+  // DamageDone is fetched per fight (not one combined table) so each player's time
+  // alive can be measured against only the fights they were actually in -- see
+  // throughputOverTimeAlive. Deaths/resurrects stay one combined call each; every row
+  // carries its `fight` id to split them back out.
+  const dpsFights = fights.filter((f) => f.kill && !excludedBossNames.has(f.name));
+  const [damageByFight, healingEntries, damageTakenEntries, deathEntries, resurrects, ranking, actorServers] = await Promise.all([
+    Promise.all(dpsFights.map((f) => fetchTable(code, [f.id], 'DamageDone'))),
     fetchTable(code, killFightIds, 'Healing'),
     fetchTable(code, killFightIds, 'DamageTaken'),
     fetchTable(code, killFightIds, 'Deaths'),
+    fetchResurrects(code, killFightIds),
     fetchRankingsForFight(code, killFightIds[killFightIds.length - 1]),
     fetchReportActorServers(code),
   ]);
@@ -328,8 +407,18 @@ async function fetchReportAggregate(code, excludedBossNames = new Set()) {
   const hps = sumThroughputByName(healingEntries);
   const damageTaken = sumThroughputByName(damageTakenEntries);
 
+  const dpsPerFight = dpsFights.map((f, i) => ({
+    durationMs: f.endTime - f.startTime,
+    entries: damageByFight[i],
+    deadMsById: deadMsByActorId(
+      deathEntries.filter((d) => d.fight === f.id),
+      resurrects.filter((r) => r.fight === f.id),
+      f.endTime,
+    ),
+  }));
+
   return {
-    dps: sumThroughputByName(damageEntries),
+    dps: throughputOverTimeAlive(dpsPerFight),
     hps,
     // Exposed (not just consumed locally below) so fetchWarcraftLogs can pool it
     // across every report this tier for the season-wide tank percentile.
@@ -698,7 +787,7 @@ async function fetchRaidNights(guild, tierZoneName) {
  * tier-wide pipeline) and applied to every pull in the report, since nobody swaps main
  * spec mid-raid-night -- wipes have no rankings of their own to resolve it from.
  *
- * @returns {Promise<{ pulls: Array<{ fightId: number, pullNumber: number, boss: string, kill: boolean, bossPercentage: number|null, durationMs: number, raiders: Array<{name: string, role: string|null, metric: 'dps'|'hps'|'survivalPercent'|null, value: number|null}>, deaths: Array<{name: string, ability: string}>, mechanicMisses: Array<{name: string, ability: string, what: string, fix: string}> }> }>}
+ * @returns {Promise<{ pulls: Array<{ fightId: number, pullNumber: number, boss: string, kill: boolean, bossPercentage: number|null, durationMs: number, raiders: Array<{name: string, role: string|null, metric: 'dps'|'hps'|'survivalPercent'|null, value: number|null, activeValue?: number|null}>, deaths: Array<{name: string, ability: string}>, mechanicMisses: Array<{name: string, ability: string, what: string, fix: string}> }> }>}
  */
 async function fetchPullBreakdown(code, roleByName) {
   const fights = await fetchFights(code);
@@ -715,15 +804,25 @@ async function fetchPullBreakdown(code, roleByName) {
   const pulls = await Promise.all(
     fights.map(async (fight, idx) => {
       const fightIds = [fight.id];
-      const [damageEntries, healingEntries, deathEntries, damageTakenEntries] = await Promise.all([
+      const [damageEntries, healingEntries, deathEntries, damageTakenEntries, resurrects] = await Promise.all([
         fetchTable(code, fightIds, 'DamageDone'),
         fetchTable(code, fightIds, 'Healing'),
         fetchTable(code, fightIds, 'Deaths'),
         fetchTable(code, fightIds, 'DamageTaken'),
+        fetchResurrects(code, fightIds),
       ]);
 
-      const dps = sumThroughputByName(damageEntries);
-      const hps = sumThroughputByName(healingEntries);
+      // Both flavors shown side by side in the pull view: the headline number is
+      // damage/healing over TIME ALIVE (matches how scoring measures it), `active*` is
+      // over time actually dealing it (drops idle gaps too, so it reads higher) -- two
+      // different denominators over the same totals, which is why Warcraft Logs' own
+      // full-fight DPS never matched what this screen used to show.
+      const durationMs = fight.endTime - fight.startTime;
+      const deadMsById = deadMsByActorId(deathEntries, resurrects, fight.endTime);
+      const dps = throughputOverTimeAlive([{ durationMs, entries: damageEntries, deadMsById }]);
+      const hps = throughputOverTimeAlive([{ durationMs, entries: healingEntries, deadMsById }]);
+      const activeDps = sumThroughputByName(damageEntries);
+      const activeHps = sumThroughputByName(healingEntries);
       const damageTaken = sumThroughputByName(damageTakenEntries);
       const survivalPercent = computeLocalPercentiles(damageTaken, resolveRole, 'tank', false);
       const deathNames = new Set(deathEntries.map((e) => e.name));
@@ -746,8 +845,8 @@ async function fetchPullBreakdown(code, roleByName) {
       const names = new Set([...dps.keys(), ...hps.keys(), ...damageTakenAbilitiesByName.keys()]);
       const raiders = [...names].map((name) => {
         const role = resolveRole(name);
-        if (role === 'dps') return { name, role, metric: 'dps', value: dps.get(name) ?? null };
-        if (role === 'healer') return { name, role, metric: 'hps', value: hps.get(name) ?? null };
+        if (role === 'dps') return { name, role, metric: 'dps', value: dps.get(name) ?? null, activeValue: activeDps.get(name) ?? null };
+        if (role === 'healer') return { name, role, metric: 'hps', value: hps.get(name) ?? null, activeValue: activeHps.get(name) ?? null };
         if (role === 'tank') return { name, role, metric: 'survivalPercent', value: survivalPercent.get(name) ?? null };
         return { name, role, metric: null, value: null };
       });
@@ -758,7 +857,7 @@ async function fetchPullBreakdown(code, roleByName) {
         boss: fight.name,
         kill: fight.kill,
         bossPercentage: fight.bossPercentage ?? null,
-        durationMs: fight.endTime - fight.startTime,
+        durationMs,
         raiders,
         deaths,
         mechanicMisses,
@@ -788,4 +887,4 @@ async function fetchNightSnapshot(code, roleByName) {
   return nightFieldsFromAggregate(agg, roleByName, minDps);
 }
 
-module.exports = { fetchWarcraftLogs, fetchGuildReports, fetchFights, fetchReportAggregate, fetchRaidNights, fetchPullBreakdown, fetchNightSnapshot, computeSeasonPercentiles };
+module.exports = { deadMsByActorId, throughputOverTimeAlive, fetchWarcraftLogs, fetchGuildReports, fetchFights, fetchReportAggregate, fetchRaidNights, fetchPullBreakdown, fetchNightSnapshot, computeSeasonPercentiles };

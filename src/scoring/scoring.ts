@@ -349,7 +349,7 @@ export function generateFeedback(r: Raider, window: Window, gates: Gates, derive
   const gapText = {
     perf:
       r.role === 'dps'
-        ? pick([`${up(perfText)} -- divided by time alive, so this is uptime rather than gear.`, `Damage sits at ${perf}% of the minimum the guild sets.`])
+        ? pick([`${up(perfText)} -- damage per second of fight time alive (time after a death doesn't count against them), so this is uptime rather than gear.`, `Damage sits at ${perf}% of the minimum the guild sets.`])
         : r.role === 'healer'
           ? pick([`${up(perfText)}. Percentile, not raw HPS, so a clean night isn't hiding anything.`, `Healing sits at the ${ordinal(perf)} percentile across the window.`])
           : pick([`${up(perfText)}. Damage taken varies by pull, so this is relative to other tanks that night.`, `Survivability sits at the ${ordinal(perf)} percentile across the window.`]),

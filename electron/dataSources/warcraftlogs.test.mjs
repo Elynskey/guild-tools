@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeSeasonPercentiles } from './warcraftlogs.cjs';
+import { computeSeasonPercentiles, deadMsByActorId, throughputOverTimeAlive } from './warcraftlogs.cjs';
 
 // Minimal fake "report aggregate" -- computeSeasonPercentiles only ever reads
 // agg[metricKey] as a Map<name, value>, so that's all these fixtures need.
@@ -83,5 +83,74 @@ describe('computeSeasonPercentiles', () => {
     // score above the midpoint, Narima below.
     expect(percentile.get('Devkra')).toBeGreaterThan(50);
     expect(percentile.get('Narima')).toBeLessThan(50);
+  });
+});
+
+// Fixtures mirror the real 9/18 Ula'tek kill (report 69YPhG2bZXKJQLc7, fight 8, 439s):
+// timestamps are report-relative ms on the same clock as the fight's start/end.
+const FIGHT_START = 3515205;
+const FIGHT_END = 3954090;
+const DURATION = FIGHT_END - FIGHT_START;
+
+describe('deadMsByActorId', () => {
+  it('counts death -> fight end for someone who never got rezzed', () => {
+    const dead = deadMsByActorId([{ id: 3, timestamp: 3763632 }], [], FIGHT_END);
+    expect(dead.get(3)).toBe(FIGHT_END - 3763632);
+  });
+
+  it('counts death -> rez, then rez -> next death is alive time (a battle-rezzed raider)', () => {
+    // Quinnter: died 3764331, rezzed 3878831, died again 3912879 and stayed dead.
+    const deaths = [
+      { id: 8, timestamp: 3764331 },
+      { id: 8, timestamp: 3912879 },
+    ];
+    const rezzes = [{ targetID: 8, timestamp: 3878831 }];
+    const dead = deadMsByActorId(deaths, rezzes, FIGHT_END);
+    expect(dead.get(8)).toBe(3878831 - 3764331 + (FIGHT_END - 3912879));
+  });
+
+  it('does not let a rez for one actor resurrect someone else', () => {
+    const dead = deadMsByActorId([{ id: 1, timestamp: 3600000 }], [{ targetID: 2, timestamp: 3610000 }], FIGHT_END);
+    expect(dead.get(1)).toBe(FIGHT_END - 3600000);
+  });
+
+  it('ignores anyone who never died', () => {
+    expect(deadMsByActorId([], [], FIGHT_END).size).toBe(0);
+  });
+});
+
+describe('throughputOverTimeAlive', () => {
+  const noDeaths = new Map();
+
+  it('divides by the whole fight for someone who lived (matches Warcraft Logs Summary DPS)', () => {
+    // Odasa: 44,324,733 over the 438.9s kill -> WCL showed 100,994.0
+    const dps = throughputOverTimeAlive([{ durationMs: DURATION, entries: [{ name: 'Odasa', id: 1, total: 44324733 }], deadMsById: noDeaths }]);
+    expect(Math.round(dps.get('Odasa'))).toBe(100994);
+  });
+
+  it('divides by time alive only, so dying does not shrink the number the way a whole-fight divisor would', () => {
+    const deadMs = FIGHT_END - 3763632; // Bubble died at 248s and stayed down
+    const withDeath = throughputOverTimeAlive([{ durationMs: DURATION, entries: [{ name: 'Bubble', id: 5, total: 22974892 }], deadMsById: new Map([[5, deadMs]]) }]);
+    const wholeFight = 22974892 / (DURATION / 1000);
+    expect(withDeath.get('Bubble')).toBeGreaterThan(wholeFight);
+    expect(Math.round(withDeath.get('Bubble'))).toBe(Math.round(22974892 / ((DURATION - deadMs) / 1000)));
+  });
+
+  it('only counts alive time from fights the player appears in (sitting a boss out is not a penalty)', () => {
+    const dps = throughputOverTimeAlive([
+      { durationMs: 400000, entries: [{ name: 'A', id: 1, total: 4000000 }], deadMsById: noDeaths },
+      { durationMs: 400000, entries: [{ name: 'B', id: 2, total: 4000000 }], deadMsById: noDeaths }, // A sat this one out
+    ]);
+    expect(dps.get('A')).toBe(10000);
+  });
+
+  it('gives alive-time credit once per name per fight even with duplicate rows (same-named pets)', () => {
+    const dps = throughputOverTimeAlive([{ durationMs: 100000, entries: [{ name: 'A', id: 1, total: 500000 }, { name: 'A', id: 9, total: 500000 }], deadMsById: noDeaths }]);
+    expect(dps.get('A')).toBe(10000); // 1,000,000 / 100s, not / 200s
+  });
+
+  it('reports 0 for someone dead the whole fight instead of dividing by zero', () => {
+    const dps = throughputOverTimeAlive([{ durationMs: 100000, entries: [{ name: 'A', id: 1, total: 1000 }], deadMsById: new Map([[1, 100000]]) }]);
+    expect(dps.get('A')).toBe(0);
   });
 });

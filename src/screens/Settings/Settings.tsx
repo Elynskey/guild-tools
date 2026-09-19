@@ -172,7 +172,7 @@ export function Settings() {
 
             <Input label="Raider.IO gate" type="number" value={String(draft.gates.rio)} onChange={(e) => setGateField('rio', e.target.value)} />
             <Input label="Item level gate" type="number" value={String(draft.gates.ilvl)} onChange={(e) => setGateField('ilvl', e.target.value)} />
-            <Input label="Minimum DPS" type="number" value={String(draft.minDps)} onChange={(e) => setMinDps(e.target.value)} hint="Damage/time-alive a DPS raider needs to clear 100% on the DPS check." />
+            <Input label="Minimum DPS" type="number" value={String(draft.minDps)} onChange={(e) => setMinDps(e.target.value)} hint="Damage per second a DPS raider needs to clear 100% on the DPS check. Measured over the fight time they were alive -- time after a death is not counted against them, and a battle rez brings them back. This is lower than the 'active DPS' Guild Tools shows beside it on Pull Feedback (which also skips idle gaps), and close to what Warcraft Logs shows for someone who lived." />
 
             <Button onClick={submit} disabled={saving || !dirty} iconLeft="check">
               {saving ? 'Saving…' : 'Save'}

@@ -9,6 +9,10 @@ interface PullLogProps {
   groups: BossGroup[];
 }
 
+const DPS_EXPLAINER = 'Damage per second over the fight time this raider was alive -- time after a death is not counted against them, and a battle rez brings them back. This is the number the DPS check scores.';
+const HPS_EXPLAINER = 'Healing per second over the fight time this raider was alive -- time after a death is not counted against them.';
+const ACTIVE_EXPLAINER = 'The same total, but divided only by time actually spent dealing it. It also skips idle gaps while alive (movement, stuns), so it always reads higher -- and it is not what the DPS check scores.';
+
 function formatMetric(raider: PullRaider): string {
   if (raider.value == null) return '—';
   if (raider.metric === 'survivalPercent') return `${Math.round(raider.value)}%ile`;
@@ -29,7 +33,7 @@ const ROLE_COLOR: Record<string, string> = { tank: 'var(--gold-300)', healer: '#
 function PullDetail({ pull }: { pull: Pull }) {
   return (
     <div style={{ background: 'var(--surface-raised)', borderTop: '1px solid var(--border-hairline)', boxShadow: 'var(--inset-well)', padding: '14px 20px' }}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '4px 16px', marginBottom: pull.deaths.length || pull.mechanicMisses.length ? 12 : 0 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(270px, 1fr))', gap: '4px 16px', marginBottom: pull.deaths.length || pull.mechanicMisses.length ? 12 : 0 }}>
         {pull.raiders.map((r) => (
           <div key={r.name} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 'var(--text-body-s)' }}>
             <span style={{ color: 'var(--text-body)' }}>
@@ -41,7 +45,14 @@ function PullDetail({ pull }: { pull: Pull }) {
               {r.name}
             </span>
             <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>
-              {formatMetric(r)} <span style={{ color: 'var(--text-faint)', fontSize: 'var(--text-micro)' }}>{metricLabel(r)}</span>
+              <span title={r.metric === 'dps' ? DPS_EXPLAINER : r.metric === 'hps' ? HPS_EXPLAINER : undefined}>
+                {formatMetric(r)} <span style={{ color: 'var(--text-faint)', fontSize: 'var(--text-micro)' }}>{metricLabel(r)}</span>
+              </span>
+              {r.activeValue != null && r.value != null && (
+                <span title={ACTIVE_EXPLAINER} style={{ marginLeft: 8, color: 'var(--text-faint)', fontSize: 'var(--text-micro)' }}>
+                  {Math.round(r.activeValue).toLocaleString()} active
+                </span>
+              )}
             </span>
           </div>
         ))}
@@ -95,6 +106,31 @@ export function PullLog({ groups }: PullLogProps) {
       <p style={{ margin: '0 0 20px', fontSize: 'var(--text-body-s)', color: 'var(--text-muted)', maxWidth: 640 }}>
         Every attempt on each boss below, in order — a red edge means it was a wipe, green means the kill. Click any pull for the full breakdown.
       </p>
+      <div
+        style={{
+          margin: '0 0 20px',
+          padding: '10px 14px',
+          maxWidth: 640,
+          border: '1px solid var(--border-hairline)',
+          borderRadius: 'var(--radius-sm)',
+          background: 'var(--surface-raised)',
+          fontSize: 'var(--text-body-s)',
+          lineHeight: 1.6,
+          color: 'var(--text-muted)',
+        }}
+      >
+        <div className="crd-eyebrow" style={{ marginBottom: 4 }}>
+          Reading DPS / HPS
+        </div>
+        <div>
+          <strong style={{ color: 'var(--text-body)' }}>DPS / HPS</strong> — per second of fight time the raider was <em>alive</em>. Time after a death doesn't count against them, and a battle rez
+          brings them back. This is the number the DPS check scores, and it lines up with Warcraft Logs for anyone who lived.
+        </div>
+        <div>
+          <strong style={{ color: 'var(--text-body)' }}>active</strong> — the same total per second of time actually spent dealing it. It also skips idle gaps while alive (movement, stuns), so it
+          always reads higher. Handy for spotting downtime, but it isn't what's scored.
+        </div>
+      </div>
       {groups.map((group) => {
         const kills = group.pulls.filter((p) => p.kill).length;
         return (
