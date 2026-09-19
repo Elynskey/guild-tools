@@ -13,6 +13,16 @@ function botHeaders() {
   return { Authorization: `Bot ${process.env.DISCORD_BOT_TOKEN}`, 'Content-Type': 'application/json' };
 }
 
+// @everyone and @here never ping, whatever a post's text says. Officers write announcement
+// text and it gets posted as-is, so a stray "@everyone" would notify the whole server;
+// user and role mentions still work (officers do ping a role deliberately). A caller that
+// truly wants different behavior can pass its own allowed_mentions.
+const SAFE_ALLOWED_MENTIONS = { parse: ['users', 'roles'] };
+
+function withSafeMentions(body) {
+  return { ...body, allowed_mentions: body.allowed_mentions ?? SAFE_ALLOWED_MENTIONS };
+}
+
 function assertConfigured() {
   if (!process.env.DISCORD_BOT_TOKEN) {
     throw new Error('Discord posting isn\'t configured (DISCORD_BOT_TOKEN missing).');
@@ -29,7 +39,7 @@ async function postMessage(channelId, body) {
   const res = await fetch(`https://discord.com/api/v10/channels/${channelId}/messages`, {
     method: 'POST',
     headers: botHeaders(),
-    body: JSON.stringify(body),
+    body: JSON.stringify(withSafeMentions(body)),
   });
   if (!res.ok) throw new Error(`Discord message post failed: ${res.status} ${res.statusText}`);
   return res.json();
@@ -45,7 +55,7 @@ async function editMessage(channelId, messageId, body) {
   const res = await fetch(`https://discord.com/api/v10/channels/${channelId}/messages/${messageId}`, {
     method: 'PATCH',
     headers: botHeaders(),
-    body: JSON.stringify(body),
+    body: JSON.stringify(withSafeMentions(body)),
   });
   if (!res.ok) throw new Error(`Discord message edit failed: ${res.status} ${res.statusText}`);
   return res.json();
@@ -70,4 +80,4 @@ async function sendDirectMessage(userId, body) {
   return postMessage(channel.id, body);
 }
 
-module.exports = { postMessage, editMessage, sendDirectMessage };
+module.exports = { postMessage, editMessage, sendDirectMessage, withSafeMentions, SAFE_ALLOWED_MENTIONS };
