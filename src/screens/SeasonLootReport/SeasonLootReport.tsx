@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { Badge } from '../../design-system/Badge';
 import { Crest } from '../../design-system/Crest';
 import { Icon } from '../../design-system/Icon';
 import { RefreshButton } from '../shared/RefreshButton';
@@ -151,6 +152,7 @@ export function SeasonLootReport() {
                               <span style={{ color: 'var(--text-strong)', fontWeight: 600 }}>{itemLabel(item.itemLink)}</span>
                               {item.slot && <span style={{ color: 'var(--text-faint)' }}>({item.slot})</span>}
                               <span style={{ color: 'var(--text-faint)' }}>— {item.boss ?? 'boss not recorded'}</span>
+                              {item.difficulty && <Badge tone={item.difficulty === 'Heroic' ? 'gold' : 'neutral'}>{item.difficulty}</Badge>}
                               <span style={{ color: 'var(--text-faint)', marginLeft: 'auto', fontFamily: 'var(--font-mono)' }}>{formatDate(item.time)}</span>
                               {item.tradedTo && (
                                 <span style={{ color: 'var(--text-gold)', display: 'flex', alignItems: 'center', gap: 3 }}>
@@ -174,6 +176,7 @@ export function SeasonLootReport() {
                                 <span style={{ color: 'var(--text-muted)' }}>{itemLabel(item.itemLink)}</span>
                                 {item.slot && <span style={{ color: 'var(--text-faint)' }}>({item.slot})</span>}
                                 <span style={{ color: 'var(--text-faint)' }}>— {item.boss ?? 'boss not recorded'}</span>
+                                {item.difficulty && <Badge tone={item.difficulty === 'Heroic' ? 'gold' : 'neutral'}>{item.difficulty}</Badge>}
                                 <span style={{ color: 'var(--text-faint)', marginLeft: 'auto', fontFamily: 'var(--font-mono)' }}>{formatDate(item.time)}</span>
                               </div>
                             ))}

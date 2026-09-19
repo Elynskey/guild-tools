@@ -141,6 +141,8 @@ export interface SeasonLootItem {
   time: number;
   /** Set if this item was later traded away -- still counts toward totalWon, just not needWinCount (see needWinCount's own doc comment). */
   tradedTo: string | null;
+  /** See RawLootRecord's `difficulty` -- same meaning, same caveats. */
+  difficulty?: string | null;
 }
 
 export interface SeasonLootRow {
@@ -199,11 +201,11 @@ export function buildSeasonLootReport(entries: LootEntry[], rosterNames: string[
       name,
       needWinCount: needWinCount(entries, name),
       totalWon: won.length,
-      items: sorted.map((e) => ({ itemLink: e.itemLink, boss: e.boss, slot: e.slot, time: e.time, tradedTo: e.tradedTo })),
+      items: sorted.map((e) => ({ itemLink: e.itemLink, boss: e.boss, slot: e.slot, time: e.time, tradedTo: e.tradedTo, difficulty: e.difficulty })),
       lastWonAt: sorted[0]?.time ?? null,
       maxNeedWinsInNight,
       lossCount: losses.length,
-      lostItems: losses.map((r) => ({ itemLink: r.itemLink, boss: r.boss, slot: r.slot ?? null, time: r.time, tradedTo: null })),
+      lostItems: losses.map((r) => ({ itemLink: r.itemLink, boss: r.boss, slot: r.slot ?? null, time: r.time, tradedTo: null, difficulty: r.difficulty })),
     };
   });
 }

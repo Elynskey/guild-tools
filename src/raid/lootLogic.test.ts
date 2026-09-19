@@ -271,4 +271,12 @@ describe('buildSeasonLootReport', () => {
     const [row] = buildSeasonLootReport(entries, ['Grimsyl']);
     expect(row.lastWonAt).toBe(5000);
   });
+
+  it('carries difficulty through to both won and lost items', () => {
+    const entries = annotateWithTrades([record({ time: 1000, itemId: 1, difficulty: 'Heroic' })], []);
+    const losses: RawNeedLossRecord[] = [{ itemId: 2, itemLink: '[Shield]', name: 'Grimsyl', boss: 'Sszorak', time: 2000, difficulty: 'Normal' }];
+    const [row] = buildSeasonLootReport(entries, ['Grimsyl'], losses);
+    expect(row.items[0].difficulty).toBe('Heroic');
+    expect(row.lostItems[0].difficulty).toBe('Normal');
+  });
 });
