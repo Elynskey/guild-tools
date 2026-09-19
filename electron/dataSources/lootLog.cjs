@@ -16,16 +16,44 @@ function configPath() {
   return path.join(resolveDataDir(), 'wow-path.json');
 }
 
-function loadConfiguredPath() {
+function loadConfig() {
   try {
-    return JSON.parse(fs.readFileSync(configPath(), 'utf8')).wowPath ?? null;
+    return JSON.parse(fs.readFileSync(configPath(), 'utf8'));
   } catch {
-    return null;
+    return {};
   }
 }
 
+// Merges into whatever's already on disk rather than overwriting -- wowPath and
+// characterName are set independently (different UI moments), and each needs to leave
+// the other alone.
+function saveConfig(patch) {
+  const merged = { ...loadConfig(), ...patch };
+  fs.writeFileSync(configPath(), JSON.stringify(merged, null, 2));
+  return merged;
+}
+
+function loadConfiguredPath() {
+  return loadConfig().wowPath ?? null;
+}
+
 function saveConfiguredPath(wowPath) {
-  fs.writeFileSync(configPath(), JSON.stringify({ wowPath }, null, 2));
+  saveConfig({ wowPath });
+}
+
+// This PC's raiding character name, as typed by the officer in Loot History's setup
+// card -- exists purely to resolve chat-tail's "You" quirk (see lootChatTail.cjs):
+// WoW's on-disk chat log substitutes the literal word "You" for the local player's own
+// name on a self-win, and there's no client API reachable from Node to recover the
+// real one. Per-PC, not per-character -- deliberately simple (one text field, not an
+// auto-detected/multi-character setup) since this only ever needs to be right for
+// whoever raids on this specific machine.
+function getCharacterName() {
+  return loadConfig().characterName ?? null;
+}
+
+function setCharacterName(name) {
+  saveConfig({ characterName: name || null });
 }
 
 function isRealWowPath(candidate) {
@@ -75,7 +103,7 @@ function getLootRecords() {
 }
 
 function getWowPathConfig() {
-  return { configured: loadConfiguredPath(), resolved: resolveWowPath(), valid: isRealWowPath(resolveWowPath()) };
+  return { configured: loadConfiguredPath(), resolved: resolveWowPath(), valid: isRealWowPath(resolveWowPath()), characterName: getCharacterName() };
 }
 
 function setWowPath(wowPath) {
@@ -101,4 +129,4 @@ function installAddon() {
   return destDir;
 }
 
-module.exports = { getLootRecords, getWowPathConfig, setWowPath, installAddon, resolveWowPath, isRealWowPath };
+module.exports = { getLootRecords, getWowPathConfig, setWowPath, installAddon, resolveWowPath, isRealWowPath, getCharacterName, setCharacterName };

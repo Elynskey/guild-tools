@@ -255,8 +255,16 @@ export interface ElectronAPI {
   getItemIconUrls: (itemIds: number[]) => Promise<Record<number, string | null>>;
   getBossLootTable: () => Promise<BossLootTable | null>;
   postLootNightToDiscord: (messages: string[]) => Promise<{ posted: number }>;
-  getWowPathConfig: () => Promise<{ configured: string | null; resolved: string | null; valid: boolean }>;
-  setWowPath: (wowPath: string) => Promise<{ configured: string | null; resolved: string | null; valid: boolean }>;
+  getWowPathConfig: () => Promise<{ configured: string | null; resolved: string | null; valid: boolean; characterName: string | null }>;
+  setWowPath: (wowPath: string) => Promise<{ configured: string | null; resolved: string | null; valid: boolean; characterName: string | null }>;
+  setCharacterName: (name: string) => Promise<{ configured: string | null; resolved: string | null; valid: boolean; characterName: string | null }>;
+  getChatTailStatus: () => Promise<{
+    lastPollAt: number | null;
+    lastStatus: 'ok' | 'not_configured' | 'error' | null;
+    capturedThisSession: number;
+    lastCaptureAt: number | null;
+    chatLog: { path: string | null; exists: boolean; active: boolean };
+  }>;
   pickWowFolder: () => Promise<string | null>;
   installLootAddon: () => Promise<{ ok: true; dest: string } | { ok: false; error: string }>;
   getSettings: () => Promise<GuildToolsSettings>;

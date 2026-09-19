@@ -37,6 +37,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   postLootNightToDiscord: (messages) => ipcRenderer.invoke('lootLog:postNightToDiscord', messages),
   getWowPathConfig: () => ipcRenderer.invoke('lootLog:getWowPath'),
   setWowPath: (wowPath) => ipcRenderer.invoke('lootLog:setWowPath', wowPath),
+  setCharacterName: (name) => ipcRenderer.invoke('lootLog:setCharacterName', name),
+  getChatTailStatus: () => ipcRenderer.invoke('lootLog:getChatTailStatus'),
   pickWowFolder: () => ipcRenderer.invoke('lootLog:pickFolder'),
   installLootAddon: () => ipcRenderer.invoke('lootLog:installAddon'),
   getSettings: () => ipcRenderer.invoke('settings:get'),

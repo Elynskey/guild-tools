@@ -6,6 +6,8 @@ import { getRoster } from '../../data/rosterSource';
 import type { BossLootTable, LootRecordPatch, ManualLootRecordInput } from '../../electron';
 
 type LogStatus = 'ok' | 'not_configured' | 'addon_not_installed';
+type WowPathConfig = { configured: string | null; resolved: string | null; valid: boolean; characterName: string | null };
+type ChatTailStatus = Awaited<ReturnType<NonNullable<typeof window.electronAPI>['getChatTailStatus']>>;
 
 export function useLootHistory() {
   const electron = window.electronAPI;
@@ -13,7 +15,9 @@ export function useLootHistory() {
   const [nights, setNights] = useState<LootNight[]>([]);
   const [selectedNightKey, setSelectedNightKey] = useState<string | null>(null);
   const [query, setQuery] = useState('');
-  const [wowPath, setWowPathState] = useState<{ configured: string | null; resolved: string | null; valid: boolean } | null>(null);
+  const [wowPath, setWowPathState] = useState<WowPathConfig | null>(null);
+  const [chatTailStatus, setChatTailStatus] = useState<ChatTailStatus | null>(null);
+  const [savingCharacterName, setSavingCharacterName] = useState(false);
   const [installing, setInstalling] = useState(false);
   const [installMessage, setInstallMessage] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -54,6 +58,21 @@ export function useLootHistory() {
     const interval = setInterval(load, 30_000);
     return () => clearInterval(interval);
   }, [load]);
+
+  // Live-capture status card's whole reason for existing: make "is this actually
+  // working right now" an observable, self-refreshing fact in the app instead of
+  // something an officer has to trust silently. Matches main.cjs's own 10s poll
+  // cadence so this never looks stale relative to what it's reporting on.
+  const loadChatTailStatus = useCallback(() => {
+    if (!electron) return;
+    electron.getChatTailStatus().then(setChatTailStatus);
+  }, [electron]);
+
+  useEffect(() => {
+    loadChatTailStatus();
+    const interval = setInterval(loadChatTailStatus, 10_000);
+    return () => clearInterval(interval);
+  }, [loadChatTailStatus]);
 
   // Name -> itemId, built from this tier's known loot table -- a fallback for records
   // whose itemId never got captured. Confirmed live 2026-09-12: C_LootHistory's
@@ -139,6 +158,18 @@ export function useLootHistory() {
       });
     });
   }, [electron, load]);
+
+  const setCharacterName = useCallback(
+    (name: string) => {
+      if (!electron) return;
+      setSavingCharacterName(true);
+      electron
+        .setCharacterName(name)
+        .then(setWowPathState)
+        .finally(() => setSavingCharacterName(false));
+    },
+    [electron],
+  );
 
   const installAddon = useCallback(() => {
     if (!electron) return;
@@ -288,6 +319,9 @@ export function useLootHistory() {
     setQuery,
     wowPath,
     pickWowFolder,
+    setCharacterName,
+    savingCharacterName,
+    chatTailStatus,
     installAddon,
     installing,
     installMessage,

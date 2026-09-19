@@ -31,8 +31,14 @@ const { listCraftRequests, addCraftRequest, fulfillCraftRequest, removeCraftRequ
 const { signIn: bnetSignIn } = require('./dataSources/bnetAuth.cjs');
 const { signIn: discordSignIn } = require('./dataSources/discordAuth.cjs');
 const { loadSession, saveSession, clearSession } = require('./dataSources/authSession.cjs');
-const { getWowPathConfig, setWowPath, installAddon } = require('./dataSources/lootLog.cjs');
+const { getWowPathConfig, setWowPath, installAddon, setCharacterName } = require('./dataSources/lootLog.cjs');
+const { getChatLogStatus } = require('./dataSources/lootChatTail.cjs');
 const { fetchLootLog, addManualLootRecord, updateLootRecord, removeLootRecord, removeLootTrade, deleteLootNight, syncChatTailCapture } = require('./dataSources/fetchLootLog.cjs');
+
+// In-memory only (not persisted) -- this session's record of whether live loot capture
+// is actually running, for Loot History's status card. Reset to zeros on every app
+// launch, which is exactly what "this session" should mean here.
+const chatTailStatus = { lastPollAt: null, lastStatus: null, capturedThisSession: 0, lastCaptureAt: null };
 const { getItemIconUrls } = require('./dataSources/fetchItemIcons.cjs');
 const { fetchBossLootTable } = require('./dataSources/fetchBossLootTable.cjs');
 const { postLootNightToDiscord } = require('./dataSources/postLootNight.cjs');
@@ -210,6 +216,11 @@ ipcMain.handle('lootLog:setWowPath', async (_event, wowPath) => {
   setWowPath(wowPath);
   return getWowPathConfig();
 });
+ipcMain.handle('lootLog:setCharacterName', async (_event, name) => {
+  setCharacterName(name);
+  return getWowPathConfig();
+});
+ipcMain.handle('lootLog:getChatTailStatus', async () => ({ ...chatTailStatus, chatLog: getChatLogStatus() }));
 ipcMain.handle('lootLog:pickFolder', async () => {
   const win = BrowserWindow.getFocusedWindow();
   const result = await dialog.showOpenDialog(win, { properties: ['openDirectory'], title: 'Select your World of Warcraft folder (the one containing "_retail_")' });
@@ -334,10 +345,29 @@ app.whenReady().then(() => {
   // the authoritative source and reconciles these on whatever reload cadence actually
   // happens. Runs immediately once, then every 10s; a stat()-only check on ticks with
   // nothing new keeps this cheap for the rest of the app's lifetime.
-  syncChatTailCapture().catch((err) => console.error('[lootChatTail] Poll failed:', err));
-  const chatTailInterval = setInterval(() => {
-    syncChatTailCapture().catch((err) => console.error('[lootChatTail] Poll failed:', err));
-  }, 10_000);
+  //
+  // chatTailStatus feeds Loot History's live-capture status card (lootLog:getChatTailStatus
+  // above) -- the whole point of that card is to make "is this actually working right
+  // now" observable from inside the app, after this exact mechanism silently captured
+  // nothing for a full raid night with no error anywhere pointing at why.
+  const runChatTailPoll = () => {
+    syncChatTailCapture()
+      .then((result) => {
+        chatTailStatus.lastPollAt = Date.now();
+        chatTailStatus.lastStatus = result.status;
+        if (result.added > 0) {
+          chatTailStatus.capturedThisSession += result.added;
+          chatTailStatus.lastCaptureAt = Date.now();
+        }
+      })
+      .catch((err) => {
+        console.error('[lootChatTail] Poll failed:', err);
+        chatTailStatus.lastPollAt = Date.now();
+        chatTailStatus.lastStatus = 'error';
+      });
+  };
+  runChatTailPoll();
+  const chatTailInterval = setInterval(runChatTailPoll, 10_000);
   app.on('will-quit', () => clearInterval(chatTailInterval));
 });
 

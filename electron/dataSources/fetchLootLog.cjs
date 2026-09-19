@@ -45,6 +45,15 @@ async function getCachedBossLootTable() {
   return table ?? cachedLootTable;
 }
 
+// Real item links are the |Hitem:...|h[Name]|h|r escape sequence, or (chat-tail's own
+// records, which never have one -- see lootChatTail.cjs) a plain "[Name]" string. Same
+// extraction every other data source in this pipeline duplicates locally rather than
+// sharing (this file has no access to the renderer's lootLogic.ts).
+function itemNameFromLink(itemLink) {
+  const match = typeof itemLink === 'string' && itemLink.match(/\[(.+)\]/);
+  return match ? match[1] : null;
+}
+
 // Called on an interval from main.cjs -- tails WoW's live chat log (see
 // lootChatTail.cjs) so a Need win reaches the shared loot log within one poll interval
 // instead of waiting on the addon's SavedVariables, which only flush to disk on
@@ -53,19 +62,40 @@ async function getCachedBossLootTable() {
 // would normally catch, but can't be replicated from plain chat text) -- degrades to
 // syncing unfiltered if the loot table itself is unavailable, same "never a broken half
 // state" philosophy as fetchBossLootTable.cjs itself.
+// Returns { status, added } (not just void) so main.cjs can track a running "is this
+// actually working" status for the Loot History screen's live-capture card -- see
+// lootChatTail.cjs's getChatLogStatus for the file-freshness half of that same signal.
 async function syncChatTailCapture() {
   const { status, newRecords } = pollChatLog();
-  if (status !== 'ok' || newRecords.length === 0) return;
+  if (status !== 'ok' || newRecords.length === 0) return { status, added: 0 };
 
   const lootTable = await getCachedBossLootTable();
-  const filtered = lootTable ? newRecords.filter((r) => r.itemId == null || r.itemId in lootTable.items) : newRecords;
-  if (filtered.length === 0) return;
+  let filtered = newRecords;
+  if (lootTable) {
+    // chat-tail records never carry a real itemId (the on-disk chat log has no item
+    // link, just plain text -- see lootChatTail.cjs) -- resolved by name against this
+    // tier's known loot table where possible, purely so an icon and the membership
+    // filter below have something to work with immediately, instead of only after the
+    // addon's own sync reconciles it. Deliberately NOT used to drop an unresolved
+    // record (a name genuinely missing from this table stays in, same as before this
+    // resolution existed) -- this table can be incomplete or stale, and silently
+    // dropping a real win because of that would be worse than an occasional off-tier
+    // item slipping through as "Unverified" for an officer to catch by eye.
+    const idByName = new Map(Object.entries(lootTable.items).map(([id, item]) => [item.name, Number(id)]));
+    filtered = newRecords.map((r) => {
+      if (r.itemId != null) return r;
+      const resolvedId = idByName.get(itemNameFromLink(r.itemLink));
+      return resolvedId != null ? { ...r, itemId: resolvedId } : r;
+    });
+  }
+  if (filtered.length === 0) return { status, added: 0 };
 
   if (proxyClient.isAvailable()) {
     await proxyClient.syncLootRecords(filtered, [], []);
   } else {
     lootRecordsStore.sync(filtered, [], []);
   }
+  return { status, added: filtered.length };
 }
 
 // Officer edits/corrections -- always go through the proxy when available (this is

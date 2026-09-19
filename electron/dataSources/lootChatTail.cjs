@@ -1,7 +1,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { resolveDataDir } = require('./dataDir.cjs');
-const { resolveWowPath, isRealWowPath } = require('./lootLog.cjs');
+const { resolveWowPath, isRealWowPath, getCharacterName } = require('./lootLog.cjs');
 
 // Second, independent capture path alongside the addon's SavedVariables read (see
 // lootLog.cjs) -- WoW's own chat log (enabled in-game via /chatlog) is written to disk
@@ -18,7 +18,8 @@ const { resolveWowPath, isRealWowPath } = require('./lootLog.cjs');
 // guess disagreed with reality live, more than once. GuildToolsLoot.lua's own
 // IsChatLogging() reminder is the real, authoritative version of the same signal and
 // already runs in-game at login/raid-entry -- no reason to keep a worse guess of it
-// here too.
+// here too. (getChatLogStatus() below reintroduces a narrow, clearly-labeled version of
+// that freshness signal -- see its own comment for why this is a different, safer use.)
 
 function chatLogPath() {
   const wowPath = resolveWowPath();
@@ -42,28 +43,61 @@ function saveState(state) {
   fs.writeFileSync(statePath(), JSON.stringify(state, null, 2));
 }
 
-// Verbatim ports of GuildToolsLoot.lua's own CHAT_MSG_LOOT parsing (WON_ROLL_PATTERN /
-// extractItemLink / itemIdFromLink) -- Lua's `.-` (lazy any) becomes `.*?`, `%x` (hex
-// digit) becomes [0-9a-fA-F], and every literal `|` needs escaping since it's JS
-// alternation syntax but has no special meaning in a Lua pattern.
-const WON_ROLL_PATTERN = /\[Loot\]: (.*?) \((.*?) - \d+\) Won: /;
-const ITEM_LINK_PATTERN = /(\|c[0-9a-fA-F]+\|Hitem:.*?\|h\|r)/;
-const ITEM_ID_PATTERN = /item:(\d+)/;
+// Confirmed live 2026-09-19 against a real WoWChatLog.txt spanning 9/11-9/18 (a full
+// week, several real raid nights): the file has ZERO matches for what this parser was
+// built against (GuildToolsLoot.lua's own WON_ROLL_PATTERN, ported verbatim under the
+// assumption the on-disk log mirrors the in-game CHAT_MSG_LOOT text). It never has.
+// The real on-disk line looks like:
+//   9/18 21:49:26.420  Loot: You (Need - 94, Main-Spec) Won: Tomb-Creeper's Claw
+// Three differences from the in-game text, all confirmed from that same real file:
+//   1. No square brackets around "Loot" (in-game: "[Loot]:"; logged: "Loot:").
+//   2. An optional ", Main-Spec"/", Off-Spec" qualifier after the roll value, still
+//      inside the parens -- the old pattern required the paren to close right after
+//      the number, so this alone would have broken every match even with #1 fixed.
+//   3. No item hyperlink at all, just the plain item name as trailing text -- WoW's
+//      chat logger strips link escape codes when writing to disk. There is nothing
+//      here to extract an itemId from; itemLink is rebuilt as a plain "[Name]"
+//      bracketed string instead, the same shape manualAdd() already uses for
+//      hand-entered records, which lootRecordsStore.cjs's name-based dedup already
+//      understands.
+// This is why chat-tail never captured a single real win despite /chatlog being
+// genuinely on and the app running the whole raid -- every line silently failed to
+// match, with no error anywhere to surface that.
+const WON_ROLL_PATTERN = /Loot: (.*?) \((.*?) - \d+(?:,[^)]*)?\) Won: (.+)$/;
+
+// The logged line substitutes the literal word "You" for the local player's own name
+// -- confirmed against the same real file (a win by the account actually running WoW
+// logs as "Loot: You (...) Won: ..." instead of their character name). This is a
+// disk-log-only quirk: the in-game chat text and the addon's own SavedVariables both
+// carry the real name (confirmed against this guild's real production SavedVariables,
+// which has zero "You" winners), so it's not a wider addon bug, just something this
+// parser alone has to correct for.
+function resolveWinnerName(rawWinner) {
+  if (rawWinner !== 'You') return rawWinner;
+  return getCharacterName();
+}
 
 function parseLine(line) {
   const wonMatch = line.match(WON_ROLL_PATTERN);
   if (!wonMatch) return null;
-  const [, winner, rollType] = wonMatch;
+  const [, rawWinner, rollType, rawItemName] = wonMatch;
   if (!rollType.toLowerCase().includes('need')) return null;
 
-  const linkMatch = line.match(ITEM_LINK_PATTERN);
-  if (!linkMatch) return null;
-  const itemLink = linkMatch[1];
-  const idMatch = itemLink.match(ITEM_ID_PATTERN);
+  // Dropped rather than recorded under the literal name "You" if no character name is
+  // configured yet -- a record like that could never reconcile with the addon's own
+  // authoritative sync (which always has the real name), so it would just sit as a
+  // permanent phantom entry. The app should be telling the officer to set this (see
+  // the Loot History screen's live-capture status card), not silently mis-attributing
+  // their own wins.
+  const winner = resolveWinnerName(rawWinner);
+  if (!winner) return null;
+
+  const itemName = rawItemName.trim();
+  if (!itemName) return null;
 
   return {
-    itemId: idMatch ? Number(idMatch[1]) : null,
-    itemLink,
+    itemId: null,
+    itemLink: `[${itemName}]`,
     winner,
     boss: null,
     slot: null,
@@ -132,4 +166,26 @@ function pollChatLog() {
   return { status: 'ok', newRecords };
 }
 
-module.exports = { pollChatLog };
+// A narrow, clearly-labeled freshness check for the app's own "is live capture
+// actually working right now" status card (Loot History) -- NOT a replacement for the
+// addon's own IsChatLogging() reminder (still the authoritative on/off signal, see the
+// file-level comment above for why a broader version of this exact idea was removed
+// 2026-09-12). This only ever answers "does the log file exist, and has it been
+// written to recently" -- both observable facts, not a guess at a client CVar this
+// process has no access to. `active` uses a 5-minute window: long enough to survive a
+// quiet stretch between chat lines, short enough to mean something if WoW isn't even
+// running right now.
+const ACTIVE_WINDOW_MS = 5 * 60 * 1000;
+
+function getChatLogStatus() {
+  const p = chatLogPath();
+  if (!p) return { path: null, exists: false, active: false };
+  try {
+    const stats = fs.statSync(p);
+    return { path: p, exists: true, active: Date.now() - stats.mtimeMs < ACTIVE_WINDOW_MS };
+  } catch {
+    return { path: p, exists: false, active: false };
+  }
+}
+
+module.exports = { pollChatLog, getChatLogStatus };

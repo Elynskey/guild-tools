@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { mkdtempSync, rmSync, mkdirSync, writeFileSync, appendFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, mkdirSync, writeFileSync, appendFileSync, utimesSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -10,6 +10,7 @@ let tempDir;
 let wowPath;
 let chatLogFile;
 let tail;
+let lootLog;
 
 beforeEach(async () => {
   tempDir = mkdtempSync(path.join(tmpdir(), 'gt-chat-tail-'));
@@ -20,7 +21,7 @@ beforeEach(async () => {
 
   process.env.DATA_DIR = tempDir;
   vi.resetModules();
-  const lootLog = await import('./lootLog.cjs');
+  lootLog = await import('./lootLog.cjs');
   lootLog.setWowPath(wowPath);
   tail = await import('./lootChatTail.cjs');
 });
@@ -30,7 +31,12 @@ afterEach(() => {
   rmSync(tempDir, { recursive: true, force: true });
 });
 
-const WON_LINE = "9/6 22:15:03.123  [Loot]: Dharma (Need - 92) Won: |cff9d9d9d|Hitem:268232::::::::90:577::3:5:43:13696:13662:13333:12834:1:28:7359:::::|h[Cincture of the Abyssal Grotto]|h|r";
+// The REAL on-disk format (confirmed 2026-09-19 against a live WoWChatLog.txt) -- no
+// brackets around "Loot", an optional ", Main-Spec"/"Off-Spec" qualifier, and no item
+// hyperlink at all, just the plain item name. See lootChatTail.cjs's own comment for
+// why this differs from the addon's in-game CHAT_MSG_LOOT text.
+const WON_LINE = "9/18 21:49:26.420  Loot: Dharma (Need - 92, Main-Spec) Won: Cincture of the Abyssal Grotto";
+const WON_LINE_SELF = '9/18 21:49:28.730  Loot: You (Need - 94, Main-Spec) Won: Tomb-Creeper\'s Claw';
 
 describe('pollChatLog', () => {
   it('seeks to EOF on the very first poll of a new path and captures nothing pre-existing', () => {
@@ -47,21 +53,40 @@ describe('pollChatLog', () => {
     const { newRecords } = tail.pollChatLog();
     expect(newRecords).toHaveLength(1);
     expect(newRecords[0]).toMatchObject({
-      itemId: 268232,
+      itemId: null,
       winner: 'Dharma',
       boss: null,
       slot: null,
+      difficulty: null,
       source: 'chat-tail',
     });
-    expect(newRecords[0].itemLink).toContain('[Cincture of the Abyssal Grotto]');
+    expect(newRecords[0].itemLink).toBe('[Cincture of the Abyssal Grotto]');
+  });
+
+  it('resolves a self-win ("You" in the log) to the configured character name', () => {
+    lootLog.setCharacterName('Vitaezra');
+    writeFileSync(chatLogFile, '');
+    tail.pollChatLog();
+    appendFileSync(chatLogFile, `${WON_LINE_SELF}\n`);
+    const { newRecords } = tail.pollChatLog();
+    expect(newRecords).toHaveLength(1);
+    expect(newRecords[0].winner).toBe('Vitaezra');
+    expect(newRecords[0].itemLink).toBe("[Tomb-Creeper's Claw]");
+  });
+
+  it('drops a self-win entirely when no character name is configured yet', () => {
+    writeFileSync(chatLogFile, '');
+    tail.pollChatLog();
+    appendFileSync(chatLogFile, `${WON_LINE_SELF}\n`);
+    expect(tail.pollChatLog().newRecords).toHaveLength(0);
   });
 
   it('is case-insensitive on the roll type and ignores non-Need rolls', () => {
     writeFileSync(chatLogFile, '');
     tail.pollChatLog();
 
-    const greedLine = WON_LINE.replace('(Need - 92)', '(Greed - 1)');
-    const shoutyNeed = WON_LINE.replace('(Need - 92)', '(NEED - 92)');
+    const greedLine = WON_LINE.replace('(Need - 92, Main-Spec)', '(Greed - 1)');
+    const shoutyNeed = WON_LINE.replace('(Need - 92, Main-Spec)', '(NEED - 92, Off-Spec)');
     appendFileSync(chatLogFile, `${greedLine}\n${shoutyNeed}\n`);
 
     const { newRecords } = tail.pollChatLog();
@@ -69,10 +94,10 @@ describe('pollChatLog', () => {
     expect(newRecords[0].winner).toBe('Dharma');
   });
 
-  it('ignores chat lines with no [Loot]: shape', () => {
+  it('ignores chat lines with no Loot: shape', () => {
     writeFileSync(chatLogFile, '');
     tail.pollChatLog();
-    appendFileSync(chatLogFile, '9/6 22:15:00.000  [Raid] Officer: pulling in 5\n');
+    appendFileSync(chatLogFile, '9/6 22:15:00.000  |Hchannel:GUILD|h[Guild]|h Officer: pulling in 5\n');
     expect(tail.pollChatLog().newRecords).toHaveLength(0);
   });
 
@@ -114,13 +139,39 @@ describe('pollChatLog', () => {
     vi.resetModules();
     const badWowPath = mkdtempSync(path.join(tmpdir(), 'gt-chat-tail-bad-wow-path-'));
     process.env.DATA_DIR = mkdtempSync(path.join(tmpdir(), 'gt-chat-tail-unconfigured-'));
-    const lootLog = await import('./lootLog.cjs');
-    lootLog.setWowPath(badWowPath); // no WTF subfolder -- isRealWowPath rejects it
+    const badLootLog = await import('./lootLog.cjs');
+    badLootLog.setWowPath(badWowPath); // no WTF subfolder -- isRealWowPath rejects it
     const unconfiguredTail = await import('./lootChatTail.cjs');
     // Only meaningful if this dev machine has no real WoW install at lootLog.cjs's
     // hardcoded Windows default path for resolveWowPath() to fall back to.
-    if (lootLog.isRealWowPath('C:\\Program Files (x86)\\World of Warcraft\\_retail_')) return;
+    if (badLootLog.isRealWowPath('C:\\Program Files (x86)\\World of Warcraft\\_retail_')) return;
     expect(unconfiguredTail.pollChatLog()).toEqual({ status: 'not_configured', newRecords: [] });
     expect(unconfiguredTail.getChatLogStatus()).toEqual({ path: null, exists: false, active: false });
+  });
+});
+
+describe('getChatLogStatus', () => {
+  it('reports exists+active for a file just written to', () => {
+    writeFileSync(chatLogFile, `${WON_LINE}\n`);
+    const status = tail.getChatLogStatus();
+    expect(status.exists).toBe(true);
+    expect(status.active).toBe(true);
+    expect(status.path).toBe(chatLogFile);
+  });
+
+  it('reports exists but not active for a file untouched for a long time', () => {
+    writeFileSync(chatLogFile, `${WON_LINE}\n`);
+    const old = new Date(Date.now() - 60 * 60 * 1000); // 1 hour ago
+    utimesSync(chatLogFile, old, old);
+    const status = tail.getChatLogStatus();
+    expect(status.exists).toBe(true);
+    expect(status.active).toBe(false);
+  });
+
+  it('reports not exists when the log file has never been created', () => {
+    const status = tail.getChatLogStatus();
+    expect(status.exists).toBe(false);
+    expect(status.active).toBe(false);
+    expect(status.path).toBe(chatLogFile);
   });
 });

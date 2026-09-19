@@ -1,12 +1,109 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { LootHistoryHeader } from './LootHistoryHeader';
 import { LootLogTable } from './LootLogTable';
 import { LootRecordDialog } from './LootRecordDialog';
 import { PostToDiscordDialog } from './PostToDiscordDialog';
 import { DeleteNightDialog } from './DeleteNightDialog';
 import { Button } from '../../design-system/Button';
+import { Badge } from '../../design-system/Badge';
 import { useLootHistory } from './useLootHistory';
 import type { LootEntry } from '../../raid/lootLogic';
+
+function timeAgo(ms: number | null): string {
+  if (ms == null) return 'never';
+  const seconds = Math.max(0, Math.round((Date.now() - ms) / 1000));
+  if (seconds < 5) return 'just now';
+  if (seconds < 60) return `${seconds}s ago`;
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  return `${Math.round(minutes / 60)}h ago`;
+}
+
+// The obvious, glanceable answer to "is tonight's loot actually being captured right
+// now" -- added after chat-tail silently captured nothing for a full raid night with
+// zero error anywhere (a parser mismatch against WoW's real on-disk log format -- see
+// lootChatTail.cjs). Previously the only signals were an in-game popup and chat lines
+// that scroll away; this makes the same fact checkable from the app itself, updating
+// every 10s to match main.cjs's own poll cadence.
+function LiveCaptureCard({ lh }: { lh: ReturnType<typeof useLootHistory> }) {
+  const [nameDraft, setNameDraft] = useState(lh.wowPath?.characterName ?? '');
+  useEffect(() => {
+    setNameDraft(lh.wowPath?.characterName ?? '');
+  }, [lh.wowPath?.characterName]);
+
+  const chatLog = lh.chatTailStatus?.chatLog;
+  const nameSet = !!lh.wowPath?.characterName;
+
+  let statusTone: 'success' | 'warning' | 'neutral' = 'neutral';
+  let statusText = 'Checking…';
+  if (chatLog) {
+    if (!chatLog.exists) {
+      statusTone = 'warning';
+      statusText = "Can't find your WoW chat log -- type /chatlog in-game once, then FULLY LOG OUT (not /reload) to start it.";
+    } else if (!chatLog.active) {
+      statusTone = 'warning';
+      statusText = 'Chat log found, but nothing written to it recently -- is WoW open and running on this PC?';
+    } else if (!nameSet) {
+      statusTone = 'warning';
+      statusText = 'Watching your chat log, but your own wins need a character name below to be captured live.';
+    } else {
+      statusTone = 'success';
+      statusText = `Watching your chat log for live loot -- last checked ${timeAgo(lh.chatTailStatus?.lastPollAt ?? null)}.`;
+    }
+  }
+
+  return (
+    <div
+      className="crd-card"
+      style={{
+        padding: '16px 20px',
+        marginBottom: 16,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 12,
+        borderColor: statusTone === 'warning' ? 'rgba(192,144,47,.5)' : undefined,
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <Badge tone={statusTone === 'success' ? 'gold' : statusTone === 'warning' ? 'warning' : 'neutral'} dot>
+          {statusTone === 'success' ? 'Live for this raid' : statusTone === 'warning' ? 'Needs attention' : 'Checking'}
+        </Badge>
+        <span style={{ fontSize: 'var(--text-body-s)', color: 'var(--text-body)' }}>{statusText}</span>
+        {(lh.chatTailStatus?.capturedThisSession ?? 0) > 0 && (
+          <span style={{ marginLeft: 'auto', fontSize: 'var(--text-micro)', color: 'var(--text-faint)', fontFamily: 'var(--font-mono)' }}>
+            {lh.chatTailStatus!.capturedThisSession} captured live this session -- last {timeAgo(lh.chatTailStatus!.lastCaptureAt)}
+          </span>
+        )}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <label style={{ fontSize: 'var(--text-body-s)', color: 'var(--text-muted)' }} htmlFor="gtloot-character-name">
+          Your character name (for your own live wins):
+        </label>
+        <input
+          id="gtloot-character-name"
+          type="text"
+          placeholder="e.g. Vitaezra"
+          value={nameDraft}
+          onChange={(e) => setNameDraft(e.target.value)}
+          onBlur={() => {
+            if (nameDraft.trim() !== (lh.wowPath?.characterName ?? '')) lh.setCharacterName(nameDraft.trim());
+          }}
+          style={{
+            padding: '6px 10px',
+            border: '1px solid var(--border-hairline)',
+            borderRadius: 'var(--radius-sm)',
+            background: 'var(--surface-raised)',
+            color: 'var(--text-body)',
+            fontFamily: 'var(--font-ui)',
+            fontSize: 'var(--text-body-s)',
+            minWidth: 160,
+          }}
+        />
+        {lh.savingCharacterName && <span style={{ fontSize: 'var(--text-micro)', color: 'var(--text-faint)' }}>Saving…</span>}
+      </div>
+    </div>
+  );
+}
 
 function SetupCard({ lh }: { lh: ReturnType<typeof useLootHistory> }) {
   const needsPath = lh.status === 'not_configured';
@@ -58,6 +155,7 @@ export function LootHistory() {
       />
 
       <div style={{ maxWidth: 1160, margin: '0 auto', padding: 32 }}>
+        {lh.status === 'ok' && <LiveCaptureCard lh={lh} />}
         {lh.status === 'ok' && (
           <div
             style={{
