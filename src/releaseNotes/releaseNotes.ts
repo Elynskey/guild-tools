@@ -23,6 +23,21 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '1.1.4',
+    date: '2026-09-19',
+    title: 'Season Loot Report is just your raiders',
+    highlights: [
+      {
+        heading: 'One-night guests are hidden',
+        body: 'People who were in a raid group but are not on the roster or in the guild, and only showed up on a single night (pugs and visitors), no longer fill the Season Loot Report. A switch above the table shows them again, tagged Guest.',
+      },
+      {
+        heading: 'Real raiders stay',
+        body: 'Everyone on the roster, every guild character, and anyone who raided with the team on two or more nights stays in the report, even if they have since left or gone inactive.',
+      },
+    ],
+  },
+  {
     version: '1.1.3',
     date: '2026-09-19',
     title: 'Live loot, DPS that matches Warcraft Logs, and more',

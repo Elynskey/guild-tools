@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Badge } from '../../design-system/Badge';
 import { Crest } from '../../design-system/Crest';
 import { Icon } from '../../design-system/Icon';
+import { Switch } from '../../design-system/Switch';
 import { RefreshButton } from '../shared/RefreshButton';
 import { HelpTooltip } from '../../design-system/HelpTooltip';
 import { BossIcon } from '../../raid/BossIcon';
@@ -70,7 +71,7 @@ export function SeasonLootReport() {
           Every Need win this tier, per raider -- who's behind, who's kept what, and when they last won something.
         </p>
 
-        <div style={{ marginBottom: 16 }}>
+        <div style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap' }}>
           <input
             type="text"
             placeholder="Filter by raider…"
@@ -87,6 +88,12 @@ export function SeasonLootReport() {
               minWidth: 220,
             }}
           />
+          {lr.guestCount > 0 && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+              <Switch label={`Show ${lr.guestCount} one-night guest${lr.guestCount === 1 ? '' : 's'}`} checked={lr.showGuests} onChange={lr.setShowGuests} />
+              <HelpTooltip text="People who were in a raid group but aren't on the roster or in the guild, and were only seen on one raid night -- pugs and visitors. Hidden by default so this report is your raiders." />
+            </span>
+          )}
         </div>
 
         {lr.loading ? (
@@ -115,7 +122,10 @@ export function SeasonLootReport() {
                     className="raider-row"
                     style={{ display: 'grid', gridTemplateColumns: GRID_TEMPLATE, gap: 12, alignItems: 'center', padding: '10px 18px', borderTop: '1px solid var(--border-hairline)', cursor: 'pointer' }}
                   >
-                    <div style={{ fontFamily: 'var(--font-display)', fontWeight: 600, letterSpacing: '.03em', color: 'var(--text-strong)' }}>{r.name}</div>
+                    <div style={{ fontFamily: 'var(--font-display)', fontWeight: 600, letterSpacing: '.03em', color: r.isGuest ? 'var(--text-muted)' : 'var(--text-strong)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                      {r.name}
+                      {r.isGuest && <Badge tone="neutral">Guest</Badge>}
+                    </div>
                     <div
                       title={r.maxNeedWinsInNight > 2 ? `Broke the 2-win cap (counted per difficulty) on at least one raid night (${r.maxNeedWinsInNight} at one difficulty)` : undefined}
                       style={{

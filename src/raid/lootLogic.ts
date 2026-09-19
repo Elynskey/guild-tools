@@ -193,6 +193,17 @@ export interface SeasonLootRow {
   lossCount: number;
   /** Newest first. Reuses SeasonLootItem's shape; tradedTo is always null since a losing roll was never won. */
   lostItems: SeasonLootItem[];
+  /** A one-night visitor, not a raider: not on the roster, not a guild character, and only ever seen in loot on a single raid night (a pug or a guest in the group). Hidden from the season report by default. Always false when no guild list was available to judge by. */
+  isGuest: boolean;
+}
+
+/** How many separate raid nights a set of timestamps spans -- a gap of more than the same 6 hours that groups loot into a night starts a new one. */
+export function countRaidNights(times: number[]): number {
+  if (times.length === 0) return 0;
+  const sorted = [...times].sort((a, b) => a - b);
+  let nights = 1;
+  for (let i = 1; i < sorted.length; i++) if (sorted[i] - sorted[i - 1] > NIGHT_GAP_SECONDS) nights++;
+  return nights;
 }
 
 /**
@@ -202,8 +213,16 @@ export interface SeasonLootRow {
  * snapshot (an alt, a since-departed member -- their history doesn't just disappear).
  * Pure function over the full season's entries, same as everything else in this file;
  * the "season" scope comes from the caller passing every entry (not one night's).
+ *
+ * Group loot also captures whoever else was in the raid group -- a one-off pug or guest
+ * run puts dozens of non-guild names in the data. `guildNames` (every guild character we
+ * know of) lets those be marked `isGuest` instead of listed as raiders: someone is a
+ * guest only if they are on neither the roster nor the guild list AND were seen on a
+ * single raid night. Anyone who raided with the team on 2+ nights stays (a raider who has
+ * since left or gone inactive keeps their history). Pass null when the guild list isn't
+ * available: nobody is judged a guest, so a missing list can never hide a real raider.
  */
-export function buildSeasonLootReport(entries: LootEntry[], rosterNames: string[], lossRecords: RawNeedLossRecord[] = []): SeasonLootRow[] {
+export function buildSeasonLootReport(entries: LootEntry[], rosterNames: string[], lossRecords: RawNeedLossRecord[] = [], guildNames: ReadonlySet<string> | null = null): SeasonLootRow[] {
   const byName = new Map<string, LootEntry[]>();
   for (const name of rosterNames) byName.set(name, []);
   for (const e of entries) {
@@ -221,6 +240,7 @@ export function buildSeasonLootReport(entries: LootEntry[], rosterNames: string[
     lossesByName.set(r.name, list);
   }
 
+  const rosterSet = new Set(rosterNames);
   const nights = groupLootByNight(entries);
   const allNames = new Set([...byName.keys(), ...lossesByName.keys()]);
 
@@ -229,6 +249,7 @@ export function buildSeasonLootReport(entries: LootEntry[], rosterNames: string[
     const sorted = [...won].sort((a, b) => b.time - a.time);
     const maxNeedWinsInNight = nights.reduce((max, night) => Math.max(max, needWinTally(night.entries, name).capCount), 0);
     const losses = [...(lossesByName.get(name) ?? [])].sort((a, b) => b.time - a.time);
+    const isGuest = guildNames !== null && !rosterSet.has(name) && !guildNames.has(name) && countRaidNights([...won.map((e) => e.time), ...losses.map((r) => r.time)]) < 2;
     return {
       name,
       needWinCount: needWinCount(entries, name),
@@ -238,6 +259,7 @@ export function buildSeasonLootReport(entries: LootEntry[], rosterNames: string[
       maxNeedWinsInNight,
       lossCount: losses.length,
       lostItems: losses.map((r) => ({ itemLink: r.itemLink, boss: r.boss, slot: r.slot ?? null, time: r.time, tradedTo: null, difficulty: r.difficulty })),
+      isGuest,
     };
   });
 }

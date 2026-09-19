@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { annotateWithTrades, buildSeasonLootReport, type SeasonLootRow } from '../../raid/lootLogic';
 import { sampleLootRecords, sampleLootTrades, sampleNeedLosses } from '../../data/sampleLoot';
 import { getRoster } from '../../data/rosterSource';
+import { getCachedProfessions } from '../../professions/professionsSource';
 
 export type SortKey = 'name' | 'needWinCount' | 'totalWon' | 'lossCount' | 'lastWonAt';
 
@@ -16,6 +17,7 @@ export function useSeasonLootReport() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [query, setQuery] = useState('');
+  const [showGuests, setShowGuests] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>('needWinCount');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
 
@@ -24,10 +26,17 @@ export function useSeasonLootReport() {
     const rosterPromise = getRoster().then((r) => r.raiders.map((raider) => raider.name));
     const lootPromise = electron ? electron.getLootLog() : Promise.resolve({ records: sampleLootRecords, trades: sampleLootTrades, needLosses: sampleNeedLosses, status: 'ok' as const });
 
-    return Promise.all([rosterPromise, lootPromise])
-      .then(([rosterNames, { records, trades, needLosses }]) => {
+    // Every guild character we know of (mains and alts), from the last professions scan --
+    // what tells a raider from a one-night guest in a pug group. Null (no scan yet, or
+    // browser preview) means "can't tell", so nobody gets hidden.
+    const guildPromise = getCachedProfessions()
+      .then((cached) => (cached ? new Set(cached.members.flatMap((m) => [m.mainName, ...m.characters.map((c) => c.characterName)])) : null))
+      .catch(() => null);
+
+    return Promise.all([rosterPromise, lootPromise, guildPromise])
+      .then(([rosterNames, { records, trades, needLosses }, guildNames]) => {
         const entries = annotateWithTrades(records, trades);
-        setRows(buildSeasonLootReport(entries, rosterNames, needLosses));
+        setRows(buildSeasonLootReport(entries, rosterNames, needLosses, guildNames));
       })
       .finally(() => {
         setLoading(false);
@@ -48,13 +57,16 @@ export function useSeasonLootReport() {
 
   const visibleRows = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const filtered = q ? rows.filter((r) => r.name.toLowerCase().includes(q)) : rows;
+    const shown = showGuests ? rows : rows.filter((r) => !r.isGuest);
+    const filtered = q ? shown.filter((r) => r.name.toLowerCase().includes(q)) : shown;
     const sorted = [...filtered].sort((a, b) => {
       const cmp = sortKey === 'name' ? a.name.localeCompare(b.name) : sortKey === 'lastWonAt' ? (a.lastWonAt ?? 0) - (b.lastWonAt ?? 0) : a[sortKey] - b[sortKey];
       return sortDir === 'asc' ? cmp : -cmp;
     });
     return sorted;
-  }, [rows, query, sortKey, sortDir]);
+  }, [rows, query, sortKey, sortDir, showGuests]);
+
+  const guestCount = useMemo(() => rows.filter((r) => r.isGuest).length, [rows]);
 
   return {
     rows: visibleRows,
@@ -63,6 +75,9 @@ export function useSeasonLootReport() {
     refresh: load,
     query,
     setQuery,
+    showGuests,
+    setShowGuests,
+    guestCount,
     sortKey,
     sortDir,
     toggleSort,

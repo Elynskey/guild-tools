@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { annotateWithTrades, buildSeasonLootReport, filterByRaider, formatNightForDiscord, groupLootByNight, needWinCount, needWinTally, type RawLootRecord, type RawNeedLossRecord, type RawTradeRecord } from './lootLogic';
+import { annotateWithTrades, buildSeasonLootReport, filterByRaider, formatNightForDiscord, groupLootByNight, needWinCount, needWinTally, countRaidNights, type RawLootRecord, type RawNeedLossRecord, type RawTradeRecord } from './lootLogic';
 
 function record(overrides: Partial<RawLootRecord> & Pick<RawLootRecord, 'time'>): RawLootRecord {
   return { itemId: 1, itemLink: '[Item]', winner: 'Grimsyl', boss: 'Vashnik the Malignant', ...overrides };
@@ -237,7 +237,7 @@ describe('formatNightForDiscord', () => {
 describe('buildSeasonLootReport', () => {
   it('includes a roster member with zero wins', () => {
     const rows = buildSeasonLootReport([], ['Grimsyl']);
-    expect(rows).toEqual([{ name: 'Grimsyl', needWinCount: 0, totalWon: 0, items: [], lastWonAt: null, maxNeedWinsInNight: 0, lossCount: 0, lostItems: [] }]);
+    expect(rows).toEqual([{ name: 'Grimsyl', needWinCount: 0, totalWon: 0, items: [], lastWonAt: null, maxNeedWinsInNight: 0, lossCount: 0, lostItems: [], isGuest: false }]);
   });
 
   it('counts every win toward totalWon but excludes a traded-away item from needWinCount', () => {
@@ -340,5 +340,49 @@ describe('buildSeasonLootReport', () => {
     const [row] = buildSeasonLootReport(entries, ['Grimsyl'], losses);
     expect(row.items[0].difficulty).toBe('Heroic');
     expect(row.lostItems[0].difficulty).toBe('Normal');
+  });
+});
+
+describe('one-night guests are kept out of the season report', () => {
+  const DAY = 24 * 60 * 60;
+  const win = (time: number, itemId: number, winner: string) => record({ time, itemId, itemLink: `[Item ${itemId}]`, winner });
+  const loss = (time: number, name: string): RawNeedLossRecord => ({ itemId: 99, itemLink: '[Shield]', name, boss: 'Sszorak', time });
+  const guild = new Set(['Ranikina', 'Dkmagetsu']);
+
+  it('counts separate raid nights, not separate timestamps', () => {
+    expect(countRaidNights([])).toBe(0);
+    expect(countRaidNights([1000, 2000, 3000])).toBe(1);
+    expect(countRaidNights([1000, 1000 + DAY, 1000 + 8 * DAY])).toBe(3);
+  });
+
+  it('marks a non-roster, non-guild name seen on one night as a guest -- wins or just lost rolls', () => {
+    const entries = annotateWithTrades([win(1000, 1, 'Pugger'), win(2000, 2, 'Pugger')], []);
+    const rows = buildSeasonLootReport(entries, ['Ranikina'], [loss(1500, 'LostOnly')], guild);
+    expect(rows.find((r) => r.name === 'Pugger')!.isGuest).toBe(true);
+    expect(rows.find((r) => r.name === 'LostOnly')!.isGuest).toBe(true);
+  });
+
+  it('keeps roster members and guild characters, even with one night or no loot at all', () => {
+    const entries = annotateWithTrades([win(1000, 1, 'Dkmagetsu')], []);
+    const rows = buildSeasonLootReport(entries, ['Ranikina'], [], guild);
+    expect(rows.find((r) => r.name === 'Ranikina')!.isGuest).toBe(false); // roster, zero loot
+    expect(rows.find((r) => r.name === 'Dkmagetsu')!.isGuest).toBe(false); // guild character, one night
+  });
+
+  it('keeps someone who raided on two or more nights even if they are on neither list (a raider who left)', () => {
+    const entries = annotateWithTrades([win(1000, 1, 'Thundoor'), win(1000 + 7 * DAY, 2, 'Thundoor')], []);
+    expect(buildSeasonLootReport(entries, ['Ranikina'], [], guild).find((r) => r.name === 'Thundoor')!.isGuest).toBe(false);
+  });
+
+  it('a win and a lost roll on different nights count as two nights', () => {
+    const entries = annotateWithTrades([win(1000, 1, 'Visitor')], []);
+    const rows = buildSeasonLootReport(entries, [], [loss(1000 + 3 * DAY, 'Visitor')], guild);
+    expect(rows.find((r) => r.name === 'Visitor')!.isGuest).toBe(false);
+  });
+
+  it('never marks anyone a guest when there is no guild list to judge by', () => {
+    const entries = annotateWithTrades([win(1000, 1, 'Pugger')], []);
+    expect(buildSeasonLootReport(entries, [], [], null).every((r) => !r.isGuest)).toBe(true);
+    expect(buildSeasonLootReport(entries, []).every((r) => !r.isGuest)).toBe(true);
   });
 });
