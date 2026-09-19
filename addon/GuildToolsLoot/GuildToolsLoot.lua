@@ -138,7 +138,7 @@ end
 local function remindChatLoggingIfOff()
   local line, isOn = chatLoggingStatusLine()
   if isOn == false then
-    announce('chat logging ' .. line .. ' -- Guild Tools needs it for live loot updates. Type /chatlog once, THEN FULLY LOG OUT (not just /reload) -- confirmed live: it only starts actually writing after a real login, not mid-session.')
+    announce('chat logging ' .. line .. ' -- Guild Tools needs it for live loot updates. Type /chatlog once, then go ALL THE WAY BACK to the character select screen (Log Out) and log back in -- /reload is NOT enough. Confirmed live: it only starts actually writing after a real login, not mid-session.')
   end
 end
 
@@ -553,14 +553,30 @@ local function buildStatusText(chatLoggingResult)
   elseif chatLoggingSeenOnThisSession then
     chatLogging = "|cffc0902fReads OFF right now, but was ON earlier this session|r -- possibly a stale read. Trust Interface Options if it disagrees."
   else
-    chatLogging = "|cffa83232Chat logging is OFF|r -- type /chatlog once, THEN FULLY LOG OUT (not /reload) to make it stick"
+    chatLogging = "|cffa83232Chat logging is OFF|r -- type /chatlog once, then go ALL THE WAY BACK to the character select screen (Log Out) and log back in. /reload is NOT enough."
   end
-  return logging .. "\n" .. chatLogging .. "\n\n/gtloot on|off to change -- /gtloot scan to pull in anything missed"
+  -- The check time is there so a Refresh visibly did something even when nothing changed.
+  return logging .. "\n" .. chatLogging .. "\n\n/gtloot on|off to change -- /gtloot scan to pull in anything missed\n|cff8a8a8aChecked " .. date("%H:%M:%S") .. "|r"
 end
 
+local function showStatusPopup()
+  sampleChatLogging(function(result)
+    StaticPopup_Show("GUILDTOOLSLOOT_STATUS", buildStatusText(result))
+  end)
+end
+
+-- Refresh re-runs the whole check (logging on/off, chat logging, both samples) and
+-- shows the popup again. StaticPopup hides itself as soon as OnAccept returns, so the
+-- re-show is deferred a beat -- calling StaticPopup_Show from inside OnAccept would
+-- get hidden again immediately by that same close. No OnCancel on purpose: Escape and
+-- the Close button just dismiss, same rule as the raid-entry popup above.
 StaticPopupDialogs["GUILDTOOLSLOOT_STATUS"] = {
   text = "%s",
-  button1 = "OK",
+  button1 = "Refresh",
+  button2 = "Close",
+  OnAccept = function()
+    C_Timer.After(0.1, showStatusPopup)
+  end,
   timeout = 0,
   whileDead = true,
   hideOnEscape = true,
@@ -735,8 +751,6 @@ SlashCmdList["GUILDTOOLSLOOT"] = function(msg)
       announce(added > 0 and (added .. " new Need win" .. (added == 1 and "" or "s") .. " pulled in from Loot History. /reload whenever's convenient to confirm the boss/slot in Guild Tools.") or "Loot History checked -- nothing new to add.")
     end
   else
-    sampleChatLogging(function(result)
-      StaticPopup_Show("GUILDTOOLSLOOT_STATUS", buildStatusText(result))
-    end)
+    showStatusPopup()
   end
 end

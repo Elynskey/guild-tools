@@ -50,7 +50,7 @@ function RaidCoverageRow({ heartbeats }: { heartbeats: { officerName: string; ch
       <span style={{ fontSize: 'var(--text-body-s)', color: 'var(--text-body)' }}>
         {covered
           ? `${activeOfficers.length} of ${heartbeats.length} officer app${heartbeats.length === 1 ? '' : 's'} reporting in has chat logging active (${activeOfficers.map((h) => h.officerName).join(', ')}).`
-          : `${heartbeats.length} officer app${heartbeats.length === 1 ? '' : 's'} reporting in, but none have chat logging active -- live capture won't work for anyone until someone runs /chatlog.`}
+          : `${heartbeats.length} officer app${heartbeats.length === 1 ? '' : 's'} reporting in, but none have chat logging active -- live capture won't work for anyone until someone runs /chatlog and then logs all the way out to the character select screen and back in.`}
       </span>
     </div>
   );
@@ -70,7 +70,7 @@ function LiveCaptureCard({ lh }: { lh: ReturnType<typeof useLootHistory> }) {
   if (chatLog) {
     if (!chatLog.exists) {
       statusTone = 'warning';
-      statusText = "Can't find your WoW chat log -- type /chatlog in-game once, then FULLY LOG OUT (not /reload) to start it.";
+      statusText = "Can't find your WoW chat log -- type /chatlog in-game once, then go ALL THE WAY BACK to the character select screen (Log Out) and log in again. /reload is not enough.";
     } else if (!chatLog.active) {
       statusTone = 'warning';
       statusText = 'Chat log found, but nothing written to it recently -- is WoW open and running on this PC?';
@@ -214,7 +214,7 @@ export function LootHistory() {
               <code>/gtloot scan</code> -- pull in any wins Loot History caught but the addon missed live
             </div>
             <div>
-              <code>/chatlog</code> -- turns on live updates to this app, once, ever
+              <code>/chatlog</code> -- turns on live updates to this app, once, ever. Then go all the way back to the character select screen (Log Out) and log back in -- <code>/reload</code> is not enough. The Refresh button on the <code>/gtloot</code> popup re-checks it.
             </div>
           </div>
         )}
