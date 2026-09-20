@@ -11,7 +11,10 @@
 //     so nothing collides and nothing it records reaches the Guild Tools app or production data;
 //   - chat lines in a different colour, "TEST" in the name, and the CRD crest as its icon in the
 //     in-game AddOns list;
-//   - the experiments in test-extras.lua appended (e.g. /gtloottest logmark).
+//   - tracking LOOSENED to every kind of content (raids of any difficulty, dungeons, delves, ...), with
+//     each record noting its zone/content type/difficulty, and /gtloottest track strict to put the real
+//     rules back;
+//   - the experiments in test-extras.lua appended (/gtloottest logmark, selftest, last, track).
 import { mkdir, readFile, rm, writeFile, cp } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
@@ -25,7 +28,36 @@ const EMBLEM = path.join(ROOT, 'assets', 'guild-emblem.png');
 const DEFAULT_ADDONS = 'C:\\Program Files (x86)\\World of Warcraft\\_retail_\\Interface\\AddOns';
 const ICON_SIZE = 128; // WoW textures must be a power of two
 
-/** The real addon's Lua, renamed so it can live beside the original. Exported for tests. */
+/** Replace `needle` exactly `count` times or fail loudly -- if the real addon changes shape, the generator must break, not silently ship a half-loosened copy. */
+function replaceExactly(text, needle, replacement, count = 1) {
+  const found = text.split(needle).length - 1;
+  if (found !== count) throw new Error(`Expected ${count} occurrence(s) of ${JSON.stringify(needle.slice(0, 70))} in the real addon, found ${found}. Update scripts/make-test-addon.mjs.`);
+  return text.split(needle).join(replacement);
+}
+
+// The loosened-tracking helpers, dropped in right after the real addon's `currentDifficulty` local so the
+// rest of the copied code can use them. Tracking everything is the default; /gtloottest track strict
+// restores the real addon's rules (this tier's raid, Normal/Heroic only).
+const TRACK_ALL_HELPERS = `local currentDifficulty = nil
+
+-- TEST ADDON: tracking is loosened to every kind of content (raids of any difficulty, dungeons,
+-- delves, ...). /gtloottest track strict restores the real addon's rules.
+local function testTrackAll()
+  return GuildToolsLootTestDB ~= nil and GuildToolsLootTestDB.trackAll ~= false
+end
+local function testContent()
+  local _, instanceType = IsInInstance()
+  local name, _, difficultyID = GetInstanceInfo()
+  return name, instanceType, difficultyID
+end
+local function testDifficultyLabel()
+  local _, _, difficultyID = testContent()
+  if not difficultyID or difficultyID == 0 then return nil end
+  local label = GetDifficultyInfo and GetDifficultyInfo(difficultyID)
+  return label or ("difficulty " .. difficultyID)
+end`;
+
+/** The real addon's Lua, renamed so it can live beside the original, with tracking loosened. Exported for tests. */
 export function transformLua(lua) {
   let out = lua
     .replaceAll('GuildToolsLootDB', 'GuildToolsLootTestDB')
@@ -34,6 +66,21 @@ export function transformLua(lua) {
     .replace(/Guild Tools Loot(?! TEST)/g, 'Guild Tools Loot TEST')
     // chat lines in a different colour than the real addon's gold
     .replaceAll('|cffd4b358Guild Tools Loot TEST', '|cff4cc9f0Guild Tools Loot TEST');
+
+  // --- loosen what is tracked ---
+  out = replaceExactly(out, 'local currentDifficulty = nil', TRACK_ALL_HELPERS);
+  out = replaceExactly(out, 'local function isTrackedEncounter(encounterID)\n  if isTrackedRaidDifficulty() then return true end', 'local function isTrackedEncounter(encounterID)\n  if testTrackAll() then return true end\n  if isTrackedRaidDifficulty() then return true end');
+  // the difficulty label captured at each boss pull: any content, by its real in-game name
+  out = replaceExactly(out, '    currentDifficulty = currentRaidDifficultyLabel()\n', '    currentDifficulty = currentRaidDifficultyLabel() or (testTrackAll() and testDifficultyLabel() or nil)\n');
+  // every record says where it came from, so the test data can tell dungeon from raid from delve
+  out = replaceExactly(
+    out,
+    '    difficulty = difficultyOverride or currentDifficulty,\n',
+    '    difficulty = difficultyOverride or currentDifficulty or (testTrackAll() and testDifficultyLabel() or nil),\n    zone = testContent(),\n    contentType = select(2, testContent()),\n    difficultyID = select(3, testContent()),\n',
+    2,
+  );
+  // a new instance is a new context: don't carry the last boss (or last zone\'s difficulty) into loot from trash or a chest
+  out = replaceExactly(out, '  elseif event == "PLAYER_ENTERING_WORLD" then\n    recordCharacter()\n', '  elseif event == "PLAYER_ENTERING_WORLD" then\n    recordCharacter()\n    if testTrackAll() then currentBoss = nil currentEncounterID = nil currentDifficulty = nil end\n');
   return out;
 }
 
