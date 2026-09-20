@@ -16,22 +16,26 @@ const { resolveDataDir } = require('./dataDir.cjs');
 // something correctly. manualAdd()/update()/remove() exist for exactly that -- a
 // correction tool, not a replacement for the addon's automatic capture.
 
-function storePath() {
-  return path.join(resolveDataDir(), 'loot-records.json');
+// Every function takes a `mode` ('prod' | 'test'), defaulting to 'prod' so any caller that doesn't
+// pass one behaves exactly as before. 'test' reads and writes a completely separate file
+// (loot-records.test.json) -- a "Guild Tools (Test)" app, and anything it captures, can never touch
+// the real officers' loot log. Same scheme as signupsStore.cjs / gotmStore.cjs.
+function storePath(mode) {
+  return path.join(resolveDataDir(), mode === 'test' ? 'loot-records.test.json' : 'loot-records.json');
 }
 
-function save(db) {
-  fs.writeFileSync(storePath(), JSON.stringify(db, null, 2));
+function save(db, mode) {
+  fs.writeFileSync(storePath(mode), JSON.stringify(db, null, 2));
 }
 
 // Records/trades synced before `id` existed (everything synced before this feature
 // shipped) need one backfilled so they're editable/removable too -- not just newly-added
 // ones. Self-heals on first read rather than a one-off migration script, and persists
 // the assigned ids immediately so this only ever runs once per record.
-function load() {
+function load(mode) {
   let db;
   try {
-    const parsed = JSON.parse(fs.readFileSync(storePath(), 'utf8'));
+    const parsed = JSON.parse(fs.readFileSync(storePath(mode), 'utf8'));
     db = { records: parsed.records ?? [], trades: parsed.trades ?? [], needLosses: parsed.needLosses ?? [], removedKeys: parsed.removedKeys ?? [] };
   } catch {
     return { records: [], trades: [], needLosses: [], removedKeys: [] };
@@ -50,7 +54,7 @@ function load() {
       backfilled = true;
     }
   }
-  if (backfilled) save(db);
+  if (backfilled) save(db, mode);
 
   return db;
 }
@@ -101,8 +105,8 @@ const needLossKey = (r) => `${r.itemId}::${r.name}::${r.time}`;
  * edit/remove UI for these (see recordNeedLoss in the addon) -- removedKeys entries for
  * needLosses only ever get added via a manual/direct cleanup, never through an app action.
  */
-function sync(newRecords, newTrades, newNeedLosses) {
-  const db = load();
+function sync(newRecords, newTrades, newNeedLosses, mode = 'prod') {
+  const db = load(mode);
   const tradeKeys = new Set(db.trades.map(tradeKey));
   const needLossKeys = new Set(db.needLosses.map(needLossKey));
   const removed = new Set(db.removedKeys);
@@ -156,17 +160,17 @@ function sync(newRecords, newTrades, newNeedLosses) {
     }
   }
 
-  save(db);
+  save(db, mode);
   return { records: db.records, trades: db.trades, needLosses: db.needLosses, addedRecords, addedTrades, addedNeedLosses, verifiedRecords };
 }
 
 /** Stamps records as announced to Discord so auto-post never announces the same win twice. */
-function markPosted(ids) {
-  const db = load();
+function markPosted(ids, mode = 'prod') {
+  const db = load(mode);
   const wanted = new Set(ids);
   const stamp = new Date().toISOString();
   for (const r of db.records) if (wanted.has(r.id)) r.discordPostedAt = stamp;
-  save(db);
+  save(db, mode);
 }
 
 // Real item links are the |Hitem:...|h[Name]|h|r escape sequence -- same extraction
@@ -248,9 +252,9 @@ function upgradeRecord(existing, incoming) {
 }
 
 /** Officer-entered record -- no real itemLink available by hand, so the item name is stored as a plain "[Name]" string (the same bracketed shape LootLogTable's display parsing already expects; it just won't carry a real tooltip). itemId, when the app's smart picker supplied one (a real item from this tier's loot table), is kept so getItemIconUrls can still resolve a real icon -- free-text entries just get null, same as before. */
-function manualAdd({ winner, itemName, boss, slot, time: recordTime, itemId, difficulty }) {
+function manualAdd({ winner, itemName, boss, slot, time: recordTime, itemId, difficulty }, mode = 'prod') {
   if (!winner || !itemName) throw new Error('winner and itemName are both required.');
-  const db = load();
+  const db = load(mode);
   const time = recordTime ?? Math.floor(Date.now() / 1000);
 
   const duplicate = db.records.find(
@@ -271,7 +275,7 @@ function manualAdd({ winner, itemName, boss, slot, time: recordTime, itemId, dif
     difficulty: difficulty || null,
   };
   db.records.push(record);
-  save(db);
+  save(db, mode);
   return db.records;
 }
 
@@ -279,8 +283,8 @@ function manualAdd({ winner, itemName, boss, slot, time: recordTime, itemId, dif
 // existing record is caught the same way adding one is -- checked against the
 // PATCHED values before anything is mutated, since `record` is the live object
 // inside db.records and mutating it first would make the record collide with itself.
-function update(id, patch) {
-  const db = load();
+function update(id, patch, mode = 'prod') {
+  const db = load(mode);
   const record = db.records.find((r) => r.id === id);
   if (!record) return db.records;
 
@@ -301,34 +305,34 @@ function update(id, patch) {
   if (patch.boss !== undefined) record.boss = patch.boss || null;
   if (patch.slot !== undefined) record.slot = patch.slot || 'Other';
   if (patch.difficulty !== undefined) record.difficulty = patch.difficulty || null;
-  save(db);
+  save(db, mode);
   return db.records;
 }
 
 // Manually-added records (no real natural key -- itemId is null) don't get tombstoned:
 // there's nothing for a future sync to ever re-add, since the addon never produced them.
-function remove(id) {
-  const db = load();
+function remove(id, mode = 'prod') {
+  const db = load(mode);
   const target = db.records.find((r) => r.id === id);
   if (target && target.itemId != null) db.removedKeys.push(recordKey(target));
   db.records = db.records.filter((r) => r.id !== id);
-  save(db);
+  save(db, mode);
   return db.records;
 }
 
 /** A trade with no matching win record (a standalone entry, e.g. a Greed-won item just passed to someone) -- no fields to correct, only ever removed outright. Tombstoned the same way remove() does, for the same reason (the addon's local copy will keep re-offering it otherwise). */
-function removeTrade(id) {
-  const db = load();
+function removeTrade(id, mode = 'prod') {
+  const db = load(mode);
   const target = db.trades.find((t) => t.id === id);
   if (target) db.removedKeys.push(tradeKey(target));
   db.trades = db.trades.filter((t) => t.id !== id);
-  save(db);
+  save(db, mode);
   return db.trades;
 }
 
 /** Bulk-removes every record/trade/needLoss whose time falls in [startTime, endTime] -- the "delete this whole raid night" action, since a night is purely a client-side time-gap grouping (see groupLootByNight), not an entity this store otherwise knows about. Tombstones each one the same way its own single-item remove function does, so a future sync from a client whose local addon data still has the originals can't silently bring any of it back. */
-function deleteNight(startTime, endTime) {
-  const db = load();
+function deleteNight(startTime, endTime, mode = 'prod') {
+  const db = load(mode);
   const inRange = (t) => t >= startTime && t <= endTime;
 
   const keptRecords = [];
@@ -366,7 +370,7 @@ function deleteNight(startTime, endTime) {
   db.records = keptRecords;
   db.trades = keptTrades;
   db.needLosses = keptNeedLosses;
-  save(db);
+  save(db, mode);
   return {
     records: db.records,
     trades: db.trades,

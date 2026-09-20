@@ -71,19 +71,23 @@ function formatBatches(records) {
 
 /**
  * @param {object[]} verifiedRecords  sync()'s verifiedRecords
- * @param {{ nowSeconds?: number, settings?: object, post?: Function, mark?: Function }} [deps]  injectable for tests
+ * @param {{ nowSeconds?: number, settings?: object, post?: Function, mark?: Function, mode?: 'prod' | 'test' }} [deps]  injectable for tests
  * @returns {Promise<{ posted: number, skipped?: string }>}
  */
 async function announceVerified(verifiedRecords, deps = {}) {
-  const { nowSeconds = Math.floor(Date.now() / 1000), settings = settingsStore.load(), post = discordPost.postMessage, mark = lootRecordsStore.markPosted } = deps;
+  const { nowSeconds = Math.floor(Date.now() / 1000), settings = settingsStore.load(), post = discordPost.postMessage, mode = 'prod' } = deps;
+  // A test-mode app's wins post to the TEST loot channel (settings.testLootLogChannelId, e.g. CRD-TEST) and
+  // are stamped in the TEST store -- never the real channel, never the real records.
+  const channelId = mode === 'test' ? settings.testLootLogChannelId : settings.lootLogChannelId;
+  const mark = deps.mark ?? ((ids) => lootRecordsStore.markPosted(ids, mode));
   if (!settings.autoPostLoot) return { posted: 0, skipped: 'off' };
-  if (!settings.lootLogChannelId) return { posted: 0, skipped: 'no loot channel configured' };
+  if (!channelId) return { posted: 0, skipped: 'no loot channel configured' };
 
   const postable = (verifiedRecords ?? []).filter((r) => isPostable(r, nowSeconds));
   let posted = 0;
   for (const batch of formatBatches(postable)) {
     try {
-      await post(settings.lootLogChannelId, { content: batch.content });
+      await post(channelId, { content: batch.content });
       mark(batch.ids);
       posted += 1;
     } catch (err) {

@@ -63,4 +63,42 @@ GuildToolsLootDB = {
     const db = readLuaVariable(src, 'GuildToolsLootDB');
     expect(db.records).toEqual([]);
   });
+
+  it('reads single-digit numbers, with and without a trailing comma (WoW writes them for small fields like difficultyID)', () => {
+    const db = readLuaVariable(`V = {
+["a"] = 8,
+["b"] = 0,
+["c"] = 9
+}
+`, 'V');
+    expect(db).toEqual({ a: 8, b: 0, c: 9 });
+  });
+
+  it('reads negative and multi-digit numbers as before', () => {
+    const db = readLuaVariable(`V = {
+["a"] = -3,
+["b"] = -42,
+["c"] = 1735689600,
+["d"] = 1.5,
+}
+`, 'V');
+    expect(db).toEqual({ a: -3, b: -42, c: 1735689600, d: 1.5 });
+  });
+
+  it('parses a record the way the test addon saves it (zone, content type and a single-digit difficultyID)', () => {
+    const src = `V = {
+["records"] = {
+{
+["itemId"] = 25,
+["winner"] = "Thundoor",
+["difficulty"] = "Mythic Keystone",
+["zone"] = "Some Dungeon",
+["contentType"] = "party",
+["difficultyID"] = 8,
+},
+},
+}
+`;
+    expect(readLuaVariable(src, 'V').records[0]).toMatchObject({ itemId: 25, contentType: 'party', difficultyID: 8 });
+  });
 });

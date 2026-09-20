@@ -8,9 +8,12 @@ frameMethods.__index = function(t, k)
   return function() return t end
 end
 function CreateFrame()
-  local f = setmetatable({ scripts = {} }, frameMethods)
+  local f = setmetatable({ scripts = {}, shown = false }, frameMethods)
   f.SetScript = function(self, name, fn) self.scripts[name] = fn end
   f.GetScript = function(self, name) return self.scripts[name] end
+  f.Show = function(self) self.shown = true end
+  f.Hide = function(self) self.shown = false end
+  f.IsShown = function(self) return self.shown == true end
   frames[#frames + 1] = f
   return f
 end
@@ -166,6 +169,93 @@ check("last with nothing captured points at selftest", out:find("nothing capture
 
 out = say("GUILDTOOLSLOOTTEST", "help")
 check("help lists track, last and selftest", out:find("track") and out:find("last") and out:find("selftest"), out)
+
+
+-- =========================== the checklist overlay ===========================
+GuildToolsLootTestDB.records = {}
+GuildToolsLootTestDB.needLosses = {}
+GuildToolsLootTestDB.checklist = {}
+GuildToolsLootTestDB.checklistHidden = nil
+say("GUILDTOOLSLOOTTEST", "checklist reset")
+zone(true, "party", "Some Dungeon", 23)
+
+out = say("GUILDTOOLSLOOTTEST", "checklist text")
+check("the text checklist lists every item", select(2, out:gsub("%[[ x!]%]", "")) == 14, out:sub(1, 200))
+check("...the auto items start with only 'loaded' ticked", out:find("%[x%] loaded") and out:find("%[ %] win") and out:find("%[ %] selftest"))
+
+state = true
+out = say("GUILDTOOLSLOOTTEST", "checklist text")
+check("chat logging ticks live from the game's own reading", out:find("%[x%] chatlog"), "")
+state = false
+out = say("GUILDTOOLSLOOTTEST", "checklist text")
+check("...and shows failed when it reads OFF", out:find("%[!%] chatlog"), "")
+state = true
+
+say("GUILDTOOLSLOOTTEST", "selftest")
+out = say("GUILDTOOLSLOOTTEST", "checklist text")
+check("a passing self-test ticks its item", out:find("%[x%] selftest"), "")
+check("...but does NOT tick 'a real win captured' (the fake win is not real)", out:find("%[ %] win"), "")
+
+-- a real win in a dungeon, seen by the poll
+win(testFrame, "Foxtrot")
+say("GUILDTOOLSLOOTTEST", "checklist refresh")
+out = say("GUILDTOOLSLOOTTEST", "checklist text")
+check("a real win ticks 'win' and the DUNGEON item", out:find("%[x%] win") and out:find("%[x%] dungeon") and out:find("%[ %] raid"), "")
+
+-- a raid win and a lost roll in a delve
+zone(true, "raid", "Some Old Raid", 16)
+win(testFrame, "Golf")
+GuildToolsLootTestDB.needLosses[#GuildToolsLootTestDB.needLosses + 1] = { itemId = 9, name = "Hotel", time = time(), contentType = "scenario", zone = "A Delve" }
+say("GUILDTOOLSLOOTTEST", "checklist refresh")
+out = say("GUILDTOOLSLOOTTEST", "checklist text")
+check("a raid win ticks RAID; a lost roll in a delve ticks 'loss' and DELVE", out:find("%[x%] raid") and out:find("%[x%] loss") and out:find("%[x%] delve"), "")
+
+-- manual items
+out = say("GUILDTOOLSLOOTTEST", "check marker")
+check("check marker: first click = done", out:find("done") and GuildToolsLootTestDB.checklist.marker == "pass", out)
+out = say("GUILDTOOLSLOOTTEST", "check marker")
+check("...second = FAILED", out:find("FAILED") and GuildToolsLootTestDB.checklist.marker == "fail", out)
+out = say("GUILDTOOLSLOOTTEST", "check marker")
+check("...third = cleared", out:find("cleared") and GuildToolsLootTestDB.checklist.marker == nil, out)
+out = say("GUILDTOOLSLOOTTEST", "check win")
+check("an auto item can't be ticked by hand", out:find("ticks itself"), out)
+out = say("GUILDTOOLSLOOTTEST", "check nonsense")
+check("an unknown id lists the manual ones", out:find("marker, live_app, reload, discord, verify"), out)
+
+-- the on-screen overlay
+local before = #frames
+GuildToolsLootTestDB.checklistHidden = nil
+say("GUILDTOOLSLOOTTEST", "checklist")
+local overlay
+for i = before + 1, #frames do if frames[i].shown then overlay = frames[i] end end
+check("/gtloottest checklist builds and shows the overlay", overlay ~= nil and GuildToolsLootTestDB.checklistHidden == false)
+say("GUILDTOOLSLOOTTEST", "checklist")
+check("running it again hides it (and remembers that)", overlay.shown == false and GuildToolsLootTestDB.checklistHidden == true, "shown=" .. tostring(overlay.shown) .. " hidden=" .. tostring(GuildToolsLootTestDB.checklistHidden) .. " newFrames=" .. (#frames - before))
+say("GUILDTOOLSLOOTTEST", "checklist")
+check("...and again shows it", overlay.shown == true and GuildToolsLootTestDB.checklistHidden == false)
+
+-- state survives: it lives in the saved variables table
+check("checklist state is kept in the test addon's saved variables", type(GuildToolsLootTestDB.checklist) == "table" and GuildToolsLootTestDB.checklist.win == "pass")
+say("GUILDTOOLSLOOTTEST", "checklist reset")
+out = say("GUILDTOOLSLOOTTEST", "checklist text")
+check("reset clears the ticks (win is unticked again)", out:find("%[ %] win"), "")
+
+-- if the window can't be drawn, the addon says so and prints the list instead of erroring
+local realCreateFrame = CreateFrame
+GuildToolsLootTestDB.checklistHidden = true
+-- rebuild path: forget the built frame by loading a fresh copy of the test addon in a client whose UI templates fail
+CreateFrame = function(kind, name, parent, template)
+  if template == "BackdropTemplate" then error("template not available") end
+  return realCreateFrame(kind, name, parent, template)
+end
+local okLoad, errLoad = pcall(dofile, "addon-test/GuildToolsLootTest/GuildToolsLootTest.lua")
+check("a client where the window can't be built still loads the addon", okLoad, tostring(errLoad))
+out = say("GUILDTOOLSLOOTTEST", "checklist")
+check("...and shows the checklist as chat text instead of erroring", out:find("couldn't draw the checklist window") and out:find("%[[ x!]%]"), out:sub(1, 200))
+CreateFrame = realCreateFrame
+
+out = say("GUILDTOOLSLOOTTEST", "help")
+check("help mentions the checklist and the manual items", out:find("checklist") and out:find("live_app"), "")
 
 print(string.format("\n%d checks, %d failed", checks, failed))
 os.exit(failed == 0 and 0 or 1)

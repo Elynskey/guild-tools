@@ -34,7 +34,7 @@ export function Settings() {
     });
   };
 
-  const field = (key: 'raidSignupsChannelId' | 'lootLogChannelId' | 'gotmChannelId' | 'testRaidSignupsChannelId' | 'testGotmChannelId', value: string) => {
+  const field = (key: 'raidSignupsChannelId' | 'lootLogChannelId' | 'gotmChannelId' | 'testRaidSignupsChannelId' | 'testGotmChannelId' | 'testLootLogChannelId', value: string) => {
     setDraft({ ...draft, [key]: value });
     setDirty(true);
   };
@@ -167,6 +167,13 @@ export function Settings() {
               placeholder="Channel ID"
               value={draft.testGotmChannelId}
               onChange={(e) => field('testGotmChannelId', e.target.value)}
+            />
+            <Input
+              label="Test loot log channel"
+              placeholder="Channel ID"
+              hint="Where a test build's loot posts go. A test build's loot log is also completely separate from the real one."
+              value={draft.testLootLogChannelId}
+              onChange={(e) => field('testLootLogChannelId', e.target.value)}
             />
 
             <Button onClick={submit} disabled={saving || !dirty} iconLeft="check">

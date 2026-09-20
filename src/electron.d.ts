@@ -152,6 +152,8 @@ export interface GuildToolsSettings {
   /** Where a "Guild Tools (Test)" install posts Raid Signups/GOTM instead of the channels above -- e.g. CRD-TEST. Only ever read by a test-mode build; a normal install ignores these entirely. */
   testRaidSignupsChannelId: string;
   testGotmChannelId: string;
+  /** Where a test-mode build's loot posts go (e.g. a CRD-TEST channel). The loot log itself is also separate in test mode. */
+  testLootLogChannelId: string;
   gates: { rio: number; ilvl: number };
   minDps: number;
   /** Officer-wide: post Need wins to the loot channel automatically as they come in. On by default; changed in Settings. */

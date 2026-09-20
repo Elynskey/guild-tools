@@ -42,6 +42,8 @@ const DEFAULTS = {
   // works without ever touching production config.
   testRaidSignupsChannelId: '',
   testGotmChannelId: '',
+  // Where a test-mode app's loot posts (auto-post and the manual "Post to Discord") go -- e.g. a CRD-TEST channel.
+  testLootLogChannelId: '',
   gates: { rio: 1000, ilvl: 285 },
   minDps: 0,
   /** Shared, officer-wide: when true, Need wins are posted to lootLogChannelId automatically as they come in (see lootAutoPost.cjs). On by default; nothing posts until a loot channel is set, and an officer can switch it off in Settings (an explicit false is kept). */

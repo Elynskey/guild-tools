@@ -16,12 +16,13 @@ const proxyClient = require('./proxyClient.cjs');
  * the proxy in every packaged build -- same branch-don't-rewrite pattern as
  * everything else in this pipeline.
  */
-async function postLootNightToDiscord(messages) {
+async function postLootNightToDiscord(messages, mode = 'prod') {
   if (!Array.isArray(messages) || messages.length === 0) throw new Error('messages must be a non-empty array.');
 
   if (proxyClient.isAvailable()) return proxyClient.postLootNightToDiscord(messages);
 
-  const channelId = settingsStore.load().lootLogChannelId;
+  const settings = settingsStore.load();
+  const channelId = mode === 'test' ? settings.testLootLogChannelId : settings.lootLogChannelId;
   if (!channelId) throw new Error('No loot-log Discord channel configured -- set one in Settings first.');
   for (const message of messages) {
     await discordPost.postMessage(channelId, { content: message });

@@ -23,6 +23,9 @@ function run(cmd, args) {
   execFileSync(cmd, args, { cwd: ROOT, stdio: 'inherit', env, shell: true });
 }
 
+// The test addon this build installs and reads (see electron/dataSources/lootLog.cjs addonIdentity) -- generated
+// fresh from the real addon so the two stay in step.
+run('npm', ['run', 'addon:test']);
 run('npm', ['run', 'icons:build']);
 run('npm', ['run', 'installer-art:build']);
 run('npm', ['run', 'proxy-config']);
@@ -42,6 +45,9 @@ run('npx', [
   '--win',
   '-c.productName="Guild Tools (Test)"',
   '-c.nsis.artifactName=Guild-Tools-TEST-Setup-${version}.${ext}',
+  // The generated test addon rides along as a real folder next to the app (not inside the asar) -- test builds only.
+  '-c.extraResources.from=addon-test/GuildToolsLootTest',
+  '-c.extraResources.to=addon-test/GuildToolsLootTest',
 ]);
 
 console.log('\n[dist-test] Done -- installer is release/Guild-Tools-TEST-Setup-<version>.exe');

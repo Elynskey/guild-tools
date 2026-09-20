@@ -8,6 +8,7 @@ const EMPTY: GuildToolsSettings = {
   gotmChannelId: '',
   testRaidSignupsChannelId: '',
   testGotmChannelId: '',
+  testLootLogChannelId: '',
   gates: { ...config.gates },
   minDps: 0,
   autoPostLoot: true,

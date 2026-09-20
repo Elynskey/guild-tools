@@ -43,7 +43,10 @@ function tokenize(src) {
       i = j + 1;
       continue;
     }
-    if (/[-\d]/.test(c) && /\d/.test(src[i + 1] ?? '')) {
+    // A number is a digit, or a minus sign followed by a digit. (This used to demand a digit AFTER the first
+    // character, so a single-digit value like `= 8,` was not a number at all and the whole file failed to
+    // parse -- latent until the test addon started saving small numeric fields such as difficultyID.)
+    if (/\d/.test(c) || (c === '-' && /\d/.test(src[i + 1] ?? ''))) {
       let j = i;
       if (src[j] === '-') j++;
       while (j < n && /[\d.eE+-]/.test(src[j])) j++;
