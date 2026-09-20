@@ -35,6 +35,12 @@ export interface HeartbeatView {
   chatLogActive: boolean;
 }
 
+/** The officer-wide settings that decide whether posts can happen at all. */
+export interface ConfigView {
+  autoPostLoot: boolean;
+  testLootLogChannelId: string;
+}
+
 export interface PipelineHealth {
   checks: HealthCheck[];
   overall: CheckStatus;
@@ -59,7 +65,7 @@ const EXPECT_POSTED_MS = 2 * 60 * 1000;
 const RECENT_WINDOW_MS = 6 * 60 * 60 * 1000;
 const isPlaceholder = (r: StoreRecordView) => r.source === 'chat-tail' || r.source === 'live';
 
-export function evaluateLootPipeline(snap: LootMonitorSnapshot, store: StoreRecordView[] | null, heartbeat: HeartbeatView | null): PipelineHealth {
+export function evaluateLootPipeline(snap: LootMonitorSnapshot, store: StoreRecordView[] | null, heartbeat: HeartbeatView | null, config: ConfigView | null = null): PipelineHealth {
   const now = snap.now;
   const checks: HealthCheck[] = [];
   const add = (group: CheckGroup, id: string, label: string, status: CheckStatus, detail: string) => checks.push({ group, id, label, status, detail });
@@ -80,6 +86,13 @@ export function evaluateLootPipeline(snap: LootMonitorSnapshot, store: StoreReco
 
   if (!snap.combatLog.exists) add('Setup', 'combatlog', 'Combat log is being written', 'warn', 'No combat log: boss kills cannot be seen, so wins cannot be attributed live (they still arrive after a /reload).');
   else add('Setup', 'combatlog', 'Combat log is being written', snap.combatLog.active ? 'ok' : 'warn', snap.combatLog.active ? 'writing' : 'Not written in the last 5 minutes: start combat logging (/combatlog) or the Warcraft Logs / Archon logger.');
+
+  // The server side: can this PC reach the proxy, and is a test channel set for posts to land in?
+  add('Setup', 'proxy', 'Loot store reachable (proxy)', store === null ? 'fail' : 'ok', store === null ? 'The proxy did not answer the loot store request: check the internet connection, or the proxy is down. Nothing can sync until it does.' : `${store.length} record(s) in the test store`);
+  if (config) {
+    add('Setup', 'test-channel', 'Test loot channel is set', config.testLootLogChannelId ? 'ok' : 'fail', config.testLootLogChannelId ? 'posts from this build go to the test Discord channel' : 'No test loot channel is set, so a test build can never post. Settings, "Test loot log channel".');
+    add('Setup', 'auto-post', 'Auto-post is on', config.autoPostLoot ? 'ok' : 'warn', config.autoPostLoot ? 'confirmed wins post on their own' : 'Auto-post is off, so confirmed wins will not post (the Post to Discord button on Loot History still works). Turn it on in Settings.');
+  }
 
   // ---- Capture ----
   const lastKill = snap.kills[0] ?? null;

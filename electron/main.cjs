@@ -36,6 +36,7 @@ const { getWowPathConfig, setWowPath, installAddon, setCharacterName, getAddonVe
 const { getChatLogStatus } = require('./dataSources/lootChatTail.cjs');
 const { getCombatLogStatus, recentKills } = require('./dataSources/lootCombatLog.cjs');
 const pipelineLog = require('./dataSources/pipelineLog.cjs');
+const { recentLootLines, recentEncounters } = require('./dataSources/rawFeeds.cjs');
 const { fetchLootLog, addManualLootRecord, updateLootRecord, removeLootRecord, removeLootTrade, deleteLootNight, syncChatTailCapture } = require('./dataSources/fetchLootLog.cjs');
 
 // In-memory only (not persisted) -- this session's record of whether live loot capture
@@ -114,6 +115,65 @@ ipcMain.handle('analytics:track', async (_event, event, screen, meta) => {
 ipcMain.handle('analytics:list', async (_event, which) => {
   if (!isTestModeBuild) return [];
   return listAnalyticsEvents(which === 'test' ? 'test' : 'prod');
+});
+
+// The loot diary is also written to a file in test builds, so a whole play session can be read afterwards (or
+// from outside the app while you play): <userData>\pipeline-events.jsonl, one JSON event per line.
+if (isTestModeBuild) pipelineLog.enablePersistence(path.join(app.getPath('userData'), 'pipeline-events.jsonl'));
+
+// The unprocessed truth behind the pipeline: what WoW actually wrote (loot lines, boss pulls).
+ipcMain.handle('testTools:rawFeeds', async () => {
+  if (!isTestModeBuild) return null;
+  return { lootLines: recentLootLines(30), pulls: recentEncounters(20) };
+});
+
+// Sends one synthetic win (fake winner, fake boss, Heroic, marked live so it counts as confirmed) through the same
+// path a real one takes -- app -> proxy -> TEST store -> auto-post to the TEST Discord channel -- and reports what
+// happened at each step, then removes the record. Needs no WoW at all, so "is the server side working?" is one click.
+ipcMain.handle('testTools:injectWin', async () => {
+  if (!isTestModeBuild) return { ok: false, error: 'Only available in a test build.' };
+  if (!proxyClient.isAvailable()) return { ok: false, error: 'No proxy configured.' };
+  const time = Math.floor(Date.now() / 1000);
+  const winner = `PipelineTest${String(time).slice(-4)}`;
+  const record = { itemId: 25, itemLink: '[Worn Shortsword]', winner, boss: 'Pipeline Test Boss', slot: 'One-Hand', time, difficulty: 'Heroic', source: 'live' };
+  const steps = [];
+  try {
+    pipelineLog.record('store-sync', `Sent a synthetic win (${winner}) through the pipeline`, { synthetic: true });
+    await proxyClient.syncLootRecords([record], [], []);
+    steps.push('sent to the proxy');
+    let found = null;
+    const startedAt = Date.now();
+    while (Date.now() - startedAt < 15000) {
+      const shared = await proxyClient.getSharedLootRecords();
+      found = shared.records.find((r) => r.winner === winner) ?? null;
+      if (found?.discordPostedAt) break;
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+    }
+    const result = { ok: true, winner, stored: !!found, posted: !!found?.discordPostedAt, steps };
+    if (found) {
+      try {
+        await proxyClient.removeLootRecord(found.id);
+        steps.push('test record removed again');
+      } catch {
+        steps.push('could not remove the test record (harmless: it is in the test store)');
+      }
+    }
+    pipelineLog.record('store-sync', `Synthetic win: ${result.stored ? 'reached the store' : 'NEVER reached the store'}, ${result.posted ? 'posted to Discord' : 'not posted to Discord'}`, { synthetic: true, ...result });
+    return result;
+  } catch (err) {
+    return { ok: false, error: err.message || String(err), steps };
+  }
+});
+
+// Empties the TEST loot store (never the real one -- this build talks to the test store only) so a run can start clean.
+ipcMain.handle('testTools:clearTestLoot', async () => {
+  if (!isTestModeBuild) return { ok: false, error: 'Only available in a test build.' };
+  try {
+    const result = await deleteLootNight(0, 9_999_999_999);
+    return { ok: true, removed: result?.removed ?? null };
+  } catch (err) {
+    return { ok: false, error: err.message || String(err) };
+  }
 });
 
 // Loot Logger Monitor (test builds only): one read-only snapshot of every stage of the loot pipeline on this PC.

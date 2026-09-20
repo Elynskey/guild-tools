@@ -1,10 +1,11 @@
 import { Link } from 'react-router-dom';
 import { Badge } from '../design-system/Badge';
+import { Button } from '../design-system/Button';
 import { Crest } from '../design-system/Crest';
 import { HelpTooltip } from '../design-system/HelpTooltip';
 import { RefreshButton } from '../screens/shared/RefreshButton';
 import { itemLabel } from '../raid/lootLogic';
-import { useLootMonitor } from './useLootMonitor';
+import { useLootMonitor, type ActionState } from './useLootMonitor';
 import { ago, difficultyName, type CheckGroup, type CheckStatus, type HealthCheck } from './lootPipelineHealth';
 
 const GROUPS: { id: CheckGroup; title: string; blurb: string }[] = [
@@ -25,6 +26,27 @@ const OVERALL_TEXT: Record<CheckStatus, string> = {
 
 const KIND_LABEL: Record<string, string> = { 'boss-kill': 'Boss kill', 'chat-win': 'Need win', enrich: 'Attribution', 'store-sync': 'Store', 'addon-sync': 'Addon data' };
 const KIND_TONE: Record<string, 'gold' | 'success' | 'warning' | 'neutral'> = { 'boss-kill': 'gold', 'chat-win': 'success', enrich: 'neutral', 'store-sync': 'neutral', 'addon-sync': 'neutral' };
+
+const LINE_KIND: Record<string, { label: string; tone: 'success' | 'warning' | 'danger' | 'neutral' | 'gold' }> = {
+  'need-win': { label: 'Need win', tone: 'success' },
+  'other-roll-won': { label: 'Other roll won', tone: 'neutral' },
+  'need-selected': { label: 'Rolled Need', tone: 'neutral' },
+  passed: { label: 'Passed', tone: 'neutral' },
+  'personal-loot': { label: 'Personal loot', tone: 'warning' },
+  'loot-other': { label: 'Other loot line', tone: 'neutral' },
+};
+
+function ActionResult({ state }: { state: ActionState }) {
+  if (!state.lines.length) return null;
+  const colour = state.tone === 'success' ? 'var(--status-success)' : state.tone === 'danger' ? 'var(--status-danger)' : 'var(--text-muted)';
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 3, fontSize: 'var(--text-body-s)', color: colour }}>
+      {state.lines.map((l, i) => (
+        <div key={i}>{l}</div>
+      ))}
+    </div>
+  );
+}
 
 function CheckRow({ check }: { check: HealthCheck }) {
   return (
@@ -93,6 +115,92 @@ export function LootMonitor() {
                 </div>
               );
             })}
+
+            <div className="crd-card" style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div style={{ fontWeight: 600, color: 'var(--text-strong)' }}>
+                Test actions
+                <span style={{ marginLeft: 10, fontWeight: 400, fontSize: 'var(--text-micro)', color: 'var(--text-faint)' }}>all of these use the TEST store and the TEST Discord only</span>
+              </div>
+              <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                <Button variant="primary" size="sm" disabled={m.synthetic.running} onClick={() => void m.sendSyntheticWin()}>
+                  Send a fake win through the pipeline
+                </Button>
+                <div style={{ flex: 1, minWidth: 260 }}>
+                  <div style={{ fontSize: 'var(--text-micro)', color: 'var(--text-faint)', marginBottom: 4 }}>No WoW needed: proves this PC, the proxy, the test store and the test Discord post all work, then removes the fake record.</div>
+                  <ActionResult state={m.synthetic} />
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                <Button variant="secondary" size="sm" onClick={() => void m.copyDebugReport()}>
+                  Copy debug report
+                </Button>
+                <div style={{ flex: 1, minWidth: 260 }}>
+                  <div style={{ fontSize: 'var(--text-micro)', color: 'var(--text-faint)', marginBottom: 4 }}>Everything on this page as one block of text to paste into a message (no secrets in it).</div>
+                  <ActionResult state={m.copyState} />
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                <Button
+                  variant="danger"
+                  size="sm"
+                  disabled={m.clearState.running}
+                  onClick={() => {
+                    if (window.confirm('Empty the TEST loot log? (The real loot log is not touched.)')) void m.clearTestLoot();
+                  }}
+                >
+                  Clear the test loot log
+                </Button>
+                <div style={{ flex: 1, minWidth: 260 }}>
+                  <div style={{ fontSize: 'var(--text-micro)', color: 'var(--text-faint)', marginBottom: 4 }}>Start a run from a clean slate.</div>
+                  <ActionResult state={m.clearState} />
+                </div>
+              </div>
+            </div>
+
+            <div className="crd-card" style={{ padding: 0, overflow: 'hidden' }}>
+              <div style={{ padding: '12px 20px', fontWeight: 600, color: 'var(--text-strong)' }}>
+                What WoW actually wrote (chat log loot lines)
+                <span style={{ marginLeft: 10, fontWeight: 400, fontSize: 'var(--text-micro)', color: 'var(--text-faint)' }}>the raw truth: if a win is not here, the app never had a chance to see it</span>
+              </div>
+              {!m.feeds?.lootLines.available ? (
+                <div style={{ padding: '14px 20px', borderTop: '1px solid var(--border-hairline)', color: 'var(--text-faint)', fontSize: 'var(--text-body-s)' }}>The chat log could not be read (missing, or chat logging is off).</div>
+              ) : m.feeds.lootLines.lines.length === 0 ? (
+                <div style={{ padding: '14px 20px', borderTop: '1px solid var(--border-hairline)', color: 'var(--text-faint)', fontSize: 'var(--text-body-s)' }}>No loot lines in the recent chat log.</div>
+              ) : (
+                m.feeds.lootLines.lines.map((l, i) => (
+                  <div key={i} style={{ display: 'grid', gridTemplateColumns: '130px 120px 1fr', gap: 12, alignItems: 'baseline', padding: '7px 20px', borderTop: '1px solid var(--border-hairline)' }}>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-micro)', color: 'var(--text-faint)' }}>{l.time ?? '?'}</div>
+                    <div>
+                      <Badge tone={LINE_KIND[l.kind]?.tone ?? 'neutral'}>{LINE_KIND[l.kind]?.label ?? l.kind}</Badge>
+                    </div>
+                    <div style={{ fontSize: 'var(--text-body-s)', color: 'var(--text-body)', wordBreak: 'break-word' }}>{l.text}</div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="crd-card" style={{ padding: 0, overflow: 'hidden' }}>
+              <div style={{ padding: '12px 20px', fontWeight: 600, color: 'var(--text-strong)' }}>
+                Boss pulls in the combat log
+                <span style={{ marginLeft: 10, fontWeight: 400, fontSize: 'var(--text-micro)', color: 'var(--text-faint)' }}>kills and wipes; only a kill starts the wait for loot</span>
+              </div>
+              {!m.feeds?.pulls.available ? (
+                <div style={{ padding: '14px 20px', borderTop: '1px solid var(--border-hairline)', color: 'var(--text-faint)', fontSize: 'var(--text-body-s)' }}>No combat log found (turn on advanced combat logging or /combatlog).</div>
+              ) : m.feeds.pulls.pulls.length === 0 ? (
+                <div style={{ padding: '14px 20px', borderTop: '1px solid var(--border-hairline)', color: 'var(--text-faint)', fontSize: 'var(--text-body-s)' }}>No boss pulls in the recent combat log.</div>
+              ) : (
+                m.feeds.pulls.pulls.map((p, i) => (
+                  <div key={i} style={{ display: 'grid', gridTemplateColumns: '78px 110px 1fr 160px', gap: 12, alignItems: 'baseline', padding: '7px 20px', borderTop: '1px solid var(--border-hairline)' }}>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-micro)', color: 'var(--text-faint)' }}>{new Date(p.at).toLocaleTimeString()}</div>
+                    <div>
+                      <Badge tone={p.kill ? 'success' : 'danger'}>{p.kill ? 'Kill' : 'Wipe'}</Badge>
+                    </div>
+                    <div style={{ fontSize: 'var(--text-body-s)', color: 'var(--text-strong)' }}>{p.boss}</div>
+                    <div style={{ fontSize: 'var(--text-body-s)', color: 'var(--text-muted)' }}>{difficultyName(p.difficultyId)}</div>
+                  </div>
+                ))
+              )}
+            </div>
 
             <div className="crd-card" style={{ padding: 0, overflow: 'hidden' }}>
               <div style={{ padding: '12px 20px', fontWeight: 600, color: 'var(--text-strong)' }}>Timeline</div>

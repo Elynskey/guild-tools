@@ -148,4 +148,26 @@ function resetForTests() {
   kills = [];
 }
 
-module.exports = { pollCombatLog, recentKills, getCombatLogStatus, parseKills, resetForTests };
+const PULL_LINE = /^(\d{1,2})\/(\d{1,2})\/(\d{4}) (\d{1,2}):(\d{2}):(\d{2})\.(\d{3})([+-]\d+(?:\.\d+)?)  (ENCOUNTER_START|ENCOUNTER_END),(.*?)\r?$/gm;
+const START_ARGS = /^(\d+),"(.*)",(\d+),(\d+),(\d+)/;
+
+/** Every boss pull in a chunk of combat log, kills AND wipes, for the monitor's "boss pulls" panel. @returns {Array<{ kind: 'start' | 'end', boss: string, encounterId: number, difficultyId: number, success: boolean | null, at: number }>} oldest first */
+function parseEncounters(text) {
+  const pulls = [];
+  for (const m of text.matchAll(PULL_LINE)) {
+    const isEnd = m[9] === 'ENCOUNTER_END';
+    const args = m[10].match(isEnd ? END_ARGS : START_ARGS);
+    if (!args) continue;
+    const [, month, day, year, hour, minute, second, ms, offsetHours] = m;
+    const at = Date.UTC(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute), Number(second), Number(ms)) - parseFloat(offsetHours) * 3600 * 1000;
+    pulls.push({ kind: isEnd ? 'end' : 'start', boss: args[2], encounterId: Number(args[1]), difficultyId: Number(args[3]), success: isEnd ? args[5] === '1' : null, at });
+  }
+  return pulls;
+}
+
+/** Path of the newest combat log file, or null. */
+function newestCombatLogPath() {
+  return newestCombatLog()?.file ?? null;
+}
+
+module.exports = { pollCombatLog, recentKills, getCombatLogStatus, parseKills, parseEncounters, newestCombatLogPath, resetForTests };

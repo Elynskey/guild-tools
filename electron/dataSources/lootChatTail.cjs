@@ -199,4 +199,21 @@ function getChatLogStatus() {
   }
 }
 
-module.exports = { pollChatLog, getChatLogStatus };
+/**
+ * What kind of loot message is this chat-log line? Feeds the monitor's "raw loot lines" panel, so what WoW really
+ * wrote can be compared with what the app decided. Null for a line that has nothing to do with loot.
+ * kind: 'need-win' (the only thing captured) | 'other-roll-won' (Greed, Transmog, ...) | 'need-selected' |
+ *       'passed' | 'personal-loot' (received directly, no roll at all) | 'loot-other'
+ */
+function classifyLootLine(line) {
+  const text = line.replace(/\r$/, '');
+  if (!/Loot:|receives? loot|You receive|Loot Roll/i.test(text)) return null;
+  const won = text.match(WON_ROLL_PATTERN);
+  if (won) return { kind: won[2].toLowerCase().includes('need') ? 'need-win' : 'other-roll-won', text };
+  if (/selected need/i.test(text)) return { kind: 'need-selected', text };
+  if (/passed/i.test(text)) return { kind: 'passed', text };
+  if (/receives? loot/i.test(text)) return { kind: 'personal-loot', text };
+  return { kind: 'loot-other', text };
+}
+
+module.exports = { pollChatLog, getChatLogStatus, classifyLootLine, chatLogPath };

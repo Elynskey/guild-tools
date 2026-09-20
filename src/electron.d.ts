@@ -258,6 +258,26 @@ export interface PipelineEvent {
   meta: Record<string, unknown> | null;
 }
 
+export interface RawLootLine {
+  /** The line's own timestamp from WoWChatLog.txt, e.g. "9/18 21:49:26.420". */
+  time: string | null;
+  kind: 'need-win' | 'other-roll-won' | 'need-selected' | 'passed' | 'personal-loot' | 'loot-other';
+  text: string;
+}
+
+export interface RawPull {
+  boss: string;
+  encounterId: number;
+  difficultyId: number;
+  kill: boolean;
+  at: number;
+}
+
+export interface LootRawFeeds {
+  lootLines: { available: boolean; lines: RawLootLine[] };
+  pulls: { available: boolean; pulls: RawPull[] };
+}
+
 /** Everything the test-only Loot Logger Monitor reads from this PC in one go (main.cjs's testTools:lootMonitor). Null outside a test build. */
 export interface LootMonitorSnapshot {
   now: number;
@@ -294,6 +314,12 @@ export interface ElectronAPI {
   listAnalyticsEvents: (which?: 'prod' | 'test') => Promise<AnalyticsEvent[]>;
   /** Test builds only: a read-only snapshot of every stage of the loot pipeline on this PC; null in a normal install. */
   getLootMonitorSnapshot: () => Promise<LootMonitorSnapshot | null>;
+  /** Test builds only: the loot lines WoW actually wrote to the chat log and the boss pulls (kills and wipes) in the combat log. */
+  getLootRawFeeds: () => Promise<LootRawFeeds | null>;
+  /** Test builds only: one synthetic win through app -> proxy -> test store -> test Discord channel, reporting each step; removes it after. */
+  injectTestWin: () => Promise<{ ok: boolean; error?: string; winner?: string; stored?: boolean; posted?: boolean; steps?: string[] }>;
+  /** Test builds only: empties the TEST loot store (never the real one). */
+  clearTestLoot: () => Promise<{ ok: boolean; error?: string; removed?: { records: number; trades: number; needLosses: number } | null }>;
   getRoster: () => Promise<LiveRosterResult | null>;
   getProfessions: () => Promise<LiveProfessionsResult | null>;
   getCachedProfessions: () => Promise<LiveProfessionsResult | null>;

@@ -8,12 +8,13 @@ frameMethods.__index = function(t, k)
   return function() return t end
 end
 function CreateFrame()
-  local f = setmetatable({ scripts = {}, shown = false }, frameMethods)
+  local f = setmetatable({ scripts = {}, shown = false, events = {} }, frameMethods)
   f.SetScript = function(self, name, fn) self.scripts[name] = fn end
   f.GetScript = function(self, name) return self.scripts[name] end
   f.Show = function(self) self.shown = true end
   f.Hide = function(self) self.shown = false end
   f.IsShown = function(self) return self.shown == true end
+  f.RegisterEvent = function(self, ev) self.events[ev] = true end
   frames[#frames + 1] = f
   return f
 end
@@ -256,6 +257,79 @@ CreateFrame = realCreateFrame
 
 out = say("GUILDTOOLSLOOTTEST", "help")
 check("help mentions the checklist and the manual items", out:find("checklist") and out:find("live_app"), "")
+
+-- =========================== raw loot lines + debug ===========================
+local lootLineFrame
+for i = #frames, 1, -1 do
+  local f = frames[i]
+  if f ~= testFrame and f ~= realFrame and f.events and f.events.CHAT_MSG_LOOT then lootLineFrame = f break end
+end
+check("a dedicated frame listens for CHAT_MSG_LOOT to keep the raw lines", lootLineFrame ~= nil)
+
+GuildToolsLootTestDB.lootLines = nil
+GuildToolsLootTestDB.lootLineStats = nil
+zone(true, "raid", "The Venomous Abyss", 15)
+local needLine = "[Loot]: Thundoor (Need - 88) Won: " .. link(4001)
+local greedLine = "[Loot]: Devkra (Greed - 12) Won: " .. link(4002)
+local oddLine = "Loot: Someone has a completely different shape " .. link(4003)
+lootLineFrame.scripts.OnEvent(lootLineFrame, "CHAT_MSG_LOOT", needLine)
+lootLineFrame.scripts.OnEvent(lootLineFrame, "CHAT_MSG_LOOT", greedLine)
+lootLineFrame.scripts.OnEvent(lootLineFrame, "CHAT_MSG_LOOT", oddLine)
+local kept = GuildToolsLootTestDB.lootLines
+check("every loot line is kept as the game sent it, with where it happened", #kept == 3 and kept[1].text == needLine and kept[1].zone == "The Venomous Abyss" and kept[1].difficultyID == 15)
+check("...and marked as a Need win or not by the addon's own pattern", kept[1].matches == true and kept[2].matches == false and kept[3].matches == false)
+out = say("GUILDTOOLSLOOTTEST", "lootlines 5")
+check("lootlines shows them newest first with the verdict", out:find("3 loot line") and out:find("%[NEED WIN%]") and out:find("%[not a need win%]") and out:find("Thundoor"), out:sub(1, 300))
+
+-- the buffer is capped
+for i = 1, 100 do lootLineFrame.scripts.OnEvent(lootLineFrame, "CHAT_MSG_LOOT", "[Loot]: P" .. i .. " (Need - 1) Won: " .. link(5000 + i)) end
+check("the raw-line buffer is capped at 80, newest kept", #GuildToolsLootTestDB.lootLines == 80 and GuildToolsLootTestDB.lootLines[80].text:find("P100 "), tostring(#GuildToolsLootTestDB.lootLines))
+check("...while the counter keeps the true total", GuildToolsLootTestDB.lootLineStats.seen == 103, tostring(GuildToolsLootTestDB.lootLineStats.seen))
+
+-- protected ("secret") values are counted, never crash
+issecretvalue = function(v) return v == "SECRET" end
+lootLineFrame.scripts.OnEvent(lootLineFrame, "CHAT_MSG_LOOT", "SECRET")
+check("a protected value is counted and skipped without error", GuildToolsLootTestDB.lootLineStats.secret == 1 and #GuildToolsLootTestDB.lootLines == 80)
+out = say("GUILDTOOLSLOOTTEST", "lootlines 1")
+check("...and lootlines tells you how many were unreadable", out:find("1 were protected"), out:sub(1, 200))
+issecretvalue = nil
+
+-- a non-string payload can't break the game's event either
+local okNil = pcall(lootLineFrame.scripts.OnEvent, lootLineFrame, "CHAT_MSG_LOOT", nil)
+check("a missing message does not raise", okNil)
+check("...it is counted as unreadable", GuildToolsLootTestDB.lootLineStats.unreadable == 1)
+
+GuildToolsLootTestDB.lootLines = {}
+GuildToolsLootTestDB.lootLineStats = { seen = 0, secret = 0, unreadable = 0 }
+out = say("GUILDTOOLSLOOTTEST", "lootlines")
+check("with no lines it explains personal loot", out:find("none yet") and out:find("personal loot"), out:sub(1, 300))
+
+-- debug: personal loot is called out as the reason nothing can be captured
+zone(true, "raid", "Some Old Raid", 14)
+C_PartyInfo = { GetLootMethod = function() return 5 end }
+LoggingCombat = function() return true end
+out = say("GUILDTOOLSLOOTTEST", "debug")
+check("debug names the zone and difficulty", out:find("Some Old Raid") and out:find("Normal"), out:sub(1, 300))
+check("debug flags PERSONAL LOOT and says why nothing is captured", out:find("Personal loot") and out:find("PERSONAL LOOT") and out:find("no Need wins"), out:sub(1, 400))
+check("debug reports chat and combat logging", out:find("chat logging: ON") and out:find("combat logging: ON"), out:sub(1, 400))
+check("debug is saved for the file", type(GuildToolsLootTestDB.debug) == "table" and GuildToolsLootTestDB.debug.personalLoot == true and GuildToolsLootTestDB.debug.zone == "Some Old Raid")
+
+C_PartyInfo = { GetLootMethod = function() return 3 end }
+out = say("GUILDTOOLSLOOTTEST", "debug")
+check("group loot is NOT flagged as personal", out:find("Group loot") and not out:find("PERSONAL LOOT"), out:sub(1, 300))
+C_PartyInfo = nil
+GetLootMethod = function() return "personalloot" end
+out = say("GUILDTOOLSLOOTTEST", "debug")
+check("the legacy loot API is understood too", out:find("PERSONAL LOOT"), out:sub(1, 300))
+GetLootMethod = nil
+out = say("GUILDTOOLSLOOTTEST", "debug")
+check("with no loot API at all it says unknown rather than erroring", out:find("loot method: unknown") and out:find("lootlines"), out:sub(1, 300))
+LoggingCombat = nil
+out = say("GUILDTOOLSLOOTTEST", "debug")
+check("...and missing logging APIs read 'unavailable'", out:find("combat logging: unavailable"), out:sub(1, 300))
+
+out = say("GUILDTOOLSLOOTTEST", "help")
+check("help lists debug and lootlines", out:find("debug") and out:find("lootlines"), "")
 
 print(string.format("\n%d checks, %d failed", checks, failed))
 os.exit(failed == 0 and 0 or 1)

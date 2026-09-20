@@ -8,6 +8,8 @@
 --   /gtloottest logmark              write a marker line and check the game really writes the chat log
 --   /gtloottest checklist [text|reset]  the in-game test checklist overlay (ticks itself where it can)
 --   /gtloottest check <id>           cycle a manual item: unchecked -> done -> failed
+--   /gtloottest debug                where you are, how loot is handed out, what logging is on (saved too)
+--   /gtloottest lootlines [n]        the raw CHAT_MSG_LOOT text the game handed this addon, and whether it matches
 --   /gtloottest help                 list every test command
 --
 -- This block runs after the whole copied addon, so it can use the file-level locals declared above
@@ -389,6 +391,135 @@ do
   end)
 end
 
+-- ---------------------------------------------------------------------------------------------
+-- Raw loot lines: every CHAT_MSG_LOOT the game hands this addon, kept as-is (newest last, capped),
+-- with whether the addon's own Need-win pattern matches it. When a win "wasn't captured" this is
+-- the evidence for WHY: the game never sent it (personal loot / not in the group), it sent it in a
+-- shape the pattern doesn't match, or it was a protected ("secret") value the addon cannot read.
+-- ---------------------------------------------------------------------------------------------
+local MAX_LOOT_LINES = 80
+
+local function testMatchesNeedWin(message)
+  local winner, rollType = message:match(WON_ROLL_PATTERN)
+  if winner and rollType and rollType:lower():find("need") then return true, winner, rollType end
+  return false, winner, rollType
+end
+
+local function rememberLootLine(message)
+  local db = GuildToolsLootTestDB
+  db.lootLines = db.lootLines or {}
+  db.lootLineStats = db.lootLineStats or { seen = 0, secret = 0, unreadable = 0 }
+  db.lootLineStats.seen = db.lootLineStats.seen + 1
+  if issecretvalue and issecretvalue(message) then
+    db.lootLineStats.secret = db.lootLineStats.secret + 1
+    return
+  end
+  local ok = pcall(function()
+    local matches = testMatchesNeedWin(message)
+    local zone, instanceType, difficultyID = GetInstanceInfo()
+    db.lootLines[#db.lootLines + 1] = {
+      at = time(),
+      text = message,
+      matches = matches,
+      zone = zone,
+      instanceType = instanceType,
+      difficultyID = difficultyID,
+    }
+    while #db.lootLines > MAX_LOOT_LINES do table.remove(db.lootLines, 1) end
+  end)
+  if not ok then db.lootLineStats.unreadable = db.lootLineStats.unreadable + 1 end
+end
+
+do
+  local lootLineFrame = CreateFrame("Frame")
+  lootLineFrame:RegisterEvent("CHAT_MSG_LOOT")
+  lootLineFrame:SetScript("OnEvent", function(_, _, message)
+    if GuildToolsLootTestDB then rememberLootLine(message) end
+  end)
+end
+
+local function showLootLines(arg)
+  local db = GuildToolsLootTestDB
+  local lines = db.lootLines or {}
+  local stats = db.lootLineStats or { seen = 0, secret = 0, unreadable = 0 }
+  local n = tonumber(arg) or 8
+  announce(stats.seen .. " loot line(s) seen since this data was created, " .. #lines .. " kept" ..
+    (stats.secret > 0 and (", " .. stats.secret .. " were protected values the addon cannot read") or "") ..
+    (stats.unreadable > 0 and (", " .. stats.unreadable .. " could not be stored") or "") .. ".")
+  if #lines == 0 then
+    announce("none yet: no loot has been announced to you. In personal loot nobody sees anyone's loot roll, and only a group with group loot, need-before-greed or master looter announces Need rolls.")
+    return
+  end
+  for i = #lines, math.max(1, #lines - n + 1), -1 do
+    local l = lines[i]
+    announce(date("%H:%M:%S", l.at) .. (l.matches and "  [NEED WIN]  " or "  [not a need win]  ") .. tostring(l.text))
+  end
+  announce("[NEED WIN] = the addon's pattern matches it and it would be captured (if the zone is tracked).")
+end
+
+-- ---------------------------------------------------------------------------------------------
+-- /gtloottest debug: the facts that decide whether loot can be captured here at all.
+-- ---------------------------------------------------------------------------------------------
+local LOOT_METHOD_NAMES = { [0] = "Free for all", [1] = "Round robin", [2] = "Master looter", [3] = "Group loot", [4] = "Need before greed", [5] = "Personal loot" }
+
+local function lootMethodInfo()
+  -- Retail's current API first, the legacy one as a fallback. Either can be missing or return a name or a number.
+  local raw
+  if C_PartyInfo and C_PartyInfo.GetLootMethod then
+    local ok, v = pcall(C_PartyInfo.GetLootMethod)
+    if ok then raw = v end
+  end
+  if raw == nil and GetLootMethod then
+    local ok, v = pcall(GetLootMethod)
+    if ok then raw = v end
+  end
+  if raw == nil then return "unknown", false end
+  local name = type(raw) == "number" and (LOOT_METHOD_NAMES[raw] or ("method " .. raw)) or tostring(raw)
+  local lower = name:lower()
+  local personal = lower:find("personal") ~= nil
+  return name, personal
+end
+
+local function debugInfo()
+  local d = {}
+  d.at = time()
+  local zone, instanceType, difficultyID, _, _, _, _, instanceID = GetInstanceInfo()
+  d.zone, d.instanceType, d.difficultyID, d.instanceID = zone, instanceType, difficultyID, instanceID
+  d.difficulty = (difficultyID and difficultyID ~= 0 and GetDifficultyInfo and GetDifficultyInfo(difficultyID)) or nil
+  d.inRaid = IsInRaid and IsInRaid() or false
+  d.inGroup = IsInGroup and IsInGroup() or false
+  d.groupSize = GetNumGroupMembers and GetNumGroupMembers() or nil
+  d.lootMethod, d.personalLoot = lootMethodInfo()
+  d.chatLogging = isChatLoggingAPI() and C_ChatInfo.IsLoggingChat() or nil
+  d.combatLogging = LoggingCombat and LoggingCombat() or nil
+  d.tracking = testTrackAll() and "ALL content" or "STRICT"
+  d.realAddonLoaded = (C_AddOns and C_AddOns.IsAddOnLoaded and C_AddOns.IsAddOnLoaded("GuildToolsLoot")) or (IsAddOnLoaded and IsAddOnLoaded("GuildToolsLoot")) or false
+  d.testAddonVersion = (C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata("GuildToolsLootTest", "Version")) or nil
+  if GetBuildInfo then d.gameVersion, d.gameBuild = GetBuildInfo() end
+  d.wins = #(GuildToolsLootTestDB.records or {})
+  d.losses = #(GuildToolsLootTestDB.needLosses or {})
+  d.lootLinesSeen = (GuildToolsLootTestDB.lootLineStats and GuildToolsLootTestDB.lootLineStats.seen) or 0
+  return d
+end
+
+local function showDebug()
+  local d = debugInfo()
+  GuildToolsLootTestDB.debug = d
+  local where = d.zone and d.zone ~= "" and d.zone or "no instance"
+  announce("where: " .. where .. " (" .. tostring(d.instanceType) .. (d.difficulty and (", " .. d.difficulty) or "") .. ", difficulty id " .. tostring(d.difficultyID) .. ")")
+  announce("group: " .. (d.inRaid and "raid" or d.inGroup and "party" or "solo") .. (d.groupSize and (", " .. d.groupSize .. " member(s)") or ""))
+  announce("loot method: " .. d.lootMethod)
+  if d.personalLoot then
+    announce("  PERSONAL LOOT: everyone gets their own drops, nobody rolls, so there are no Need wins or lost rolls to capture here. This is normal for most older content.")
+  elseif d.lootMethod == "unknown" then
+    announce("  the game would not say how loot is handed out; trust /gtloottest lootlines to show what actually arrives.")
+  end
+  announce("chat logging: " .. (d.chatLogging == nil and "unavailable" or d.chatLogging and "ON" or "OFF") .. ",  combat logging: " .. (d.combatLogging == nil and "unavailable" or d.combatLogging and "ON" or "OFF"))
+  announce("tracking: " .. d.tracking .. ";  captured so far: " .. d.wins .. " win(s), " .. d.losses .. " lost roll(s);  loot lines seen: " .. d.lootLinesSeen)
+  announce("real /gtloot addon is " .. (d.realAddonLoaded and "ALSO loaded (both record, on separate data)" or "not loaded") .. ";  test addon " .. tostring(d.testAddonVersion or "?") .. ";  game " .. tostring(d.gameVersion or "?") .. " (" .. tostring(d.gameBuild or "?") .. ")")
+  announce("saved into GuildToolsLootTestDB.debug -- it reaches the file at /reload or logout.")
+end
+
 local function testHelp()
   announce("test commands (same names as the real /gtloot, plus more):")
   announce("  /gtloottest on | off | scan | chatlog   -- as the real addon")
@@ -396,6 +527,8 @@ local function testHelp()
   announce("  /gtloottest last [n]                    -- what was captured, and where (zone / dungeon / raid / difficulty)")
   announce("  /gtloottest selftest                    -- fake Need win through the real capture code: PASS/FAIL")
   announce("  /gtloottest logmark                     -- write a marker and check it lands in WoWChatLog.txt")
+  announce("  /gtloottest debug                       -- where you are, how loot is handed out (personal loot?), what logging is on")
+  announce("  /gtloottest lootlines [n]               -- the raw loot text the game sent this addon, and whether it would be captured")
   announce("  /gtloottest checklist [text|reset]      -- the on-screen test checklist (drag it; ticks itself)")
   announce("  /gtloottest check <id>                  -- tick a manual item: marker, live_app, reload, discord, verify")
   announce("This test addon keeps its own data (GuildToolsLootTestDB) and never reaches the Guild Tools app.")
@@ -416,6 +549,10 @@ SlashCmdList["GUILDTOOLSLOOTTEST"] = function(msg)
     checklistCommand(rest)
   elseif arg == "check" then
     checkCommand(rest)
+  elseif arg == "debug" then
+    showDebug()
+  elseif arg == "lootlines" then
+    showLootLines(rest)
   elseif arg == "help" then
     testHelp()
   else
