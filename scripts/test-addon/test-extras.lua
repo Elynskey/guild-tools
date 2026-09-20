@@ -6,7 +6,7 @@
 --   /gtloottest last [n]             the last n Need wins this addon captured, and where each came from
 --   /gtloottest selftest             push a fake Need win through the real capture code and say PASS/FAIL
 --   /gtloottest logmark              write a marker line and check the game really writes the chat log
---   /gtloottest checklist [text|reset]  the in-game test checklist overlay (ticks itself where it can)
+--   /gtloottest checklist [text|reset]  the in-game checklist of what is still to be tested (ticks itself where it can)
 --   /gtloottest check <id>           cycle a manual item: unchecked -> done -> failed
 --   /gtloottest debug                where you are, how loot is handed out, what logging is on (saved too)
 --   /gtloottest lootlines [n]        the raw CHAT_MSG_LOOT text the game handed this addon, and whether it matches
@@ -145,20 +145,16 @@ end
 --   manual - only you can see it (the Test app, Discord, the log file)
 
 local CHECKS = {
-  { id = "loaded", kind = "auto", text = "Test addon loaded", hint = "you're reading this" },
-  { id = "chatlog", kind = "live", text = "Chat logging reads ON", hint = "/gtloottest chatlog if not" },
-  { id = "tracking", kind = "live", text = "Tracking set to ALL content", hint = "/gtloottest track all" },
-  { id = "selftest", kind = "auto", text = "/gtloottest selftest passes", hint = "fake win through the real code" },
-  { id = "marker", kind = "manual", text = "logmark's probe word is in WoWChatLog.txt", hint = "/gtloottest logmark, then search the file" },
-  { id = "win", kind = "auto", text = "A real Need WIN captured", hint = "roll Need in a group, win something" },
-  { id = "loss", kind = "auto", text = "A real LOST Need roll captured", hint = "roll Need and lose" },
-  { id = "raid", kind = "auto", text = "  ...captured in a RAID", hint = "any raid, any difficulty" },
-  { id = "dungeon", kind = "auto", text = "  ...captured in a DUNGEON", hint = "any dungeon, any level" },
-  { id = "delve", kind = "auto", text = "  ...captured in a DELVE / scenario", hint = "only if it rolls" },
-  { id = "live_app", kind = "manual", text = "Test app showed the win LIVE (before /reload)", hint = "Loot History, Guild Tools (Test)" },
-  { id = "reload", kind = "manual", text = "After /reload: win in the Test app with zone + difficulty", hint = "Loot History" },
-  { id = "discord", kind = "manual", text = "The win posted to the CRD-TEST loot channel", hint = "Discord, loot-need-wins" },
-  { id = "verify", kind = "manual", text = "Test app: Verify chat logging shows this PC writing", hint = "say a line in chat first" },
+  { id = "flush", kind = "auto", text = "Ran /gtloottest flushtest (Claude reads which step worked)", hint = "four steps, 20 s apart, ~65 s: keep chatting, then tell Claude it finished" },
+  { id = "syncbtn", kind = "auto", text = "The 'Loot ready: click to sync' button appeared", hint = "after a win or lost roll, ~15 s of quiet, out of combat" },
+  { id = "syncclick", kind = "auto", text = "Sync reloaded the UI (button click or /gtloottest sync)", hint = "if it says 'type /reload yourself', tell Claude what it printed" },
+  { id = "app_sync", kind = "manual", text = "Test app + Discord got the win within ~15 s of the sync", hint = "Loot History (Guild Tools (Test)) and CRD-TEST #loot-need-wins" },
+  { id = "once", kind = "manual", text = "Each win was posted to Discord exactly ONCE", hint = "no duplicates (a bug on 9/19: every win posted twice)" },
+  { id = "chatpath", kind = "auto", text = "The chat-text path saw a win (lootlines shows [NEED WIN])", hint = "addon 1.7 fix: the game now writes ', Main-Spec' in the roll" },
+  { id = "selfwin", kind = "auto", text = "Your own win was recorded once, under your name", hint = "not as 'You', and not twice" },
+  { id = "dungeon", kind = "auto", text = "A win or lost roll captured in a DUNGEON", hint = "any dungeon, any level" },
+  { id = "delve", kind = "auto", text = "A win or lost roll captured in a DELVE / scenario", hint = "only if it rolls" },
+  { id = "legacy", kind = "manual", text = "Older raid (Dragonflight): ran /gtloottest lootlines after a boss", hint = "does the game announce rolls there? Tell Claude what it showed" },
 }
 local CHECK_INDEX = {}
 for _, c in ipairs(CHECKS) do CHECK_INDEX[c.id] = c end
@@ -170,12 +166,6 @@ end
 
 -- "pass" | "fail" | nil for one item
 local function checkState(c)
-  if c.id == "chatlog" then
-    if not isChatLoggingAPI() then return nil end
-    return C_ChatInfo.IsLoggingChat() and "pass" or "fail"
-  elseif c.id == "tracking" then
-    return testTrackAll() and "pass" or "fail"
-  end
   return checklistStates()[c.id]
 end
 
@@ -342,15 +332,22 @@ local function pollChecklist()
     elseif kind == "scenario" then states.delve = "pass" end
   end
   for i = lastWinCount + 1, #wins do
-    states.win = "pass"
-    tagContent(wins[i])
+    local w = wins[i]
+    tagContent(w)
+    -- Your own win: recorded under your character name (not the word "You") and only once. The addon has two paths
+    -- that can both see the same win; a second copy inside a minute means they did not dedupe.
+    if w.self and w.winner == UnitName("player") then
+      local copies = 0
+      for _, other in ipairs(wins) do
+        if other.itemId == w.itemId and other.winner == w.winner and math.abs((other.time or 0) - (w.time or 0)) <= 60 then copies = copies + 1 end
+      end
+      if copies > 1 then states.selfwin = "fail" elseif states.selfwin ~= "fail" then states.selfwin = "pass" end
+    end
   end
   for i = lastLossCount + 1, #losses do
-    states.loss = "pass"
     tagContent(losses[i])
   end
   lastWinCount, lastLossCount = #wins, #losses
-  states.loaded = "pass"
   refreshChecklist()
 end
 
@@ -376,7 +373,7 @@ end
 local function checkCommand(id)
   local c = CHECK_INDEX[id or ""]
   if not c then
-    announce("no such checklist item. Manual items: marker, live_app, reload, discord, verify  (e.g. /gtloottest check marker)")
+    announce("no such checklist item. Manual items: app_sync, once, legacy  (e.g. /gtloottest check once)")
     return
   end
   if c.kind ~= "manual" then
@@ -427,6 +424,10 @@ local function rememberLootLine(message)
   end
   local ok = pcall(function()
     local matches = testMatchesNeedWin(message)
+    if matches then
+      GuildToolsLootTestDB.checklist = GuildToolsLootTestDB.checklist or {}
+      GuildToolsLootTestDB.checklist.chatpath = "pass"
+    end
     local zone, instanceType, difficultyID = GetInstanceInfo()
     db.lootLines[#db.lootLines + 1] = {
       at = time(),
@@ -562,12 +563,19 @@ end
 
 local function syncNow()
   announce("syncing: reloading the UI so Guild Tools gets your loot...")
+  local states = checklistStates()
   if not ReloadUI then
+    states.syncclick = "fail"
     announce("this client has no ReloadUI here -- type /reload yourself.")
     return
   end
+  -- Ticked BEFORE the reload: the reload is what writes this table to disk.
+  states.syncclick = "pass"
   local ok, err = pcall(ReloadUI)
-  if not ok then announce("the game would not reload from here (" .. tostring(err) .. ") -- type /reload yourself.") end
+  if not ok then
+    states.syncclick = "fail"
+    announce("the game would not reload from here (" .. tostring(err) .. ") -- type /reload yourself.")
+  end
 end
 
 local function shouldShowSync()
@@ -627,6 +635,7 @@ updateSyncPrompt = function()
     syncFrame = result
   end
   if show then
+    checklistStates().syncbtn = "pass"
     syncFrame:SetText("Loot ready: click to sync (" .. syncPending() .. " new)")
     syncFrame:Show()
   else
@@ -691,6 +700,7 @@ local function flushTest()
   C_Timer.After(5 + FLUSH_STEP_SECONDS * 3, function()
     if not C_ChatInfo.IsLoggingChat() then api(true) end
     stamp("STEP 4: finished. If nothing above made the file grow, take any loading screen now (zone through a portal or hearth) and tell me the time")
+    checklistStates().flush = "pass"
     announce("flush test finished; chat logging reads " .. (C_ChatInfo.IsLoggingChat() and "ON" or "OFF") .. ". The step times are saved (GuildToolsLootTestDB.flushtest) and reach the file at your next reload or logout.")
   end)
 end
@@ -705,7 +715,7 @@ local function testHelp()
   announce("  /gtloottest debug                       -- where you are, how loot is handed out (personal loot?), what logging is on")
   announce("  /gtloottest lootlines [n]               -- the raw loot text the game sent this addon, and whether it would be captured")
   announce("  /gtloottest checklist [text|reset]      -- the on-screen test checklist (drag it; ticks itself)")
-  announce("  /gtloottest check <id>                  -- tick a manual item: marker, live_app, reload, discord, verify")
+  announce("  /gtloottest check <id>                  -- tick a manual item: app_sync, once, legacy")
   announce("  /gtloottest sync                        -- reload now so Guild Tools gets your loot (also the click-to-sync button that appears after loot)")
   announce("  /gtloottest flushtest                   -- try ways to make WoW write WoWChatLog.txt without a reload (four steps, ~65 s)")
   announce("  /gtloottest help                        -- this list")

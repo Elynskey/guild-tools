@@ -197,49 +197,59 @@ GuildToolsLootTestDB.checklist = {}
 GuildToolsLootTestDB.checklistHidden = nil
 say("GUILDTOOLSLOOTTEST", "checklist reset")
 zone(true, "party", "Some Dungeon", 23)
+local function hasItem(o, id) return o:find("%] " .. id .. " %-%-") end
 
 out = say("GUILDTOOLSLOOTTEST", "checklist text")
-check("the text checklist lists every item", select(2, out:gsub("%[[ x!]%]", "")) == 14, out:sub(1, 200))
-check("...the auto items start with only 'loaded' ticked", out:find("%[x%] loaded") and out:find("%[ %] win") and out:find("%[ %] selftest"))
-
-state = true
-out = say("GUILDTOOLSLOOTTEST", "checklist text")
-check("chat logging ticks live from the game's own reading", out:find("%[x%] chatlog"), "")
-state = false
-out = say("GUILDTOOLSLOOTTEST", "checklist text")
-check("...and shows failed when it reads OFF", out:find("%[!%] chatlog"), "")
-state = true
-
-say("GUILDTOOLSLOOTTEST", "selftest")
-out = say("GUILDTOOLSLOOTTEST", "checklist text")
-check("a passing self-test ticks its item", out:find("%[x%] selftest"), "")
-check("...but does NOT tick 'a real win captured' (the fake win is not real)", out:find("%[ %] win"), "")
+check("the text checklist lists only what is still to be tested (10 items)", select(2, out:gsub("%[[ x!]%]", "")) == 10, out:sub(1, 200))
+check("...nothing starts ticked", not out:find("%[x%]") and not out:find("%[!%]"), out:sub(1, 120))
+local gone = { "loaded", "chatlog", "tracking", "selftest", "marker", "win", "loss", "raid", "live_app", "reload", "discord", "verify" }
+local stillThere = {}
+for _, id in ipairs(gone) do if hasItem(out, id) then stillThere[#stillThere + 1] = id end end
+check("...and everything already proven working is gone", #stillThere == 0, table.concat(stillThere, ","))
+local wanted = { "flush", "syncbtn", "syncclick", "app_sync", "once", "chatpath", "selfwin", "dungeon", "delve", "legacy" }
+local missingItems = {}
+for _, id in ipairs(wanted) do if not hasItem(out, id) then missingItems[#missingItems + 1] = id end end
+check("...and what is left to do is there", #missingItems == 0, table.concat(missingItems, ","))
 
 -- a real win in a dungeon, seen by the poll
 win(testFrame, "Foxtrot")
 say("GUILDTOOLSLOOTTEST", "checklist refresh")
 out = say("GUILDTOOLSLOOTTEST", "checklist text")
-check("a real win ticks 'win' and the DUNGEON item", out:find("%[x%] win") and out:find("%[x%] dungeon") and out:find("%[ %] raid"), "")
+check("a real win in a dungeon ticks DUNGEON only", out:find("%[x%] dungeon") and out:find("%[ %] delve"), "")
 
--- a raid win and a lost roll in a delve
-zone(true, "raid", "Some Old Raid", 16)
-win(testFrame, "Golf")
+-- a lost roll in a delve
 GuildToolsLootTestDB.needLosses[#GuildToolsLootTestDB.needLosses + 1] = { itemId = 9, name = "Hotel", time = time(), contentType = "scenario", zone = "A Delve" }
 say("GUILDTOOLSLOOTTEST", "checklist refresh")
 out = say("GUILDTOOLSLOOTTEST", "checklist text")
-check("a raid win ticks RAID; a lost roll in a delve ticks 'loss' and DELVE", out:find("%[x%] raid") and out:find("%[x%] loss") and out:find("%[x%] delve"), "")
+check("a lost roll in a delve ticks DELVE", out:find("%[x%] delve"), "")
+
+-- your own win: once, under your name
+zone(true, "raid", "Some Old Raid", 16)
+win(testFrame, "Tester")
+say("GUILDTOOLSLOOTTEST", "checklist refresh")
+out = say("GUILDTOOLSLOOTTEST", "checklist text")
+check("your own win, recorded once under your name, ticks 'selfwin'", out:find("%[x%] selfwin"), "")
+local mine = GuildToolsLootTestDB.records[#GuildToolsLootTestDB.records]
+local copy = {}
+for k, v in pairs(mine) do copy[k] = v end
+GuildToolsLootTestDB.records[#GuildToolsLootTestDB.records + 1] = copy
+say("GUILDTOOLSLOOTTEST", "checklist refresh")
+out = say("GUILDTOOLSLOOTTEST", "checklist text")
+check("...and a second copy of the same win turns it FAILED", out:find("%[!%] selfwin"), "")
+GuildToolsLootTestDB.records[#GuildToolsLootTestDB.records] = nil
+GuildToolsLootTestDB.checklist.selfwin = nil
 
 -- manual items
-out = say("GUILDTOOLSLOOTTEST", "check marker")
-check("check marker: first click = done", out:find("done") and GuildToolsLootTestDB.checklist.marker == "pass", out)
-out = say("GUILDTOOLSLOOTTEST", "check marker")
-check("...second = FAILED", out:find("FAILED") and GuildToolsLootTestDB.checklist.marker == "fail", out)
-out = say("GUILDTOOLSLOOTTEST", "check marker")
-check("...third = cleared", out:find("cleared") and GuildToolsLootTestDB.checklist.marker == nil, out)
-out = say("GUILDTOOLSLOOTTEST", "check win")
+out = say("GUILDTOOLSLOOTTEST", "check once")
+check("check once: first click = done", out:find("done") and GuildToolsLootTestDB.checklist.once == "pass", out)
+out = say("GUILDTOOLSLOOTTEST", "check once")
+check("...second = FAILED", out:find("FAILED") and GuildToolsLootTestDB.checklist.once == "fail", out)
+out = say("GUILDTOOLSLOOTTEST", "check once")
+check("...third = cleared", out:find("cleared") and GuildToolsLootTestDB.checklist.once == nil, out)
+out = say("GUILDTOOLSLOOTTEST", "check flush")
 check("an auto item can't be ticked by hand", out:find("ticks itself"), out)
 out = say("GUILDTOOLSLOOTTEST", "check nonsense")
-check("an unknown id lists the manual ones", out:find("marker, live_app, reload, discord, verify"), out)
+check("an unknown id lists the manual ones", out:find("app_sync, once, legacy"), out)
 
 -- the on-screen overlay
 local before = #frames
@@ -254,10 +264,10 @@ say("GUILDTOOLSLOOTTEST", "checklist")
 check("...and again shows it", overlay.shown == true and GuildToolsLootTestDB.checklistHidden == false)
 
 -- state survives: it lives in the saved variables table
-check("checklist state is kept in the test addon's saved variables", type(GuildToolsLootTestDB.checklist) == "table" and GuildToolsLootTestDB.checklist.win == "pass")
+check("checklist state is kept in the test addon's saved variables", type(GuildToolsLootTestDB.checklist) == "table" and GuildToolsLootTestDB.checklist.dungeon == "pass")
 say("GUILDTOOLSLOOTTEST", "checklist reset")
 out = say("GUILDTOOLSLOOTTEST", "checklist text")
-check("reset clears the ticks (win is unticked again)", out:find("%[ %] win"), "")
+check("reset clears the ticks (dungeon is unticked again)", out:find("%[ %] dungeon"), "")
 
 -- if the window can't be drawn, the addon says so and prints the list instead of erroring
 local realCreateFrame = CreateFrame
@@ -274,7 +284,7 @@ check("...and shows the checklist as chat text instead of erroring", out:find("c
 CreateFrame = realCreateFrame
 
 out = say("GUILDTOOLSLOOTTEST", "help")
-check("help mentions the checklist and the manual items", out:find("checklist") and out:find("live_app"), "")
+check("help mentions the checklist and the manual items", out:find("checklist") and out:find("app_sync"), "")
 
 -- =========================== raw loot lines + debug ===========================
 local lootLineFrame
@@ -296,6 +306,12 @@ lootLineFrame.scripts.OnEvent(lootLineFrame, "CHAT_MSG_LOOT", oddLine)
 local kept = GuildToolsLootTestDB.lootLines
 check("every loot line is kept as the game sent it, with where it happened", #kept == 3 and kept[1].text == needLine and kept[1].zone == "The Venomous Abyss" and kept[1].difficultyID == 15)
 check("...and marked as a Need win or not by the addon's own pattern", kept[1].matches == true and kept[2].matches == false and kept[3].matches == false)
+out = say("GUILDTOOLSLOOTTEST", "checklist text")
+check("a line the chat-text pattern matches ticks 'chatpath' on the checklist", out:find("%[x%] chatpath"), out:sub(1, 200))
+lootLineFrame.scripts.OnEvent(lootLineFrame, "CHAT_MSG_LOOT", "[Loot]: Mooingshots (Need - 75, Main-Spec) Won: " .. link(4004))
+check("the game's newer ', Main-Spec' wording is recognised as a Need win", GuildToolsLootTestDB.lootLines[#GuildToolsLootTestDB.lootLines].matches == true)
+GuildToolsLootTestDB.lootLines[#GuildToolsLootTestDB.lootLines] = nil
+GuildToolsLootTestDB.lootLineStats.seen = GuildToolsLootTestDB.lootLineStats.seen - 1
 out = say("GUILDTOOLSLOOTTEST", "lootlines 5")
 check("lootlines shows them newest first with the verdict", out:find("3 loot line") and out:find("%[NEED WIN%]") and out:find("%[not a need win%]") and out:find("Thundoor"), out:sub(1, 300))
 
@@ -326,6 +342,7 @@ check("with no lines it explains personal loot", out:find("none yet") and out:fi
 zone(true, "raid", "Some Old Raid", 14)
 C_PartyInfo = { GetLootMethod = function() return 5 end }
 LoggingCombat = function() return true end
+state = true -- chat logging reads ON in this scenario
 out = say("GUILDTOOLSLOOTTEST", "debug")
 check("debug names the zone and difficulty", out:find("Some Old Raid") and out:find("Normal"), out:sub(1, 300))
 check("debug reports PERSONAL LOOT but says it is not proof that nobody rolls, and what to trust instead", out:find("Personal loot") and out:find("reads PERSONAL LOOT") and out:find("NOT a reliable sign") and out:find("lootlines"), out:sub(1, 500))
@@ -399,6 +416,7 @@ check("a fresh capture does not show the button yet (waits for things to go quie
 clock = 16
 tick()
 check("after 15 quiet seconds the click-to-sync button appears", buttonShown())
+check("...and ticks 'syncbtn' on the checklist", GuildToolsLootTestDB.checklist.syncbtn == "pass")
 
 combat = true
 tick()
@@ -413,6 +431,7 @@ check("...and returns once it is safe", buttonShown())
 
 syncButton().scripts.OnClick(syncButton())
 check("clicking the button reloads the UI (a real click is the hardware event ReloadUI needs)", reloads == 1, tostring(reloads))
+check("...and ticks 'syncclick' BEFORE the reload writes the table to disk", GuildToolsLootTestDB.checklist.syncclick == "pass")
 out = say("GUILDTOOLSLOOTTEST", "sync")
 check("/gtloottest sync reloads too and says so", reloads == 2 and out:find("reloading the UI"), out)
 
@@ -420,6 +439,7 @@ local realReload = ReloadUI
 ReloadUI = function() error("ADDON_ACTION_FORBIDDEN") end
 out = say("GUILDTOOLSLOOTTEST", "sync")
 check("if the game refuses the reload it says so and points at /reload instead of raising", out:find("would not reload") and out:find("/reload"), out)
+check("...and marks 'syncclick' FAILED so it is not mistaken for working", GuildToolsLootTestDB.checklist.syncclick == "fail")
 ReloadUI = realReload
 
 loginFrame.scripts.OnEvent(loginFrame, "PLAYER_LOGIN")
@@ -452,6 +472,7 @@ check("...leaves chat logging ON", state == true and out:find("reads ON"), tostr
 check("...uses both routes: LoggingChat(false/true) and the /chatlog command", table.concat(calls, ","):find("api:false") and table.concat(calls, ","):find("api:true") and table.concat(calls, ","):find("slash"), table.concat(calls, ","))
 local stages = GuildToolsLootTestDB.flushtest and GuildToolsLootTestDB.flushtest.stages or {}
 check("...and saves each step with its time so an outside watcher can match them", #stages == 7 and stages[1].name:find("STEP 1") and type(stages[1].at) == "number", tostring(#stages))
+check("...and ticks 'flush' on the checklist", GuildToolsLootTestDB.checklist.flush == "pass")
 
 calls = {}
 LoggingChat = nil
