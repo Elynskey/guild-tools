@@ -5,6 +5,7 @@ import { Crest } from '../design-system/Crest';
 import { HelpTooltip } from '../design-system/HelpTooltip';
 import { RefreshButton } from '../screens/shared/RefreshButton';
 import { itemLabel } from '../raid/lootLogic';
+import { ADDON_COMMANDS } from './addonCommands';
 import { useLootMonitor, type ActionState } from './useLootMonitor';
 import { ago, difficultyName, type CheckGroup, type CheckStatus, type HealthCheck } from './lootPipelineHealth';
 
@@ -155,6 +156,20 @@ export function LootMonitor() {
                   <ActionResult state={m.clearState} />
                 </div>
               </div>
+            </div>
+
+            <div className="crd-card" style={{ padding: 0, overflow: 'hidden' }}>
+              <div style={{ padding: '12px 20px', fontWeight: 600, color: 'var(--text-strong)' }}>
+                Test addon commands
+                <span style={{ marginLeft: 10, fontWeight: 400, fontSize: 'var(--text-micro)', color: 'var(--text-faint)' }}>type these in WoW chat; /gtloottest help prints the same list in game</span>
+              </div>
+              {ADDON_COMMANDS.map((c) => (
+                <div key={c.command} style={{ display: 'grid', gridTemplateColumns: '210px 1fr 1fr', gap: 14, alignItems: 'baseline', padding: '8px 20px', borderTop: '1px solid var(--border-hairline)' }}>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-body-s)', color: 'var(--text-strong)' }}>/gtloottest {c.command}</div>
+                  <div style={{ fontSize: 'var(--text-body-s)', color: 'var(--text-body)', lineHeight: 1.5 }}>{c.does}</div>
+                  <div style={{ fontSize: 'var(--text-body-s)', color: 'var(--text-muted)', lineHeight: 1.5 }}>{c.when}</div>
+                </div>
+              ))}
             </div>
 
             <div className="crd-card" style={{ padding: 0, overflow: 'hidden' }}>

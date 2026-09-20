@@ -229,7 +229,7 @@ end
 
 local function buildChecklistFrame()
   local f = CreateFrame("Frame", "GuildToolsLootTestChecklist", UIParent, "BackdropTemplate")
-  f:SetSize(470, 76 + #CHECKS * 20)
+  f:SetSize(470, 76 + #CHECKS * 20 + 44)
   local pos = GuildToolsLootTestDB.checklistPos
   if pos then f:SetPoint(pos.point, UIParent, pos.relPoint, pos.x, pos.y) else f:SetPoint("CENTER", UIParent, "CENTER", 360, 40) end
   f:SetFrameStrata("MEDIUM")
@@ -269,6 +269,13 @@ local function buildChecklistFrame()
     GuildToolsLootTestDB.checklistHidden = true
     f:Hide()
   end)
+
+  -- The commands, so nobody has to remember them mid-raid. /gtloottest help says what each one does.
+  f.commands = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+  f.commands:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 16, 14)
+  f.commands:SetWidth(440)
+  f.commands:SetJustifyH("LEFT")
+  f.commands:SetText("|cffffd100/gtloottest|r  selftest  debug  lootlines  last  logmark  track  check  checklist  help")
 
   f.rows = {}
   for i, c in ipairs(CHECKS) do
@@ -531,6 +538,7 @@ local function testHelp()
   announce("  /gtloottest lootlines [n]               -- the raw loot text the game sent this addon, and whether it would be captured")
   announce("  /gtloottest checklist [text|reset]      -- the on-screen test checklist (drag it; ticks itself)")
   announce("  /gtloottest check <id>                  -- tick a manual item: marker, live_app, reload, discord, verify")
+  announce("  /gtloottest help                        -- this list")
   announce("This test addon keeps its own data (GuildToolsLootTestDB) and never reaches the Guild Tools app.")
 end
 
