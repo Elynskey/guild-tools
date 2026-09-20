@@ -1,4 +1,4 @@
-const { getLootRecords } = require('./lootLog.cjs');
+const { getLootRecords, getAddonDataStamp } = require('./lootLog.cjs');
 const { pollChatLog } = require('./lootChatTail.cjs');
 const { pollCombatLog, recentKills } = require('./lootCombatLog.cjs');
 const { enrichWin } = require('./lootLiveEnrich.cjs');
@@ -16,20 +16,40 @@ let lastAddonCounts = null;
 // there's nothing new; the server dedupes) and the shared, officer-wide view is what
 // actually gets shown. Local dev / no-proxy builds fall back to local-only, same
 // branch-don't-rewrite pattern as everything else in this pipeline.
+async function offerAddonData(local) {
+  if (local.records.length === 0 && local.trades.length === 0 && local.needLosses.length === 0) return;
+  await proxyClient.syncLootRecords(local.records, local.trades, local.needLosses);
+  const counts = `${local.records.length}/${local.trades.length}/${local.needLosses.length}`;
+  if (counts !== lastAddonCounts) {
+    lastAddonCounts = counts;
+    pipelineLog.record('addon-sync', `Addon data offered to the store: ${local.records.length} win(s), ${local.needLosses.length} lost roll(s), ${local.trades.length} trade(s)`, { records: local.records.length, needLosses: local.needLosses.length, trades: local.trades.length });
+  }
+}
+
+// The addon's SavedVariables file is written only at /reload or logout. This is called from the app's 10-second background
+// tick and does nothing until that file's timestamp moves, then offers the addon's data to the store right away (so a
+// win reaches Discord within one tick of the reload) -- previously that only happened when someone opened Loot History.
+// Same push fetchLootLog does, and the server dedupes, so it is safe to repeat.
+let lastAddonStamp = null;
+async function syncAddonDataIfChanged() {
+  const stamp = getAddonDataStamp();
+  if (stamp === null || stamp === lastAddonStamp) return { synced: false };
+  const local = getLootRecords();
+  if (local.status !== 'ok') return { synced: false };
+  if (proxyClient.isAvailable()) await offerAddonData(local);
+  else lootRecordsStore.sync(local.records, local.trades, local.needLosses);
+  // Only remembered once the push worked, so a failed attempt is retried on the next tick.
+  lastAddonStamp = stamp;
+  return { synced: true, records: local.records.length };
+}
+
 async function fetchLootLog() {
   const local = getLootRecords();
 
   if (!proxyClient.isAvailable()) return local;
 
   try {
-    if (local.records.length > 0 || local.trades.length > 0 || local.needLosses.length > 0) {
-      await proxyClient.syncLootRecords(local.records, local.trades, local.needLosses);
-      const counts = `${local.records.length}/${local.trades.length}/${local.needLosses.length}`;
-      if (counts !== lastAddonCounts) {
-        lastAddonCounts = counts;
-        pipelineLog.record('addon-sync', `Addon data offered to the store: ${local.records.length} win(s), ${local.needLosses.length} lost roll(s), ${local.trades.length} trade(s)`, { records: local.records.length, needLosses: local.needLosses.length, trades: local.trades.length });
-      }
-    }
+    await offerAddonData(local);
     const shared = await proxyClient.getSharedLootRecords();
     const status = shared.records.length > 0 || shared.trades.length > 0 || local.status === 'ok' ? 'ok' : local.status;
     return { records: shared.records, trades: shared.trades, needLosses: shared.needLosses ?? [], status };
@@ -131,4 +151,4 @@ async function deleteLootNight(startTime, endTime) {
   return lootRecordsStore.deleteNight(startTime, endTime);
 }
 
-module.exports = { fetchLootLog, addManualLootRecord, updateLootRecord, removeLootRecord, removeLootTrade, deleteLootNight, syncChatTailCapture };
+module.exports = { fetchLootLog, syncAddonDataIfChanged, addManualLootRecord, updateLootRecord, removeLootRecord, removeLootTrade, deleteLootNight, syncChatTailCapture };

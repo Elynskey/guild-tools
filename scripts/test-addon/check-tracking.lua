@@ -363,5 +363,115 @@ check("...and missing logging APIs read 'unavailable'", out:find("combat logging
 out = say("GUILDTOOLSLOOTTEST", "help")
 check("help lists debug and lootlines", out:find("debug") and out:find("lootlines"), "")
 
+-- =========================== one-click sync ===========================
+local clock = 0
+GetTime = function() return clock end
+local reloads = 0
+ReloadUI = function() reloads = reloads + 1 end
+local encounter, combat = false, false
+IsEncounterInProgress = function() return encounter end
+InCombatLockdown = function() return combat end
+local loginFrame, ticker
+for i = #frames, 1, -1 do
+  local f = frames[i]
+  if not loginFrame and f.events.PLAYER_LOGIN and f ~= testFrame and f ~= realFrame then loginFrame = f end
+  if not ticker and f.scripts.OnUpdate then ticker = f end
+end
+check("the addon has a login hook and a 2-second ticker to drive the sync button", loginFrame ~= nil and ticker ~= nil)
+local function tick() ticker.scripts.OnUpdate(ticker, 2) end
+local function syncButton()
+  for i = #frames, 1, -1 do if frames[i].scripts.OnClick and frames[i].scripts.OnEnter and frames[i].scripts.OnDragStart and frames[i].scripts.OnDragStop and frames[i].scripts.OnLeave and not rawget(frames[i], "close") then return frames[i] end end
+end
+local function buttonShown() local b = syncButton(); return b ~= nil and b.shown == true end
+
+GuildToolsLootTestDB.records = {}
+GuildToolsLootTestDB.needLosses = {}
+GuildToolsLootTestDB.trades = {}
+GuildToolsLootTestDB.syncPromptOff = nil
+clock = 0
+loginFrame.scripts.OnEvent(loginFrame, "PLAYER_LOGIN")
+tick()
+check("no button while nothing new has been captured", not buttonShown())
+
+GuildToolsLootTestDB.records[#GuildToolsLootTestDB.records + 1] = { itemId = 1, winner = "Tester", time = time() }
+tick()
+check("a fresh capture does not show the button yet (waits for things to go quiet)", not buttonShown())
+clock = 16
+tick()
+check("after 15 quiet seconds the click-to-sync button appears", buttonShown())
+
+combat = true
+tick()
+check("...but never in combat", not buttonShown())
+combat = false
+encounter = true
+tick()
+check("...nor during an encounter", not buttonShown())
+encounter = false
+tick()
+check("...and returns once it is safe", buttonShown())
+
+syncButton().scripts.OnClick(syncButton())
+check("clicking the button reloads the UI (a real click is the hardware event ReloadUI needs)", reloads == 1, tostring(reloads))
+out = say("GUILDTOOLSLOOTTEST", "sync")
+check("/gtloottest sync reloads too and says so", reloads == 2 and out:find("reloading the UI"), out)
+
+local realReload = ReloadUI
+ReloadUI = function() error("ADDON_ACTION_FORBIDDEN") end
+out = say("GUILDTOOLSLOOTTEST", "sync")
+check("if the game refuses the reload it says so and points at /reload instead of raising", out:find("would not reload") and out:find("/reload"), out)
+ReloadUI = realReload
+
+loginFrame.scripts.OnEvent(loginFrame, "PLAYER_LOGIN")
+tick()
+check("after the reload (a new PLAYER_LOGIN) nothing is pending, so the button goes away", not buttonShown())
+
+GuildToolsLootTestDB.needLosses[#GuildToolsLootTestDB.needLosses + 1] = { itemId = 2, name = "Someone", time = time() }
+tick()
+clock = 40
+tick()
+check("a lost roll counts as loot to sync too", buttonShown())
+out = say("GUILDTOOLSLOOTTEST", "syncoff")
+check("/gtloottest syncoff hides it and says how to get it back", not buttonShown() and out:find("OFF") and GuildToolsLootTestDB.syncPromptOff == true, out)
+tick()
+check("...and it stays hidden", not buttonShown())
+out = say("GUILDTOOLSLOOTTEST", "syncoff")
+tick()
+check("...until switched back on", buttonShown() and out:find("ON"), out)
+GuildToolsLootTestDB.syncPromptOff = nil
+
+-- =========================== the flush test ===========================
+local calls = {}
+local chatlogState = state
+LoggingChat = function(on) calls[#calls + 1] = "api:" .. tostring(on); state = on end
+SlashCmdList["CHATLOG"] = function() calls[#calls + 1] = "slash"; state = not state end
+state = true
+out = say("GUILDTOOLSLOOTTEST", "flushtest")
+check("flushtest announces what is available and runs all four steps", out:find("LoggingChat is available") and out:find("STEP 1") and out:find("STEP 2") and out:find("STEP 3") and out:find("STEP 4"), out:sub(1, 300))
+check("...leaves chat logging ON", state == true and out:find("reads ON"), tostring(state))
+check("...uses both routes: LoggingChat(false/true) and the /chatlog command", table.concat(calls, ","):find("api:false") and table.concat(calls, ","):find("api:true") and table.concat(calls, ","):find("slash"), table.concat(calls, ","))
+local stages = GuildToolsLootTestDB.flushtest and GuildToolsLootTestDB.flushtest.stages or {}
+check("...and saves each step with its time so an outside watcher can match them", #stages == 7 and stages[1].name:find("STEP 1") and type(stages[1].at) == "number", tostring(#stages))
+
+calls = {}
+LoggingChat = nil
+state = true
+out = say("GUILDTOOLSLOOTTEST", "flushtest")
+check("without LoggingChat it says so, still tries the /chatlog command, and ends ON", out:find("LoggingChat is NOT available") and table.concat(calls, ","):find("slash") and state == true, out:sub(1, 200) .. " | " .. table.concat(calls, ","))
+
+state = false
+out = say("GUILDTOOLSLOOTTEST", "flushtest")
+check("if logging was off it turns it on first and still ends ON", state == true, tostring(state))
+
+local realApi = C_ChatInfo.IsLoggingChat
+C_ChatInfo.IsLoggingChat = nil
+out = say("GUILDTOOLSLOOTTEST", "flushtest")
+check("when the game can't report chat logging the test refuses instead of guessing", out:find("can't read chat logging"), out)
+C_ChatInfo.IsLoggingChat = realApi
+LoggingChat = function(on) state = on end
+
+out = say("GUILDTOOLSLOOTTEST", "help")
+check("help lists sync and flushtest", out:find("sync") and out:find("flushtest"), "")
+
 print(string.format("\n%d checks, %d failed", checks, failed))
 os.exit(failed == 0 and 0 or 1)

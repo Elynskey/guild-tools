@@ -37,7 +37,7 @@ const { getChatLogStatus } = require('./dataSources/lootChatTail.cjs');
 const { getCombatLogStatus, recentKills } = require('./dataSources/lootCombatLog.cjs');
 const pipelineLog = require('./dataSources/pipelineLog.cjs');
 const { recentLootLines, recentEncounters } = require('./dataSources/rawFeeds.cjs');
-const { fetchLootLog, addManualLootRecord, updateLootRecord, removeLootRecord, removeLootTrade, deleteLootNight, syncChatTailCapture } = require('./dataSources/fetchLootLog.cjs');
+const { fetchLootLog, syncAddonDataIfChanged, addManualLootRecord, updateLootRecord, removeLootRecord, removeLootTrade, deleteLootNight, syncChatTailCapture } = require('./dataSources/fetchLootLog.cjs');
 
 // In-memory only (not persisted) -- this session's record of whether live loot capture
 // is actually running, for Loot History's status card. Reset to zeros on every app
@@ -499,7 +499,11 @@ app.whenReady().then(() => {
         console.error('[lootChatTail] Poll failed:', err);
         chatTailStatus.lastPollAt = Date.now();
         chatTailStatus.lastStatus = 'error';
-      });
+      })
+      // After the chat log, so a flush that lands both at once (a /reload) is seen by the chat tail first and then
+      // reconciled with the addon's own records.
+      .then(() => syncAddonDataIfChanged())
+      .catch((err) => console.error('[lootAddonSync] Sync failed:', err));
 
     if (proxyClient.isAvailable() && authState?.displayName) {
       const chatLog = getChatLogStatus();

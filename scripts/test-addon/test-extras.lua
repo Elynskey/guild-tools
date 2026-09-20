@@ -10,6 +10,8 @@
 --   /gtloottest check <id>           cycle a manual item: unchecked -> done -> failed
 --   /gtloottest debug                where you are, how loot is handed out, what logging is on (saved too)
 --   /gtloottest lootlines [n]        the raw CHAT_MSG_LOOT text the game handed this addon, and whether it matches
+--   /gtloottest sync                 reload the UI now so Guild Tools gets your loot (also the click-to-sync button)
+--   /gtloottest flushtest            try ways to make WoW write WoWChatLog.txt now, without a reload
 --   /gtloottest help                 list every test command
 --
 -- This block runs after the whole copied addon, so it can use the file-level locals declared above
@@ -86,6 +88,7 @@ end
 -- a drop. It checks the addon's own logic and the current zone; it cannot check that the game
 -- writes the line to WoWChatLog.txt (that needs a real roll, or /gtloottest logmark for the log).
 local testChecklistSet -- assigned in the checklist section below
+local updateSyncPrompt -- assigned in the sync section below (the 2-second ticker above it calls it)
 
 local SELFTEST_LINK = "|cffffffff|Hitem:25::::::::1:::::::|h[Worn Shortsword]|h|r"
 
@@ -275,7 +278,7 @@ local function buildChecklistFrame()
   f.commands:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 16, 14)
   f.commands:SetWidth(440)
   f.commands:SetJustifyH("LEFT")
-  f.commands:SetText("|cffffd100/gtloottest|r  selftest  debug  lootlines  last  logmark  track  check  checklist  help")
+  f.commands:SetText("|cffffd100/gtloottest|r  selftest  debug  lootlines  sync  flushtest  last  logmark  track  check  checklist  help")
 
   f.rows = {}
   for i, c in ipairs(CHECKS) do
@@ -394,6 +397,7 @@ do
     if elapsed >= 2 then
       elapsed = 0
       pollChecklist()
+      updateSyncPrompt()
     end
   end)
 end
@@ -533,6 +537,164 @@ local function showDebug()
   announce("saved into GuildToolsLootTestDB.debug -- it reaches the file at /reload or logout.")
 end
 
+-- ---------------------------------------------------------------------------------------------
+-- One-click sync. WoW writes this addon's saved data (and buffers the chat log) only at /reload or logout, and
+-- ReloadUI() needs a real click or key press, so it cannot be done on a timer. Instead: once new loot results have
+-- been captured and things have been quiet for a moment, a small button offers the reload. One click, and Guild
+-- Tools has the wins within seconds. Never shown in combat or during an encounter.
+-- ---------------------------------------------------------------------------------------------
+local SYNC_QUIET_SECONDS = 15
+local syncBase          -- counts when this session loaded: everything after it is not on disk yet
+local syncSeen          -- counts at the last look, to notice a change
+local syncChangedAt = 0
+local syncFrame
+
+local function syncCounts()
+  local db = GuildToolsLootTestDB or {}
+  return { r = #(db.records or {}), l = #(db.needLosses or {}), t = #(db.trades or {}) }
+end
+
+local function syncPending()
+  if not syncBase then return 0 end
+  local c = syncCounts()
+  return math.max(0, c.r - syncBase.r) + math.max(0, c.l - syncBase.l) + math.max(0, c.t - syncBase.t)
+end
+
+local function syncNow()
+  announce("syncing: reloading the UI so Guild Tools gets your loot...")
+  if not ReloadUI then
+    announce("this client has no ReloadUI here -- type /reload yourself.")
+    return
+  end
+  local ok, err = pcall(ReloadUI)
+  if not ok then announce("the game would not reload from here (" .. tostring(err) .. ") -- type /reload yourself.") end
+end
+
+local function shouldShowSync()
+  if GuildToolsLootTestDB.syncPromptOff then return false end
+  local pending = syncPending()
+  if pending <= 0 then return false end
+  if GetTime() - syncChangedAt < SYNC_QUIET_SECONDS then return false end
+  if IsEncounterInProgress and IsEncounterInProgress() then return false end
+  if InCombatLockdown and InCombatLockdown() then return false end
+  return true
+end
+
+local function buildSyncFrame()
+  local f = CreateFrame("Button", "GuildToolsLootTestSync", UIParent, "UIPanelButtonTemplate")
+  f:SetSize(330, 34)
+  local pos = GuildToolsLootTestDB.syncPos
+  if pos then f:SetPoint(pos.point, UIParent, pos.relPoint, pos.x, pos.y) else f:SetPoint("TOP", UIParent, "TOP", 0, -140) end
+  f:SetFrameStrata("DIALOG")
+  f:SetMovable(true)
+  f:RegisterForDrag("RightButton")
+  f:RegisterForClicks("LeftButtonUp")
+  f:SetScript("OnDragStart", function(self) self:StartMoving() end)
+  f:SetScript("OnDragStop", function(self)
+    self:StopMovingOrSizing()
+    local point, _, relPoint, x, y = self:GetPoint()
+    GuildToolsLootTestDB.syncPos = { point = point, relPoint = relPoint, x = x, y = y }
+  end)
+  f:SetScript("OnClick", function() syncNow() end)
+  f:SetScript("OnEnter", function(self)
+    if GameTooltip then
+      GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
+      GameTooltip:SetText("Sync loot to Guild Tools")
+      GameTooltip:AddLine("Reloads the UI, which is what makes WoW write your loot to disk. Left-click to sync. Drag with the right mouse button to move. /gtloottest syncoff hides this button.", 1, 1, 1, true)
+      GameTooltip:Show()
+    end
+  end)
+  f:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+  return f
+end
+
+updateSyncPrompt = function()
+  if not GuildToolsLootTestDB or not syncBase then return end
+  local c = syncCounts()
+  if not syncSeen or c.r ~= syncSeen.r or c.l ~= syncSeen.l or c.t ~= syncSeen.t then
+    syncSeen = c
+    syncChangedAt = GetTime()
+  end
+  local show = shouldShowSync()
+  if not show and not syncFrame then return end
+  if not syncFrame then
+    local ok, result = pcall(buildSyncFrame)
+    if not ok then
+      announce("couldn't draw the sync button (" .. tostring(result) .. ") -- type /gtloottest sync when you want to sync.")
+      GuildToolsLootTestDB.syncPromptOff = true
+      return
+    end
+    syncFrame = result
+  end
+  if show then
+    syncFrame:SetText("Loot ready: click to sync (" .. syncPending() .. " new)")
+    syncFrame:Show()
+  else
+    syncFrame:Hide()
+  end
+end
+
+local function initSyncBaseline()
+  syncBase = syncCounts()
+  syncSeen = syncBase
+  syncChangedAt = GetTime()
+end
+
+-- ---------------------------------------------------------------------------------------------
+-- /gtloottest flushtest: WoW keeps chat lines in memory and writes WoWChatLog.txt only at /reload or logout
+-- (confirmed live 2026-09-19). This tries the ways an addon can ask for the file to be closed and reopened, one
+-- every 20 seconds, and records the exact time of each so an outside watcher can match them to the moment the file
+-- grew. Whichever one makes it grow can then run automatically after every boss, with no reload.
+-- ---------------------------------------------------------------------------------------------
+local FLUSH_STEP_SECONDS = 20
+
+local function flushTest()
+  if not isChatLoggingAPI() then
+    announce("can't read chat logging on this client, so this test can't run.")
+    return
+  end
+  local stages = {}
+  GuildToolsLootTestDB.flushtest = { startedAt = time(), hasLoggingChat = LoggingChat ~= nil, hasSlash = (SlashCmdList and SlashCmdList["CHATLOG"]) ~= nil, stages = stages }
+
+  local function stamp(name)
+    stages[#stages + 1] = { name = name, at = time(), reads = C_ChatInfo.IsLoggingChat() and "ON" or "OFF" }
+    announce(date("%H:%M:%S") .. "  " .. name)
+  end
+  local function slash()
+    if SlashCmdList and SlashCmdList["CHATLOG"] then SlashCmdList["CHATLOG"]("") end
+  end
+  -- The setter when this client has it, else the /chatlog toggle -- only ever acting if the reading needs to change,
+  -- so it can never flip the wrong way.
+  local function api(on)
+    if C_ChatInfo.IsLoggingChat() == on then return end
+    if LoggingChat then LoggingChat(on) else slash() end
+  end
+
+  announce("flush test: " .. (LoggingChat and "LoggingChat is available" or "LoggingChat is NOT available") .. ", " .. ((SlashCmdList and SlashCmdList["CHATLOG"]) and "/chatlog handler is available" or "/chatlog handler is NOT available") .. ". Four steps, " .. FLUSH_STEP_SECONDS .. "s apart; chat logging ends ON. Keep chatting or wait for guild traffic; watching happens outside the game.")
+  if not C_ChatInfo.IsLoggingChat() then api(true) end
+
+  C_Timer.After(5, function()
+    stamp("STEP 1: LoggingChat(false), then LoggingChat(true) one second later")
+    api(false)
+    C_Timer.After(1, function() api(true); stamp("STEP 1 done") end)
+  end)
+  C_Timer.After(5 + FLUSH_STEP_SECONDS, function()
+    stamp("STEP 2: the /chatlog command twice, one second apart")
+    slash()
+    C_Timer.After(1, function() slash(); stamp("STEP 2 done") end)
+  end)
+  C_Timer.After(5 + FLUSH_STEP_SECONDS * 2, function()
+    stamp("STEP 3: logging OFF for six seconds, then ON")
+    api(false)
+    C_Timer.After(6, function() api(true); stamp("STEP 3 done") end)
+  end)
+  C_Timer.After(5 + FLUSH_STEP_SECONDS * 3, function()
+    if not C_ChatInfo.IsLoggingChat() then api(true) end
+    stamp("STEP 4: finished. If nothing above made the file grow, take any loading screen now (zone through a portal or hearth) and tell me the time")
+    announce("flush test finished; chat logging reads " .. (C_ChatInfo.IsLoggingChat() and "ON" or "OFF") .. ". The step times are saved (GuildToolsLootTestDB.flushtest) and reach the file at your next reload or logout.")
+  end)
+end
+
 local function testHelp()
   announce("test commands (same names as the real /gtloot, plus more):")
   announce("  /gtloottest on | off | scan | chatlog   -- as the real addon")
@@ -544,6 +706,8 @@ local function testHelp()
   announce("  /gtloottest lootlines [n]               -- the raw loot text the game sent this addon, and whether it would be captured")
   announce("  /gtloottest checklist [text|reset]      -- the on-screen test checklist (drag it; ticks itself)")
   announce("  /gtloottest check <id>                  -- tick a manual item: marker, live_app, reload, discord, verify")
+  announce("  /gtloottest sync                        -- reload now so Guild Tools gets your loot (also the click-to-sync button that appears after loot)")
+  announce("  /gtloottest flushtest                   -- try ways to make WoW write WoWChatLog.txt without a reload (four steps, ~65 s)")
   announce("  /gtloottest help                        -- this list")
   announce("This test addon keeps its own data (GuildToolsLootTestDB) and never reaches the Guild Tools app.")
 end
@@ -563,6 +727,14 @@ SlashCmdList["GUILDTOOLSLOOTTEST"] = function(msg)
     checklistCommand(rest)
   elseif arg == "check" then
     checkCommand(rest)
+  elseif arg == "sync" then
+    syncNow()
+  elseif arg == "syncoff" then
+    GuildToolsLootTestDB.syncPromptOff = not GuildToolsLootTestDB.syncPromptOff
+    if syncFrame then syncFrame:Hide() end
+    announce("the click-to-sync button is now " .. (GuildToolsLootTestDB.syncPromptOff and "OFF" or "ON") .. ". /gtloottest sync still works.")
+  elseif arg == "flushtest" then
+    flushTest()
   elseif arg == "debug" then
     showDebug()
   elseif arg == "lootlines" then
@@ -581,6 +753,7 @@ do
   banner:SetScript("OnEvent", function()
     announce("TEST addon loaded, tracking " .. (testTrackAll() and "ALL content" or "STRICT") .. " -- type /gtloottest help. The real /gtloot addon is unaffected.")
     pollChecklist()
+    initSyncBaseline()
     if not GuildToolsLootTestDB.checklistHidden then showChecklist() end
   end)
 end

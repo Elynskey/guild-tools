@@ -215,6 +215,23 @@ function getLootRecords() {
   return { records: db.records ?? [], trades: db.trades ?? [], needLosses: db.needLosses ?? [], status: 'ok' };
 }
 
+/**
+ * When this PC's addon SavedVariables file last changed (ms since the epoch), or null if there isn't one. A cheap stat, no
+ * parse: the app's background tick uses it to notice a /reload or logout (the only moments the file is written) and sync
+ * the addon's data right then, instead of waiting for someone to open Loot History.
+ */
+function getAddonDataStamp() {
+  const wowPath = resolveWowPath();
+  if (!isRealWowPath(wowPath)) return null;
+  const file = findSavedVariablesFile(wowPath);
+  if (!file) return null;
+  try {
+    return fs.statSync(file).mtimeMs;
+  } catch {
+    return null;
+  }
+}
+
 function getWowPathConfig() {
   const character = resolveCharacter();
   return {
@@ -290,6 +307,7 @@ function getAddonVersionInfo(bundledTocOverride) {
 module.exports = {
   withAddonFlavor,
   getLootRecords,
+  getAddonDataStamp,
   getWowPathConfig,
   setWowPath,
   installAddon,
