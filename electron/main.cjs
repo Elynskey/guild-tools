@@ -385,7 +385,8 @@ app.whenReady().then(() => {
       });
 
     if (proxyClient.isAvailable() && authState?.displayName) {
-      proxyClient.sendLootCaptureHeartbeat(authState.displayName, getChatLogStatus().active).catch(() => {});
+      const chatLog = getChatLogStatus();
+      proxyClient.sendLootCaptureHeartbeat(authState.displayName, chatLog.active, chatLog.sizeBytes).catch(() => {});
     }
   };
   runChatTailPoll();

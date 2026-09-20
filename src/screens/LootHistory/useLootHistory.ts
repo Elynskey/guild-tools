@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { evaluateVerification, VERIFY_WINDOW_MS, type ChatLogSnapshot } from './chatLogVerify';
+import { evaluateRaidVerification, evaluateVerification, RAID_VERIFY_WINDOW_MS, type ChatLogSnapshot, type OfficerVerifyStatus } from './chatLogVerify';
 import { annotateWithTrades, formatNightForDiscord, groupLootByNight, itemLabel, needWinTally, type NeedWinTally } from '../../raid/lootLogic';
 import type { LootNight } from '../../raid/lootLogic';
 import { sampleLootRecords, sampleLootTrades } from '../../data/sampleLoot';
@@ -114,9 +114,17 @@ export function useLootHistory() {
     return () => clearInterval(interval);
   }, [loadChatTailStatus]);
 
-  // "Verify chat logging": the officer says something in chat while this watches the log
-  // file for a NEW write (see chatLogVerify.ts for why the game's own ON isn't enough).
-  const [verify, setVerify] = useState<{ phase: 'idle' | 'waiting' | 'verified' | 'failed'; secondsLeft: number }>({ phase: 'idle', secondsLeft: 0 });
+  // "Verify chat logging": say one line in raid or party chat and every officer's log gets it, so
+  // one check verifies ALL the loggers. This PC is judged from its own file straight away; every
+  // other officer is judged from their app's heartbeat (their log changed after the check began,
+  // in the proxy's clock -- see lootCaptureHeartbeats.cjs). chatLogVerify.ts has the rules.
+  type VerifyState = {
+    phase: 'idle' | 'waiting' | 'done';
+    secondsLeft: number;
+    self: OfficerVerifyStatus;
+    others: { name: string; status: OfficerVerifyStatus }[];
+  };
+  const [verify, setVerify] = useState<VerifyState>({ phase: 'idle', secondsLeft: 0, self: 'waiting', others: [] });
   const verifyTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const stopVerifyTimer = useCallback(() => {
@@ -130,20 +138,23 @@ export function useLootHistory() {
   const startVerify = useCallback(async () => {
     if (!electron) return;
     stopVerifyTimer();
-    const baseline = snapshot(await electron.getChatTailStatus());
+    const [status, beats, auth] = await Promise.all([electron.getChatTailStatus(), electron.getLootCaptureHeartbeats(), electron.getAuthState()]);
+    const baseline = snapshot(status);
+    const ownName = auth?.displayName ?? null;
+    const startedAtServer = beats.serverNow ?? Date.now();
     const startedAt = Date.now();
-    setVerify({ phase: 'waiting', secondsLeft: Math.ceil(VERIFY_WINDOW_MS / 1000) });
+    setVerify({ phase: 'waiting', secondsLeft: Math.ceil(RAID_VERIFY_WINDOW_MS / 1000), self: 'waiting', others: [] });
     verifyTimer.current = setInterval(() => {
-      void electron.getChatTailStatus().then((status) => {
+      void Promise.all([electron.getChatTailStatus(), electron.getLootCaptureHeartbeats()]).then(([current, latest]) => {
         const elapsed = Date.now() - startedAt;
-        const result = evaluateVerification(baseline, snapshot(status), elapsed);
-        if (result === 'waiting') {
-          setVerify({ phase: 'waiting', secondsLeft: Math.max(0, Math.ceil((VERIFY_WINDOW_MS - elapsed) / 1000)) });
-          return;
+        const selfResult = evaluateVerification(baseline, snapshot(current), elapsed, RAID_VERIFY_WINDOW_MS);
+        const raid = evaluateRaidVerification(startedAtServer, latest.heartbeats.filter((h) => h.officerName !== ownName), elapsed);
+        const finished = (selfResult === 'verified' && raid.allVerified) || raid.expired;
+        setVerify({ phase: finished ? 'done' : 'waiting', secondsLeft: Math.max(0, Math.ceil((RAID_VERIFY_WINDOW_MS - elapsed) / 1000)), self: selfResult, others: raid.officers });
+        if (finished) {
+          stopVerifyTimer();
+          setChatTailStatus(current);
         }
-        stopVerifyTimer();
-        setVerify({ phase: result, secondsLeft: 0 });
-        setChatTailStatus(status);
       });
     }, 1000);
   }, [electron, stopVerifyTimer]);

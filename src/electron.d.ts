@@ -292,7 +292,20 @@ export interface ElectronAPI {
     /** The combat log is what tells Guild Tools which boss was just killed, so a win can be attributed (and auto-posted) with no /reload. */
     combatLog: { exists: boolean; active: boolean; lastKill: { boss: string; difficultyId: number; endedAt: number } | null };
   }>;
-  getLootCaptureHeartbeats: () => Promise<{ heartbeats: { officerName: string; chatLogActive: boolean; lastSeenAt: number }[] }>;
+  getLootCaptureHeartbeats: () => Promise<{
+    heartbeats: {
+      officerName: string;
+      /** True if this officer's chat log was written to in the last 15 minutes (see lootCaptureHeartbeats.cjs). */
+      chatLogActive: boolean;
+      /** The raw reading: written to in the last 5 minutes. */
+      writingNow?: boolean;
+      /** When (server clock) this officer's chat log last changed between two heartbeats -- what raid-wide Verify keys on. */
+      lastWriteSeenAt?: number | null;
+      lastSeenAt: number;
+    }[];
+    /** The proxy's clock, so a verification can be timed without trusting this PC's clock. */
+    serverNow?: number;
+  }>;
   pickWowFolder: () => Promise<string | null>;
   installLootAddon: () => Promise<{ ok: true; dest: string } | { ok: false; error: string }>;
   getSettings: () => Promise<GuildToolsSettings>;

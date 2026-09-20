@@ -241,8 +241,8 @@ async function postLootNightToDiscord(messages) {
   return proxyFetchJson('/loot-records/post-night', { method: 'POST', body: JSON.stringify({ messages }) });
 }
 
-async function sendLootCaptureHeartbeat(officerName, chatLogActive) {
-  return proxyFetchJson('/loot-capture/heartbeat', { method: 'POST', body: JSON.stringify({ officerName, chatLogActive }) });
+async function sendLootCaptureHeartbeat(officerName, chatLogActive, chatLogSizeBytes) {
+  return proxyFetchJson('/loot-capture/heartbeat', { method: 'POST', body: JSON.stringify({ officerName, chatLogActive, chatLogSizeBytes }) });
 }
 
 async function getLootCaptureHeartbeats() {

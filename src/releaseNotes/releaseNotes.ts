@@ -32,8 +32,8 @@ export const RELEASE_NOTES: ReleaseNote[] = [
         body: 'People who were in a raid group but are not on the roster or in the guild, and only showed up on a single night (pugs and visitors), no longer fill the Season Loot Report. A switch above the table shows them again, tagged Guest.',
       },
       {
-        heading: 'Verify chat logging, and restart it if it is not writing',
-        body: 'Loot History has a Verify chat logging button: say something in chat and it confirms the game is really writing your chat log. If the game says logging is ON but nothing is written, /gtloot chatlog restarts it. The status card also shows when the last chat line was written instead of just "off".',
+        heading: 'Verify chat logging for the whole raid, and restart it if it is not writing',
+        body: 'Press Verify chat logging on Loot History, then say one line in raid or party chat: it lands in every officer log at once, and the card shows who is really writing and who is not. If the game says logging is ON but nothing is written, /gtloot chatlog restarts it. The status card also shows when the last chat line was written instead of just "off", and an officer who wrote in the last 15 minutes still counts as logging through a quiet stretch.',
       },
       {
         heading: 'Real raiders stay',

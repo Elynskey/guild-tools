@@ -212,23 +212,47 @@ function AutoPostRow({ lh }: { lh: ReturnType<typeof useLootHistory> }) {
   );
 }
 
-/** Proves chat logging is actually writing: the game can say ON while nothing reaches the log file, so this watches for a new line while you say something in chat. */
+/** Proves chat logging is really writing -- for this PC and every other officer at once. The game can say ON while nothing reaches the log file; a line said in raid or party chat lands in everyone's log, so watching for it verifies all the loggers. */
 function VerifyRow({ lh }: { lh: ReturnType<typeof useLootHistory> }) {
   const v = lh.verify;
+  const failedNames = [...(v.self === 'failed' ? ['this PC'] : []), ...v.others.filter((o) => o.status === 'failed').map((o) => o.name.split('#')[0])];
+  const chip = (label: string, status: 'verified' | 'waiting' | 'failed') => (
+    <span
+      key={label}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 5,
+        padding: '2px 9px',
+        borderRadius: 999,
+        border: `1px solid ${status === 'verified' ? 'rgba(95,158,74,.6)' : status === 'failed' ? 'rgba(192,144,47,.6)' : 'var(--border-hairline)'}`,
+        fontSize: 'var(--text-micro)',
+        color: status === 'verified' ? 'var(--status-success)' : status === 'failed' ? 'var(--status-warning)' : 'var(--text-muted)',
+      }}
+    >
+      {status === 'verified' ? '✓' : status === 'failed' ? '✕' : '…'} {label}
+    </span>
+  );
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
         <Button size="sm" variant="secondary" onClick={() => void lh.startVerify()} disabled={v.phase === 'waiting'} iconLeft="check">
           {v.phase === 'waiting' ? `Watching… ${v.secondsLeft}s` : 'Verify chat logging'}
         </Button>
-        <HelpTooltip text="The game can say chat logging is ON while nothing is actually being written, and a quiet stretch looks the same as off. This watches your chat log for about 30 seconds -- say anything in chat (party, raid, guild) and it should confirm the moment a line is written." />
-        {v.phase === 'waiting' && <span style={{ fontSize: 'var(--text-body-s)', color: 'var(--text-body)' }}>Say something in chat now, in game (guild, party or raid all work).</span>}
-        {v.phase === 'verified' && <Badge tone="success">Verified: chat logging is writing</Badge>}
-        {v.phase === 'failed' && <Badge tone="warning">Nothing was written</Badge>}
+        <HelpTooltip text="The game can say chat logging is ON while nothing is actually being written, and a quiet stretch looks the same as off. Say ONE line in raid or party chat while this watches: it lands in every officer's chat log at once, so it verifies everyone who is logging. Officers who aren't in your raid group won't see it, so they'll show as not written." />
+        {v.phase === 'waiting' && <span style={{ fontSize: 'var(--text-body-s)', color: 'var(--text-body)' }}>Say one line in raid or party chat now, in game.</span>}
+        {v.phase === 'done' && failedNames.length === 0 && <Badge tone="success">Verified: everyone is writing</Badge>}
+        {v.phase === 'done' && failedNames.length > 0 && <Badge tone="warning">{failedNames.length} not writing</Badge>}
       </div>
-      {v.phase === 'failed' && (
+      {v.phase !== 'idle' && (
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          {chip('This PC', v.self)}
+          {v.others.map((o) => chip(o.name.split('#')[0], o.status))}
+        </div>
+      )}
+      {v.phase === 'done' && failedNames.length > 0 && (
         <div style={{ fontSize: 'var(--text-micro)', color: 'var(--status-warning)', lineHeight: 1.5 }}>
-          Nothing reached the chat log in 30 seconds. If the game says logging is ON, it may not really be writing. In game, type <b>/gtloot chatlog</b> (or /chatlog twice: off, then on), then press Verify again. If it still fails, check that WoW is running on this PC and that its folder is the right one below.
+          No new line reached the chat log for: <b>{failedNames.join(', ')}</b>. If someone is in the raid and the game says logging is ON, it may not really be writing: in game, type <b>/gtloot chatlog</b> (or /chatlog twice: off, then on), then verify again. Officers not in this raid group are expected to show here.
         </div>
       )}
     </div>

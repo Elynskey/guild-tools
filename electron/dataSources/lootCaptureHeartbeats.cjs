@@ -24,16 +24,31 @@ const STALE_MS = 30 * 1000; // 3x the app's own 10s poll interval -- tolerates o
 // someone who logs out stays "on" for up to that long, in exchange for the raid not looking
 // uncovered every time chat goes quiet. The raw reading is still returned as `writingNow`.
 const RECENT_ACTIVE_MS = 15 * 60 * 1000;
-const heartbeats = new Map(); // officerName -> { writingNow: boolean, lastActiveAt: number | null, lastSeenAt: number }
+// Also tracks WHEN each officer's chat log last actually changed, in this server's clock, so a
+// raid-wide "verify chat logging" can ask "did everyone's log get the line that was just said in
+// raid chat?" without comparing clocks between PCs. The app reports the log's size with each
+// heartbeat; a size that differs from the previous heartbeat's (it grew, or the file was replaced)
+// means it was written to in between. An older app that reports no size can only say "active"
+// flipped from false to true, which is treated the same way.
+const heartbeats = new Map(); // officerName -> { writingNow, lastActiveAt, lastSeenAt, sizeBytes, lastWriteSeenAt }
 
-function recordHeartbeat(officerName, chatLogActive) {
+function recordHeartbeat(officerName, chatLogActive, chatLogSizeBytes) {
   if (!officerName) return;
   const now = Date.now();
   const previous = heartbeats.get(officerName);
+  const sizeBytes = Number.isFinite(chatLogSizeBytes) ? chatLogSizeBytes : null;
+  let lastWriteSeenAt = previous?.lastWriteSeenAt ?? null;
+  if (sizeBytes !== null && previous?.sizeBytes != null) {
+    if (sizeBytes !== previous.sizeBytes) lastWriteSeenAt = now;
+  } else if (sizeBytes === null && chatLogActive && previous && !previous.writingNow) {
+    lastWriteSeenAt = now;
+  }
   heartbeats.set(officerName, {
     writingNow: !!chatLogActive,
     lastActiveAt: chatLogActive ? now : (previous?.lastActiveAt ?? null),
     lastSeenAt: now,
+    sizeBytes,
+    lastWriteSeenAt,
   });
 }
 
@@ -49,7 +64,14 @@ function listActiveHeartbeats() {
       continue;
     }
     const recentlyActive = entry.lastActiveAt !== null && now - entry.lastActiveAt <= RECENT_ACTIVE_MS;
-    result.push({ officerName, chatLogActive: entry.writingNow || recentlyActive, writingNow: entry.writingNow, lastActiveAt: entry.lastActiveAt, lastSeenAt: entry.lastSeenAt });
+    result.push({
+      officerName,
+      chatLogActive: entry.writingNow || recentlyActive,
+      writingNow: entry.writingNow,
+      lastActiveAt: entry.lastActiveAt,
+      lastWriteSeenAt: entry.lastWriteSeenAt,
+      lastSeenAt: entry.lastSeenAt,
+    });
   }
   return result;
 }

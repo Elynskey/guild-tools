@@ -17,7 +17,7 @@ afterEach(() => {
 describe('lootCaptureHeartbeats', () => {
   it('reports an officer who just checked in', () => {
     heartbeats.recordHeartbeat('Vitaezra', true);
-    expect(heartbeats.listActiveHeartbeats()).toEqual([{ officerName: 'Vitaezra', chatLogActive: true, writingNow: true, lastActiveAt: expect.any(Number), lastSeenAt: expect.any(Number) }]);
+    expect(heartbeats.listActiveHeartbeats()).toEqual([{ officerName: 'Vitaezra', chatLogActive: true, writingNow: true, lastActiveAt: expect.any(Number), lastWriteSeenAt: null, lastSeenAt: expect.any(Number) }]);
   });
 
   it('tracks multiple officers independently', () => {
@@ -99,5 +99,49 @@ describe('an officer who was writing recently still counts as logging through a 
     beatFor(1, true);
     vi.advanceTimersByTime(31 * 1000);
     expect(heartbeats.listActiveHeartbeats()).toEqual([]);
+  });
+});
+
+describe('write detection for raid-wide verification (in the server clock)', () => {
+  it('marks a write when the reported log size changes between heartbeats', () => {
+    heartbeats.recordHeartbeat('Quixhea', true, 5000);
+    expect(heartbeats.listActiveHeartbeats()[0].lastWriteSeenAt).toBeNull(); // first beat: nothing to compare with
+    vi.advanceTimersByTime(10 * 1000);
+    heartbeats.recordHeartbeat('Quixhea', true, 5000);
+    expect(heartbeats.listActiveHeartbeats()[0].lastWriteSeenAt).toBeNull(); // unchanged: no write
+    vi.advanceTimersByTime(10 * 1000);
+    const before = Date.now();
+    heartbeats.recordHeartbeat('Quixhea', true, 5300);
+    expect(heartbeats.listActiveHeartbeats()[0].lastWriteSeenAt).toBe(before);
+  });
+
+  it('a replaced (smaller) log file counts as a write too', () => {
+    heartbeats.recordHeartbeat('Quixhea', true, 5000);
+    vi.advanceTimersByTime(10 * 1000);
+    heartbeats.recordHeartbeat('Quixhea', true, 120);
+    expect(heartbeats.listActiveHeartbeats()[0].lastWriteSeenAt).not.toBeNull();
+  });
+
+  it('keeps the last write time through later heartbeats with no change', () => {
+    heartbeats.recordHeartbeat('Quixhea', true, 5000);
+    vi.advanceTimersByTime(10 * 1000);
+    heartbeats.recordHeartbeat('Quixhea', true, 5300);
+    const wrote = heartbeats.listActiveHeartbeats()[0].lastWriteSeenAt;
+    vi.advanceTimersByTime(20 * 1000);
+    heartbeats.recordHeartbeat('Quixhea', true, 5300);
+    expect(heartbeats.listActiveHeartbeats()[0].lastWriteSeenAt).toBe(wrote);
+  });
+
+  it('an older app with no size: active flipping from false to true counts as a write', () => {
+    heartbeats.recordHeartbeat('Shrty', false);
+    vi.advanceTimersByTime(10 * 1000);
+    heartbeats.recordHeartbeat('Shrty', true);
+    expect(heartbeats.listActiveHeartbeats()[0].lastWriteSeenAt).not.toBeNull();
+  });
+
+  it('ignores a size that is not a number', () => {
+    heartbeats.recordHeartbeat('Quixhea', true, 'lots');
+    heartbeats.recordHeartbeat('Quixhea', true, NaN);
+    expect(heartbeats.listActiveHeartbeats()[0].lastWriteSeenAt).toBeNull();
   });
 });
