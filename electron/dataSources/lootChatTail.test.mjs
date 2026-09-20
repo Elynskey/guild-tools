@@ -150,6 +150,50 @@ describe('pollChatLog', () => {
   });
 });
 
+describe('lineTimeSeconds: a win takes the time written on its own log line', () => {
+  const at = (y, mo, d, h, mi, s) => new Date(y, mo - 1, d, h, mi, s).getTime();
+
+  it('reads the line\'s own stamp (local time, no year), not the moment it was read', () => {
+    const now = at(2026, 9, 19, 23, 4, 14);
+    expect(tail.lineTimeSeconds('9/19 22:59:38.969  Loot: You (Need - 100, Main-Spec) Won: X', now)).toBe(Math.floor(at(2026, 9, 19, 22, 59, 38) / 1000));
+  });
+
+  it('a record read minutes after it was logged (a flush) keeps the logged time, so it lines up with the addon\'s copy', () => {
+    writeFileSync(chatLogFile, 'old\n');
+    tail.pollChatLog();
+    const flushedAt = Date.now();
+    const d = new Date(flushedAt - 5 * 60 * 1000);
+    const stamp = `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}.100`;
+    appendFileSync(chatLogFile, `${stamp}  Loot: Dharma (Need - 92, Main-Spec) Won: Cincture of the Abyssal Grotto\n`);
+    const { newRecords } = tail.pollChatLog();
+    expect(newRecords).toHaveLength(1);
+    const ageSeconds = flushedAt / 1000 - newRecords[0].time;
+    expect(ageSeconds).toBeGreaterThan(290);
+    expect(ageSeconds).toBeLessThan(320);
+  });
+
+  it('a stamp a day or more ahead belongs to last year (a log flushed just after New Year)', () => {
+    const now = at(2026, 1, 1, 0, 5, 0);
+    expect(tail.lineTimeSeconds('12/31 23:59:50.000  Loot: x', now)).toBe(Math.floor(at(2025, 12, 31, 23, 59, 50) / 1000));
+  });
+
+  it('a stamp a little ahead of now is clamped to now, never the future', () => {
+    const now = at(2026, 9, 19, 23, 4, 14);
+    expect(tail.lineTimeSeconds('9/19 23:04:20.000  Loot: x', now)).toBe(Math.floor(now / 1000));
+  });
+
+  it('a line with no readable stamp gives null and the record falls back to the read time', () => {
+    expect(tail.lineTimeSeconds('Loot: Dharma (Need - 92) Won: X', Date.now())).toBeNull();
+    expect(tail.lineTimeSeconds('13/45 25:99:99  Loot: x', Date.now())).toBeNull();
+    writeFileSync(chatLogFile, 'old\n');
+    tail.pollChatLog();
+    const before = Math.floor(Date.now() / 1000);
+    appendFileSync(chatLogFile, 'Loot: Dharma (Need - 92, Main-Spec) Won: Cincture of the Abyssal Grotto\n');
+    const { newRecords } = tail.pollChatLog();
+    expect(newRecords[0].time).toBeGreaterThanOrEqual(before);
+  });
+});
+
 describe('getChatLogStatus', () => {
   it('reports exists+active for a file just written to', () => {
     writeFileSync(chatLogFile, `${WON_LINE}\n`);

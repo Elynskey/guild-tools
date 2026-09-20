@@ -5,10 +5,17 @@ const pipelineLog = require('./pipelineLog.cjs');
 const { resolveWowPath, isRealWowPath, getCharacterName } = require('./lootLog.cjs');
 
 // Second, independent capture path alongside the addon's SavedVariables read (see
-// lootLog.cjs) -- WoW's own chat log (enabled in-game via /chatlog) is written to disk
-// continuously during a session, unlike SavedVariables, which only flushes on /reload or
-// logout. This lets Guild Tools see a Need win within one poll interval instead of
-// waiting on a reload, at the cost of not knowing which boss it came from or its equip
+// lootLog.cjs) -- WoW's own chat log (enabled in-game via /chatlog). It was long assumed to
+// be written to disk continuously, unlike SavedVariables, which only flushes on /reload or
+// logout. CONFIRMED WRONG live 2026-09-19 (WoW 12.1.0): the client holds chat lines in
+// memory and writes them in one burst at /reload or logout -- 24 KB covering half an hour
+// (22:34-23:03) landed in a single write at 23:04:05, the same moment as the addon's
+// SavedVariables. So this path is only "live" when chat volume fills the client's buffer;
+// otherwise it sees a whole session's wins at once, at the flush. That is why every record
+// here takes its time from its own log line (lineTimeSeconds), never from when it was read:
+// stamping the read time made a flushed win look minutes newer than the addon's copy of the
+// same win, outside sync()'s duplicate window, so every win was recorded and posted twice.
+// The path still saves waiting on the addon's own data, at the cost of not knowing which boss it came from or its equip
 // slot (both need WoW client APIs -- ENCOUNTER_START/END and GetItemInfoInstant -- that
 // don't exist outside the game). Records from here carry `source: 'chat-tail'` and
 // `boss: null`; lootRecordsStore.cjs's sync() reconciles them once the addon's
@@ -66,6 +73,22 @@ function saveState(state) {
 // match, with no error anywhere to surface that.
 const WON_ROLL_PATTERN = /Loot: (.*?) \((.*?) - \d+(?:,[^)]*)?\) Won: (.+)$/;
 
+// Every logged line starts with the client's own local-time stamp, e.g. "9/18 21:49:26.420" (month/day, no
+// year). Returns unix seconds, or null if the line has no readable stamp. The year is assumed to be the current
+// one (a stamp that would land more than a day in the future belongs to the year before: a log flushed just
+// after New Year); a stamp slightly ahead of `nowMs` (clock skew) is clamped to now, never the future.
+const LINE_TIME = /^(\d{1,2})\/(\d{1,2}) (\d{1,2}):(\d{2}):(\d{2})(?:\.(\d+))?/;
+function lineTimeSeconds(line, nowMs = Date.now()) {
+  const m = line.match(LINE_TIME);
+  if (!m) return null;
+  const [, month, day, hour, minute, second] = m.map(Number);
+  const now = new Date(nowMs);
+  let at = new Date(now.getFullYear(), month - 1, day, hour, minute, second);
+  if (Number.isNaN(at.getTime()) || at.getMonth() !== month - 1) return null;
+  if (at.getTime() > nowMs + 24 * 60 * 60 * 1000) at = new Date(now.getFullYear() - 1, month - 1, day, hour, minute, second);
+  return Math.floor(Math.min(at.getTime(), nowMs) / 1000);
+}
+
 // The logged line substitutes the literal word "You" for the local player's own name
 // -- confirmed against the same real file (a win by the account actually running WoW
 // logs as "Loot: You (...) Won: ..." instead of their character name). This is a
@@ -78,7 +101,7 @@ function resolveWinnerName(rawWinner) {
   return getCharacterName();
 }
 
-function parseLine(line) {
+function parseLine(line, nowMs = Date.now()) {
   const wonMatch = line.match(WON_ROLL_PATTERN);
   if (!wonMatch) return null;
   const [, rawWinner, rollType, rawItemName] = wonMatch;
@@ -108,7 +131,7 @@ function parseLine(line) {
     // since. Flagged so the addon's own record of the same win (which carries
     // `self: true`) can be paired with this one exactly and correct the name.
     ...(selfWin ? { selfWin: true } : {}),
-    time: Math.floor(Date.now() / 1000),
+    time: lineTimeSeconds(line, nowMs) ?? Math.floor(nowMs / 1000),
   };
 }
 
@@ -216,4 +239,4 @@ function classifyLootLine(line) {
   return { kind: 'loot-other', text };
 }
 
-module.exports = { pollChatLog, getChatLogStatus, classifyLootLine, chatLogPath };
+module.exports = { pollChatLog, getChatLogStatus, classifyLootLine, chatLogPath, lineTimeSeconds };

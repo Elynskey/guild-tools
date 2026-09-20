@@ -204,7 +204,15 @@ end
 -- and (2) the roll-type word, leaving the item link for extractItemLink() to pull from
 -- the same message separately (it carries the full |Hitem:...|h escape sequence, not
 -- just the plain bracketed name this pattern's lazy match would stop at).
-local WON_ROLL_PATTERN = "%[Loot%]: (.-) %((.-) %- %d+%) Won: "
+--
+-- Live 2026-09-19 (WoW 12.1.0): the game now writes "(Need - 75, Main-Spec)" -- a ", Main-Spec" /
+-- ", Off-Spec" qualifier after the roll value, still inside the parens. The old pattern required
+-- the paren to close right after the number, so it matched NOTHING and every win in that session
+-- was captured only by the C_LootHistory path below (the redundancy did its job). `[^%)]*` lets
+-- the qualifier through. A win by the local player arrives as the word "You" here, while the
+-- C_LootHistory path records the real name; the handler below maps "You" to this character so
+-- the two paths dedupe against each other instead of recording one win twice.
+local WON_ROLL_PATTERN = "%[Loot%]: (.-) %((.-) %- %d+[^%)]*%) Won: "
 
 local function extractItemLink(message)
   return message:match("(|c%x+|Hitem:.-|h|r)")
@@ -777,6 +785,7 @@ frame:SetScript("OnEvent", function(_, event, ...)
     local message = ...
     local winner, rollType = message:match(WON_ROLL_PATTERN)
     if winner and rollType and rollType:lower():find("need") then
+      if winner == "You" then winner = UnitName("player") or winner end
       local link = extractItemLink(message)
       if link then recordNeedWin(winner, link) end
     end

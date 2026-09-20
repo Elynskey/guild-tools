@@ -101,6 +101,24 @@ win(realFrame, "Alpha")
 check("REAL addon still records this tier's Heroic raid", #GuildToolsLootDB.records == 1 and GuildToolsLootDB.records[1].difficulty == "Heroic")
 check("...and its records have no test-only fields", GuildToolsLootDB.records[1].zone == nil and GuildToolsLootDB.records[1].contentType == nil)
 
+-- the game now writes ", Main-Spec" inside the parens (WoW 12.1.0): both addons must still read it
+local function winMainSpec(frame, winner)
+  n = n + 1
+  frame.scripts.OnEvent(frame, "CHAT_MSG_LOOT", "[Loot]: " .. winner .. " (Need - 77, Main-Spec) Won: " .. link(2000 + n))
+end
+local realRecordsSoFar = GuildToolsLootDB.records
+GuildToolsLootDB.records = {}
+zone(true, "raid", "The Venomous Abyss", 15)
+realFrame.scripts.OnEvent(realFrame, "ENCOUNTER_START", 222, "Raid Boss")
+winMainSpec(realFrame, "Zed")
+check("REAL addon reads a win with the ', Main-Spec' qualifier", #GuildToolsLootDB.records == 1 and GuildToolsLootDB.records[1].winner == "Zed", tostring(#GuildToolsLootDB.records))
+winMainSpec(realFrame, "You")
+check("...maps the word 'You' to this character (not a stranger named You)", GuildToolsLootDB.records[2] and GuildToolsLootDB.records[2].winner == "Tester" and GuildToolsLootDB.records[2].self == true, GuildToolsLootDB.records[2] and tostring(GuildToolsLootDB.records[2].winner))
+local before = #GuildToolsLootDB.records
+realFrame.scripts.OnEvent(realFrame, "CHAT_MSG_LOOT", "[Loot]: Tester (Need - 12, Off-Spec) Won: " .. link(2000 + n))
+check("...so a second path reporting the same win under the real name does not record it twice", #GuildToolsLootDB.records == before, tostring(#GuildToolsLootDB.records))
+GuildToolsLootDB.records = realRecordsSoFar
+
 -- =========================== the TEST addon tracks everything ===========================
 GuildToolsLootTestDB.records = {}
 local cases = {
