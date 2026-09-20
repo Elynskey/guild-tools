@@ -469,22 +469,26 @@ end
 -- ---------------------------------------------------------------------------------------------
 local LOOT_METHOD_NAMES = { [0] = "Free for all", [1] = "Round robin", [2] = "Master looter", [3] = "Group loot", [4] = "Need before greed", [5] = "Personal loot" }
 
+-- Asks BOTH loot-method APIs and keeps their raw answers, so a wrong or missing reading is visible instead of
+-- being turned into a confident sentence. Returns: name, isPersonal, detail (the raw readings).
 local function lootMethodInfo()
-  -- Retail's current API first, the legacy one as a fallback. Either can be missing or return a name or a number.
-  local raw
-  if C_PartyInfo and C_PartyInfo.GetLootMethod then
-    local ok, v = pcall(C_PartyInfo.GetLootMethod)
-    if ok then raw = v end
+  local function ask(fn)
+    if not fn then return nil end
+    local ok, v = pcall(fn)
+    if ok then return v end
+    return nil
   end
-  if raw == nil and GetLootMethod then
-    local ok, v = pcall(GetLootMethod)
-    if ok then raw = v end
+  local function describe(raw)
+    if raw == nil then return nil end
+    if type(raw) == "number" then return LOOT_METHOD_NAMES[raw] or ("method " .. raw) end
+    return tostring(raw)
   end
-  if raw == nil then return "unknown", false end
-  local name = type(raw) == "number" and (LOOT_METHOD_NAMES[raw] or ("method " .. raw)) or tostring(raw)
-  local lower = name:lower()
-  local personal = lower:find("personal") ~= nil
-  return name, personal
+  local newRaw = ask(C_PartyInfo and C_PartyInfo.GetLootMethod)
+  local oldRaw = ask(GetLootMethod)
+  local name = describe(newRaw) or describe(oldRaw)
+  local detail = "C_PartyInfo.GetLootMethod = " .. tostring(newRaw) .. ";  GetLootMethod = " .. tostring(oldRaw)
+  if name == nil then return "unknown", false, detail end
+  return name, name:lower():find("personal") ~= nil, detail
 end
 
 local function debugInfo()
@@ -496,7 +500,7 @@ local function debugInfo()
   d.inRaid = IsInRaid and IsInRaid() or false
   d.inGroup = IsInGroup and IsInGroup() or false
   d.groupSize = GetNumGroupMembers and GetNumGroupMembers() or nil
-  d.lootMethod, d.personalLoot = lootMethodInfo()
+  d.lootMethod, d.personalLoot, d.lootMethodDetail = lootMethodInfo()
   d.chatLogging = isChatLoggingAPI() and C_ChatInfo.IsLoggingChat() or nil
   d.combatLogging = LoggingCombat and LoggingCombat() or nil
   d.tracking = testTrackAll() and "ALL content" or "STRICT"
@@ -515,9 +519,15 @@ local function showDebug()
   local where = d.zone and d.zone ~= "" and d.zone or "no instance"
   announce("where: " .. where .. " (" .. tostring(d.instanceType) .. (d.difficulty and (", " .. d.difficulty) or "") .. ", difficulty id " .. tostring(d.difficultyID) .. ")")
   announce("group: " .. (d.inRaid and "raid" or d.inGroup and "party" or "solo") .. (d.groupSize and (", " .. d.groupSize .. " member(s)") or ""))
-  announce("loot method: " .. d.lootMethod)
+  announce("loot method: " .. d.lootMethod .. "   [" .. d.lootMethodDetail .. "]")
   if d.personalLoot then
-    announce("  PERSONAL LOOT: everyone gets their own drops, nobody rolls, so there are no Need wins or lost rolls to capture here. This is normal for most older content.")
+    if not d.inGroup then
+      announce("  PERSONAL LOOT because you are NOT in a group: the game uses personal loot when you are alone. Group loot (Need rolls) only applies once you are in a group, so this is expected solo.")
+    elseif d.difficultyID == 17 then
+      announce("  PERSONAL LOOT: Raid Finder always hands out personal loot, so there are no Need wins to capture there.")
+    else
+      announce("  PERSONAL LOOT reported while you ARE in a group: if that is right there are no Need wins to capture (the group leader can change it in the group menu). If Need rolls are happening anyway, this reading is wrong -- /gtloottest lootlines shows what actually arrives, and the values above are what the game answered.")
+    end
   elseif d.lootMethod == "unknown" then
     announce("  the game would not say how loot is handed out; trust /gtloottest lootlines to show what actually arrives.")
   end

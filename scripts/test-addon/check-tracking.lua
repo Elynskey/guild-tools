@@ -310,17 +310,31 @@ C_PartyInfo = { GetLootMethod = function() return 5 end }
 LoggingCombat = function() return true end
 out = say("GUILDTOOLSLOOTTEST", "debug")
 check("debug names the zone and difficulty", out:find("Some Old Raid") and out:find("Normal"), out:sub(1, 300))
-check("debug flags PERSONAL LOOT and says why nothing is captured", out:find("Personal loot") and out:find("PERSONAL LOOT") and out:find("no Need wins"), out:sub(1, 400))
+check("debug flags PERSONAL LOOT in a group and says what to trust instead", out:find("Personal loot") and out:find("PERSONAL LOOT reported while you ARE in a group") and out:find("no Need wins") and out:find("lootlines"), out:sub(1, 500))
+check("debug shows the raw answers of both loot APIs", out:find("C_PartyInfo.GetLootMethod = 5") and out:find("GetLootMethod = nil"), out:sub(1, 400))
+check("...and saves them", GuildToolsLootTestDB.debug.lootMethodDetail:find("= 5"), tostring(GuildToolsLootTestDB.debug.lootMethodDetail))
 check("debug reports chat and combat logging", out:find("chat logging: ON") and out:find("combat logging: ON"), out:sub(1, 400))
 check("debug is saved for the file", type(GuildToolsLootTestDB.debug) == "table" and GuildToolsLootTestDB.debug.personalLoot == true and GuildToolsLootTestDB.debug.zone == "Some Old Raid")
+
+-- alone in the raid: personal loot is the game's default, and the message must say that instead of blaming loot rolls
+local realIsInGroup = IsInGroup
+IsInGroup = function() return false end
+out = say("GUILDTOOLSLOOTTEST", "debug")
+check("solo: personal loot is explained as 'not in a group', not as a fault", out:find("NOT in a group") and out:find("expected solo") and not out:find("reading is wrong"), out:sub(1, 400))
+IsInGroup = realIsInGroup
+zone(true, "raid", "The Venomous Abyss", 17)
+out = say("GUILDTOOLSLOOTTEST", "debug")
+check("Raid Finder is explained as always personal loot", out:find("Raid Finder always hands out personal loot"), out:sub(1, 400))
+zone(true, "raid", "Some Old Raid", 14)
 
 C_PartyInfo = { GetLootMethod = function() return 3 end }
 out = say("GUILDTOOLSLOOTTEST", "debug")
 check("group loot is NOT flagged as personal", out:find("Group loot") and not out:find("PERSONAL LOOT"), out:sub(1, 300))
+check("...and both raw answers are still shown", out:find("C_PartyInfo.GetLootMethod = 3"), out:sub(1, 300))
 C_PartyInfo = nil
 GetLootMethod = function() return "personalloot" end
 out = say("GUILDTOOLSLOOTTEST", "debug")
-check("the legacy loot API is understood too", out:find("PERSONAL LOOT"), out:sub(1, 300))
+check("the legacy loot API is understood too, and shown as the source", out:find("PERSONAL LOOT") and out:find("GetLootMethod = personalloot"), out:sub(1, 300))
 GetLootMethod = nil
 out = say("GUILDTOOLSLOOTTEST", "debug")
 check("with no loot API at all it says unknown rather than erroring", out:find("loot method: unknown") and out:find("lootlines"), out:sub(1, 300))
