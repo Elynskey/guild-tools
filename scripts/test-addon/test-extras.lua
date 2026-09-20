@@ -521,13 +521,9 @@ local function showDebug()
   announce("group: " .. (d.inRaid and "raid" or d.inGroup and "party" or "solo") .. (d.groupSize and (", " .. d.groupSize .. " member(s)") or ""))
   announce("loot method: " .. d.lootMethod .. "   [" .. d.lootMethodDetail .. "]")
   if d.personalLoot then
-    if not d.inGroup then
-      announce("  PERSONAL LOOT because you are NOT in a group: the game uses personal loot when you are alone. Group loot (Need rolls) only applies once you are in a group, so this is expected solo.")
-    elseif d.difficultyID == 17 then
-      announce("  PERSONAL LOOT: Raid Finder always hands out personal loot, so there are no Need wins to capture there.")
-    else
-      announce("  PERSONAL LOOT reported while you ARE in a group: if that is right there are no Need wins to capture (the group leader can change it in the group menu). If Need rolls are happening anyway, this reading is wrong -- /gtloottest lootlines shows what actually arrives, and the values above are what the game answered.")
-    end
+    -- Not a verdict: seen live 2026-09-19 (WoW 12.1.0), Raid Finder read "Personal loot" here while the raid
+    -- rolled Need/Greed on every drop. The loot-method reading does not decide whether rolls happen.
+    announce("  the game reads PERSONAL LOOT" .. (d.inGroup and "" or " (you are not in a group, which is the game's default when alone)") .. ". That reading is NOT a reliable sign that nobody rolls: Raid Finder read this way while the raid was rolling Need on everything. Trust /gtloottest lootlines, which shows the loot text that actually arrives.")
   elseif d.lootMethod == "unknown" then
     announce("  the game would not say how loot is handed out; trust /gtloottest lootlines to show what actually arrives.")
   end

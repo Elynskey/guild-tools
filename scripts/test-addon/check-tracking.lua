@@ -328,7 +328,7 @@ C_PartyInfo = { GetLootMethod = function() return 5 end }
 LoggingCombat = function() return true end
 out = say("GUILDTOOLSLOOTTEST", "debug")
 check("debug names the zone and difficulty", out:find("Some Old Raid") and out:find("Normal"), out:sub(1, 300))
-check("debug flags PERSONAL LOOT in a group and says what to trust instead", out:find("Personal loot") and out:find("PERSONAL LOOT reported while you ARE in a group") and out:find("no Need wins") and out:find("lootlines"), out:sub(1, 500))
+check("debug reports PERSONAL LOOT but says it is not proof that nobody rolls, and what to trust instead", out:find("Personal loot") and out:find("reads PERSONAL LOOT") and out:find("NOT a reliable sign") and out:find("lootlines"), out:sub(1, 500))
 check("debug shows the raw answers of both loot APIs", out:find("C_PartyInfo.GetLootMethod = 5") and out:find("GetLootMethod = nil"), out:sub(1, 400))
 check("...and saves them", GuildToolsLootTestDB.debug.lootMethodDetail:find("= 5"), tostring(GuildToolsLootTestDB.debug.lootMethodDetail))
 check("debug reports chat and combat logging", out:find("chat logging: ON") and out:find("combat logging: ON"), out:sub(1, 400))
@@ -338,11 +338,11 @@ check("debug is saved for the file", type(GuildToolsLootTestDB.debug) == "table"
 local realIsInGroup = IsInGroup
 IsInGroup = function() return false end
 out = say("GUILDTOOLSLOOTTEST", "debug")
-check("solo: personal loot is explained as 'not in a group', not as a fault", out:find("NOT in a group") and out:find("expected solo") and not out:find("reading is wrong"), out:sub(1, 400))
+check("solo: personal loot is explained as the game's default when alone", out:find("not in a group") and out:find("default when alone"), out:sub(1, 400))
 IsInGroup = realIsInGroup
 zone(true, "raid", "The Venomous Abyss", 17)
 out = say("GUILDTOOLSLOOTTEST", "debug")
-check("Raid Finder is explained as always personal loot", out:find("Raid Finder always hands out personal loot"), out:sub(1, 400))
+check("Raid Finder is NOT declared to be rollless (it rolls Need in 12.1.0)", out:find("Raid Finder read this way while the raid was rolling") and not out:find("always hands out"), out:sub(1, 400))
 zone(true, "raid", "Some Old Raid", 14)
 
 C_PartyInfo = { GetLootMethod = function() return 3 end }
