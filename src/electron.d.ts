@@ -313,7 +313,9 @@ export interface ElectronAPI {
   /** Test builds only (a normal install gets an empty list). `which` picks whose events: 'prod' (default) is how officers actually use the real app, 'test' is test builds. */
   listAnalyticsEvents: (which?: 'prod' | 'test') => Promise<AnalyticsEvent[]>;
   /** Test builds only: a read-only snapshot of every stage of the loot pipeline on this PC; null in a normal install. */
-  getLootMonitorSnapshot: () => Promise<LootMonitorSnapshot | null>;
+  getLootMonitorSnapshot: (which?: 'test' | 'live') => Promise<LootMonitorSnapshot | null>;
+  /** Test builds only: the REAL guild's shared loot store, read-only (the Monitor's Live view). Null if it could not be read. */
+  getLiveLootStore: () => Promise<{ records: { time: number; source?: 'chat-tail' | 'live'; boss?: string | null; difficulty?: string | null; discordPostedAt?: string }[] } | null>;
   /** Test builds only: the loot lines WoW actually wrote to the chat log and the boss pulls (kills and wipes) in the combat log. */
   getLootRawFeeds: () => Promise<LootRawFeeds | null>;
   /** Test builds only: one synthetic win through app -> proxy -> test store -> test Discord channel, reporting each step; removes it after. */

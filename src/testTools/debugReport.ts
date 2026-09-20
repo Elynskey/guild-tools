@@ -1,5 +1,6 @@
 import type { LootMonitorSnapshot, LootRawFeeds } from '../electron';
-import { ago, difficultyName, type ConfigView, type PipelineHealth, type StoreRecordView } from './lootPipelineHealth';
+import { ago, difficultyName, type ConfigView, type MonitorView, type PipelineHealth, type StoreRecordView } from './lootPipelineHealth';
+import type { OfficerView } from './liveLootHealth';
 
 const STATUS_WORD = { ok: 'OK', warn: 'LOOK', fail: 'BROKEN', idle: 'waiting' } as const;
 
@@ -12,6 +13,10 @@ export interface DebugReportInput {
   feeds: LootRawFeeds | null;
   store: StoreRecordView[] | null;
   config: ConfigView | null;
+  /** Which side of the Monitor this report is about. Default: the test pipeline. */
+  view?: MonitorView;
+  /** Live view only: the officers' apps the proxy currently hears from. */
+  officers?: OfficerView[] | null;
 }
 
 /**
@@ -19,10 +24,11 @@ export interface DebugReportInput {
  * built to be pasted into a message. No secrets: no keys, no tokens, no Discord IDs, only names of things and
  * what was seen. Pure, so its shape is tested.
  */
-export function buildDebugReport({ appVersion, snapshot, health, feeds, store, config }: DebugReportInput): string {
+export function buildDebugReport({ appVersion, snapshot, health, feeds, store, config, view = 'test', officers = null }: DebugReportInput): string {
   const now = snapshot.now;
+  const live = view === 'live';
   const out: string[] = [];
-  out.push(`Guild Tools (Test) ${appVersion} -- loot logger report, ${new Date(now).toLocaleString()}`);
+  out.push(`Guild Tools (Test) ${appVersion} -- ${live ? 'LIVE loot pipeline report (real guild, read-only)' : 'loot logger report (test pipeline)'}, ${new Date(now).toLocaleString()}`);
   out.push(`Overall: ${STATUS_WORD[health.overall]}`);
   out.push('');
   out.push('== Checks ==');
@@ -35,19 +41,21 @@ export function buildDebugReport({ appVersion, snapshot, health, feeds, store, c
   out.push(`Combat log: ${snapshot.combatLog.exists ? (snapshot.combatLog.active ? 'writing' : 'not written in 5 min') : 'missing'}`);
   out.push(`Live capture this session: ${snapshot.session.capturedThisSession} win(s); last poll ${snapshot.session.lastPollAt ? ago(snapshot.session.lastPollAt, now) : 'never'} (${snapshot.session.lastStatus ?? 'n/a'})`);
   out.push(`Addon saved data: ${snapshot.addonData.wins} win(s), ${snapshot.addonData.losses} lost roll(s), ${snapshot.addonData.trades} trade(s) [${snapshot.addonData.status}]`);
-  if (config) out.push(`Settings: auto-post ${config.autoPostLoot ? 'on' : 'OFF'}; test loot channel ${config.testLootLogChannelId ? 'set' : 'NOT SET'}`);
+  if (config) out.push(`Settings: auto-post ${config.autoPostLoot ? 'on' : 'OFF'}; ${live ? 'loot' : 'test loot'} channel ${config.channelId ? 'set' : 'NOT SET'}`);
   if (store) {
     const placeholders = store.filter((r) => r.source === 'chat-tail' || r.source === 'live').length;
-    out.push(`Test store: ${store.length} record(s), ${placeholders} unconfirmed, ${store.filter((r) => r.discordPostedAt).length} posted`);
+    out.push(`${live ? 'Live store' : 'Test store'}: ${store.length} record(s), ${placeholders} unconfirmed, ${store.filter((r) => r.discordPostedAt).length} posted`);
   } else {
-    out.push('Test store: could not be read');
+    out.push(`${live ? 'Live store' : 'Test store'}: could not be read`);
   }
+  if (live) out.push(`Officer apps reporting: ${officers === null ? 'not checked' : officers.length === 0 ? 'none' : officers.map((o) => `${o.officerName} (chat log ${o.chatLogActive ? 'on' : 'quiet'})`).join(', ')}`);
   out.push('');
   out.push('== Boss kills seen (newest first) ==');
   out.push(...(snapshot.kills.length ? snapshot.kills.map((k) => `${clock(k.endedAt)}  ${k.boss} (${difficultyName(k.difficultyId)})`) : ['none']));
   out.push('');
   out.push('== Timeline (newest first, last 40) ==');
-  out.push(...(snapshot.events.length ? [...snapshot.events].reverse().slice(0, 40).map((e) => `${clock(e.at)}  [${e.kind}] ${e.text}`) : ['nothing yet']));
+  if (live) out.push("(not applicable in the Live view: this app's diary is about the test pipeline)");
+  else out.push(...(snapshot.events.length ? [...snapshot.events].reverse().slice(0, 40).map((e) => `${clock(e.at)}  [${e.kind}] ${e.text}`) : ['nothing yet']));
   out.push('');
   out.push('== Loot lines WoW wrote to the chat log (newest first) ==');
   if (!feeds?.lootLines.available) out.push('(chat log not readable)');

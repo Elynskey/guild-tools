@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { Crest } from '../../design-system/Crest';
 import { Icon } from '../../design-system/Icon';
 import { useTestMode } from '../../shared/useTestMode';
+import { DeveloperTag } from '../../testTools/DeveloperBanner';
 
 interface NavCardDef {
   to: string;
@@ -165,13 +166,17 @@ export function Landing({ displayName, signOut }: LandingProps) {
 
       {testCards.length > 0 && (
         <div style={{ width: '100%', maxWidth: 760, display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <div className="crd-eyebrow" style={{ color: 'var(--text-gold)' }}>
+          <div className="crd-eyebrow" style={{ color: 'var(--text-gold)', display: 'flex', alignItems: 'center', gap: 10 }}>
+            <DeveloperTag />
             Test tools · only in Guild Tools (Test)
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 20 }}>
             {testCards.map((card) => (
               <Link key={card.to} to={card.to} className="crd-card crd-card--interactive" style={{ display: 'block', padding: 24, textDecoration: 'none', border: '1px dashed var(--border-hairline)' }}>
-                <Icon name={card.icon} size={28} style={{ color: 'var(--gold-300)' }} />
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <Icon name={card.icon} size={28} style={{ color: 'var(--gold-300)' }} />
+                  <DeveloperTag />
+                </div>
                 <div style={{ marginTop: 14, fontFamily: 'var(--font-display)', fontSize: 'var(--text-title-l)', fontWeight: 600, letterSpacing: '.04em', color: 'var(--text-strong)' }}>{card.title}</div>
                 <div style={{ marginTop: 6, fontSize: 'var(--text-body-s)', lineHeight: 1.5, color: 'var(--text-muted)' }}>{card.description}</div>
               </Link>

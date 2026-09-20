@@ -1,12 +1,15 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Badge } from '../design-system/Badge';
 import { Button } from '../design-system/Button';
+import { Tabs } from '../design-system/Tabs';
 import { Crest } from '../design-system/Crest';
 import { HelpTooltip } from '../design-system/HelpTooltip';
 import { RefreshButton } from '../screens/shared/RefreshButton';
 import { itemLabel } from '../raid/lootLogic';
 import { ADDON_COMMANDS } from './addonCommands';
 import { useLootMonitor, type ActionState } from './useLootMonitor';
+import type { MonitorView } from './lootPipelineHealth';
 import { ago, difficultyName, type CheckGroup, type CheckStatus, type HealthCheck } from './lootPipelineHealth';
 
 const GROUPS: { id: CheckGroup; title: string; blurb: string }[] = [
@@ -63,8 +66,27 @@ function CheckRow({ check }: { check: HealthCheck }) {
   );
 }
 
+const VIEW_KEY = 'gt.lootMonitor.view';
+function loadView(): MonitorView {
+  try {
+    return window.localStorage.getItem(VIEW_KEY) === 'live' ? 'live' : 'test';
+  } catch {
+    return 'test';
+  }
+}
+
 export function LootMonitor() {
-  const m = useLootMonitor();
+  const [view, setViewState] = useState<MonitorView>(loadView);
+  const setView = (v: MonitorView) => {
+    setViewState(v);
+    try {
+      window.localStorage.setItem(VIEW_KEY, v);
+    } catch {
+      // remembering the choice is a convenience only
+    }
+  };
+  const m = useLootMonitor(view);
+  const live = view === 'live';
   const now = m.snapshot?.now ?? Date.now();
 
   return (
@@ -82,11 +104,31 @@ export function LootMonitor() {
             </div>
           </Link>
           <div style={{ flex: 1 }} />
+          <Tabs
+            aria-label="Which pipeline to watch"
+            tabs={[
+              { value: 'test', label: 'Test' },
+              { value: 'live', label: 'Live (read-only)' },
+            ]}
+            value={view}
+            onChange={(v) => setView(v as MonitorView)}
+          />
           <RefreshButton onRefresh={m.refresh} refreshing={false} />
         </div>
       </header>
 
       <div style={{ maxWidth: 1160, margin: '0 auto', padding: 32, display: 'flex', flexDirection: 'column', gap: 20 }}>
+        <div className="crd-card" style={{ padding: '12px 20px', fontSize: 'var(--text-body-s)', color: 'var(--text-body)', borderColor: live ? 'rgba(192,144,47,.55)' : undefined }}>
+          {live ? (
+            <>
+              <strong style={{ color: 'var(--text-gold)' }}>Live view: the real guild.</strong> Reads the real loot log, the real loot channel setting, the officers&apos; apps the proxy hears from, and this PC&apos;s real GuildToolsLoot addon. Read-only: nothing on this page writes to the real loot log or to Discord.
+            </>
+          ) : (
+            <>
+              <strong style={{ color: 'var(--text-gold)' }}>Test view.</strong> This build&apos;s own pipeline: the test addon, the test loot log, the test Discord channel. Switch to Live (read-only) to watch the real guild instead.
+            </>
+          )}
+        </div>
         {m.error && <div className="crd-card" style={{ padding: '16px 20px', color: 'var(--status-warning)' }}>{m.error}</div>}
         {!m.snapshot || !m.health ? (
           !m.error && <div style={{ padding: 48, textAlign: 'center', color: 'var(--text-muted)' }}>Reading the pipeline…</div>
@@ -98,7 +140,9 @@ export function LootMonitor() {
               </Badge>
               <span style={{ fontSize: 'var(--text-body-s)', color: 'var(--text-body)' }}>{OVERALL_TEXT[m.health.overall]}</span>
               <span style={{ marginLeft: 'auto', fontFamily: 'var(--font-mono)', fontSize: 'var(--text-micro)', color: 'var(--text-faint)' }}>
-                this session: {m.snapshot.kills.length} kill(s) · {m.snapshot.events.filter((e) => e.kind === 'chat-win').length} win(s) seen · store checked {m.storeCheckedAt ? ago(m.storeCheckedAt, now) : 'not yet'}
+                {live
+                  ? `${m.snapshot.kills.length} kill(s) seen on this PC · ${m.officers ? m.officers.length : '?'} officer app(s) open · store checked ${m.storeCheckedAt ? ago(m.storeCheckedAt, now) : 'not yet'}`
+                  : `this session: ${m.snapshot.kills.length} kill(s) · ${m.snapshot.events.filter((e) => e.kind === 'chat-win').length} win(s) seen · store checked ${m.storeCheckedAt ? ago(m.storeCheckedAt, now) : 'not yet'}`}
               </span>
             </div>
 
@@ -119,9 +163,10 @@ export function LootMonitor() {
 
             <div className="crd-card" style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div style={{ fontWeight: 600, color: 'var(--text-strong)' }}>
-                Test actions
-                <span style={{ marginLeft: 10, fontWeight: 400, fontSize: 'var(--text-micro)', color: 'var(--text-faint)' }}>all of these use the TEST store and the TEST Discord only</span>
+                {live ? 'Report' : 'Test actions'}
+                <span style={{ marginLeft: 10, fontWeight: 400, fontSize: 'var(--text-micro)', color: 'var(--text-faint)' }}>{live ? 'the Live view is read-only, so the fake-win and clear actions are only in the Test view' : 'all of these use the TEST store and the TEST Discord only'}</span>
               </div>
+              {!live && (
               <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap' }}>
                 <Button variant="primary" size="sm" disabled={m.synthetic.running} onClick={() => void m.sendSyntheticWin()}>
                   Send a fake win through the pipeline
@@ -131,6 +176,7 @@ export function LootMonitor() {
                   <ActionResult state={m.synthetic} />
                 </div>
               </div>
+              )}
               <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap' }}>
                 <Button variant="secondary" size="sm" onClick={() => void m.copyDebugReport()}>
                   Copy debug report
@@ -140,6 +186,7 @@ export function LootMonitor() {
                   <ActionResult state={m.copyState} />
                 </div>
               </div>
+              {!live && (
               <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap' }}>
                 <Button
                   variant="danger"
@@ -156,12 +203,13 @@ export function LootMonitor() {
                   <ActionResult state={m.clearState} />
                 </div>
               </div>
+              )}
             </div>
 
             <div className="crd-card" style={{ padding: 0, overflow: 'hidden' }}>
               <div style={{ padding: '12px 20px', fontWeight: 600, color: 'var(--text-strong)' }}>
-                Test addon commands
-                <span style={{ marginLeft: 10, fontWeight: 400, fontSize: 'var(--text-micro)', color: 'var(--text-faint)' }}>type these in WoW chat; /gtloottest help prints the same list in game</span>
+                {live ? 'Addon commands' : 'Test addon commands'}
+                <span style={{ marginLeft: 10, fontWeight: 400, fontSize: 'var(--text-micro)', color: 'var(--text-faint)' }}>type these in WoW chat; /gtloottest help prints the same list in game{live ? ' (these are for the test addon; the real addon has /gtloot)' : ''}</span>
               </div>
               {ADDON_COMMANDS.map((c) => (
                 <div key={c.command} style={{ display: 'grid', gridTemplateColumns: '210px 1fr 1fr', gap: 14, alignItems: 'baseline', padding: '8px 20px', borderTop: '1px solid var(--border-hairline)' }}>
@@ -219,7 +267,9 @@ export function LootMonitor() {
 
             <div className="crd-card" style={{ padding: 0, overflow: 'hidden' }}>
               <div style={{ padding: '12px 20px', fontWeight: 600, color: 'var(--text-strong)' }}>Timeline</div>
-              {m.snapshot.events.length === 0 ? (
+              {live ? (
+                <div style={{ padding: '14px 20px', borderTop: '1px solid var(--border-hairline)', color: 'var(--text-faint)', fontSize: 'var(--text-body-s)' }}>Not shown in the Live view: this app&apos;s own diary is about the test pipeline. The checks above are read from the real store and the officers&apos; apps.</div>
+              ) : m.snapshot.events.length === 0 ? (
                 <div style={{ padding: '14px 20px', borderTop: '1px solid var(--border-hairline)', color: 'var(--text-faint)', fontSize: 'var(--text-body-s)' }}>Nothing yet. Boss kills, Need wins and store pushes land here the moment they happen.</div>
               ) : (
                 [...m.snapshot.events].reverse().map((e) => (
@@ -239,7 +289,7 @@ export function LootMonitor() {
 
             <div className="crd-card" style={{ padding: 0, overflow: 'hidden' }}>
               <div style={{ padding: '12px 20px', fontWeight: 600, color: 'var(--text-strong)' }}>
-                What the test addon has saved
+                {live ? 'What this PC\'s real addon has saved' : 'What the test addon has saved'}
                 <span style={{ marginLeft: 10, fontWeight: 400, fontSize: 'var(--text-micro)', color: 'var(--text-faint)' }}>updates at /reload or logout</span>
               </div>
               {m.snapshot.addonData.recentWins.length === 0 ? (

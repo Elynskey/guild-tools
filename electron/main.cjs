@@ -32,7 +32,7 @@ const { listCraftRequests, addCraftRequest, fulfillCraftRequest, removeCraftRequ
 const { signIn: bnetSignIn } = require('./dataSources/bnetAuth.cjs');
 const { signIn: discordSignIn } = require('./dataSources/discordAuth.cjs');
 const { loadSession, saveSession, clearSession } = require('./dataSources/authSession.cjs');
-const { getWowPathConfig, setWowPath, installAddon, setCharacterName, getAddonVersionInfo, getLootRecords } = require('./dataSources/lootLog.cjs');
+const { getWowPathConfig, setWowPath, installAddon, setCharacterName, getAddonVersionInfo, getLootRecords, withAddonFlavor } = require('./dataSources/lootLog.cjs');
 const { getChatLogStatus } = require('./dataSources/lootChatTail.cjs');
 const { getCombatLogStatus, recentKills } = require('./dataSources/lootCombatLog.cjs');
 const pipelineLog = require('./dataSources/pipelineLog.cjs');
@@ -176,9 +176,25 @@ ipcMain.handle('testTools:clearTestLoot', async () => {
   }
 });
 
-// Loot Logger Monitor (test builds only): one read-only snapshot of every stage of the loot pipeline on this PC.
-ipcMain.handle('testTools:lootMonitor', async () => {
+// The REAL guild's shared loot store, read-only, for the Monitor's Live view. Never writes, and unlike getLootLog it does
+// not offer this PC's addon data to the store.
+ipcMain.handle('testTools:liveLootStore', async () => {
   if (!isTestModeBuild) return null;
+  if (!proxyClient.isAvailable()) return null;
+  const shared = await proxyClient.getSharedLootRecords('prod');
+  return { records: shared.records ?? [] };
+});
+
+// Loot Logger Monitor (test builds only): one read-only snapshot of every stage of the loot pipeline on this PC.
+// `which` 'live' reads the REAL addon's saved data and version; this app's own diary and session (which are about the
+// test pipeline) are left empty there.
+ipcMain.handle('testTools:lootMonitor', async (_event, which) => {
+  if (!isTestModeBuild) return null;
+  const live = which === 'live';
+  return live ? withAddonFlavor('real', () => buildMonitorSnapshot(true)) : buildMonitorSnapshot(false);
+});
+
+function buildMonitorSnapshot(live) {
   const now = Date.now();
   const addonData = getLootRecords();
   const winTimes = addonData.records.map((r) => r.time).filter((t) => Number.isFinite(t));
@@ -188,7 +204,7 @@ ipcMain.handle('testTools:lootMonitor', async () => {
     addon: getAddonVersionInfo(),
     chatLog: getChatLogStatus(),
     combatLog: getCombatLogStatus(),
-    session: { ...chatTailStatus },
+    session: live ? { lastPollAt: null, lastStatus: null, capturedThisSession: 0, lastCaptureAt: null } : { ...chatTailStatus },
     sessionStartedAt: appStartedAt,
     kills: recentKills(now, 6 * 60 * 60 * 1000).slice(0, 25),
     addonData: {
@@ -199,9 +215,9 @@ ipcMain.handle('testTools:lootMonitor', async () => {
       lastWinAt: winTimes.length ? Math.max(...winTimes) : null,
       recentWins: [...addonData.records].sort((a, b) => b.time - a.time).slice(0, 12).map((r) => ({ winner: r.winner, itemLink: r.itemLink, boss: r.boss ?? null, zone: r.zone ?? null, contentType: r.contentType ?? null, difficulty: r.difficulty ?? null, time: r.time })),
     },
-    events: pipelineLog.recent(150),
+    events: live ? [] : pipelineLog.recent(150),
   };
-});
+}
 
 ipcMain.handle('roster:fetch', async () => fetchRoster());
 ipcMain.handle('professions:getCached', async () => getCachedProfessions());

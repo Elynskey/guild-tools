@@ -24,7 +24,7 @@ const feeds: LootRawFeeds = {
   lootLines: { available: true, lines: [{ time: '9/20 19:28:35.055', kind: 'need-win', text: "Loot: Thundoor (Need - 88, Main-Spec) Won: Crown of the Eternal Fang" }, { time: '9/20 19:28:30.000', kind: 'personal-loot', text: 'Devkra receives loot: [Ring].' }] },
   pulls: { available: true, pulls: [{ boss: "Ula'tek", encounterId: 3492, difficultyId: 15, kill: true, at: NOW - 300_000 }, { boss: "Ula'tek", encounterId: 3492, difficultyId: 15, kill: false, at: NOW - 900_000 }] },
 };
-const config = { autoPostLoot: true, testLootLogChannelId: '1548097098921025617' };
+const config = { autoPostLoot: true, channelId: '1548097098921025617' };
 const store = [{ time: Math.floor((NOW - 100_000) / 1000), source: 'live' as const, boss: "Ula'tek", difficulty: 'Heroic' }];
 
 describe('buildDebugReport', () => {
@@ -57,7 +57,7 @@ describe('buildDebugReport', () => {
   });
 
   it('says plainly when the feeds or store could not be read, and when a setting is off', () => {
-    const bare = buildDebugReport({ appVersion: '1.1.6', snapshot, health, feeds: { lootLines: { available: false, lines: [] }, pulls: { available: false, pulls: [] } }, store: null, config: { autoPostLoot: false, testLootLogChannelId: '' } });
+    const bare = buildDebugReport({ appVersion: '1.1.6', snapshot, health, feeds: { lootLines: { available: false, lines: [] }, pulls: { available: false, pulls: [] } }, store: null, config: { autoPostLoot: false, channelId: '' } });
     expect(bare).toContain('(chat log not readable)');
     expect(bare).toContain('(no combat log)');
     expect(bare).toContain('Test store: could not be read');
@@ -66,9 +66,32 @@ describe('buildDebugReport', () => {
   });
 });
 
+describe('the Live view report', () => {
+  const health = evaluateLootPipeline(snapshot, store, null);
+  const live = buildDebugReport({ appVersion: '1.1.6', snapshot, health, feeds, store, config, view: 'live', officers: [{ officerName: 'Quixhea', chatLogActive: true }, { officerName: 'Odasa', chatLogActive: false }] });
+
+  it('says it is the live, read-only view and calls the store the live one', () => {
+    expect(live.split('\n')[0]).toContain('LIVE loot pipeline report (real guild, read-only)');
+    expect(live).toMatch(/Live store: 1 record\(s\)/);
+    expect(live).not.toContain('Test store');
+    expect(live).toContain('loot channel set');
+    expect(live).not.toContain('test loot channel');
+  });
+
+  it('lists the officer apps and does not pretend the test diary is the live timeline', () => {
+    expect(live).toContain('Officer apps reporting: Quixhea (chat log on), Odasa (chat log quiet)');
+    expect(live).toContain('not applicable in the Live view');
+    expect(live).not.toContain('[chat-win]');
+  });
+
+  it('still has no secrets', () => {
+    expect(live).not.toContain('1548097098921025617');
+  });
+});
+
 describe('the new server-side checks', () => {
   it('a missing store fails the proxy check; an unset test channel fails; auto-post off only warns', () => {
-    const h = evaluateLootPipeline(snapshot, null, null, { autoPostLoot: false, testLootLogChannelId: '' });
+    const h = evaluateLootPipeline(snapshot, null, null, { autoPostLoot: false, channelId: '' });
     const by = (id: string) => h.checks.find((c) => c.id === id)!;
     expect(by('proxy').status).toBe('fail');
     expect(by('test-channel').status).toBe('fail');
@@ -76,7 +99,7 @@ describe('the new server-side checks', () => {
     expect(h.overall).toBe('fail');
   });
   it('all set is green', () => {
-    const h = evaluateLootPipeline(snapshot, [], { reporting: true, chatLogActive: true }, { autoPostLoot: true, testLootLogChannelId: 'x' });
+    const h = evaluateLootPipeline(snapshot, [], { reporting: true, chatLogActive: true }, { autoPostLoot: true, channelId: 'x' });
     for (const id of ['proxy', 'test-channel', 'auto-post']) expect(h.checks.find((c) => c.id === id)!.status).toBe('ok');
   });
   it('without a config the two setting checks are simply absent', () => {

@@ -11,8 +11,25 @@ const { getProxyConfig } = require('./proxyConfig.cjs');
  * compares against that addon's version, so a test app and a test addon line up and the real
  * addon is never read or overwritten by test builds.
  */
+// The Loot Logger Monitor (test builds only) can look at the REAL addon's data too, read-only, to watch the live
+// pipeline from a test build. This flips which addon every read in this file means for the duration of one synchronous
+// call, and nothing else: it never writes, and it is always reset.
+let flavorOverride = null;
+
+/** Runs `fn` (which must be synchronous) with addonIdentity() answering for 'real' (GuildToolsLoot) or 'test' (GuildToolsLootTest). */
+function withAddonFlavor(flavor, fn) {
+  const previous = flavorOverride;
+  flavorOverride = flavor;
+  try {
+    return fn();
+  } finally {
+    flavorOverride = previous;
+  }
+}
+
 function addonIdentity() {
-  if (getProxyConfig().testMode) {
+  const useTestAddon = flavorOverride ? flavorOverride === 'test' : getProxyConfig().testMode;
+  if (useTestAddon) {
     const name = 'GuildToolsLootTest';
     // Packaged test build: shipped as an extra resource next to the app; in dev: the generated folder in the repo.
     const candidates = [process.resourcesPath && path.join(process.resourcesPath, 'addon-test', name), path.join(__dirname, '..', '..', 'addon-test', name)].filter(Boolean);
@@ -271,6 +288,7 @@ function getAddonVersionInfo(bundledTocOverride) {
 }
 
 module.exports = {
+  withAddonFlavor,
   getLootRecords,
   getWowPathConfig,
   setWowPath,

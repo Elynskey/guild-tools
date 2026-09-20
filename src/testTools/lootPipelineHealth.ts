@@ -35,10 +35,10 @@ export interface HeartbeatView {
   chatLogActive: boolean;
 }
 
-/** The officer-wide settings that decide whether posts can happen at all. */
+/** The officer-wide settings that decide whether posts can happen at all. `channelId` is the channel for the store being looked at (the test channel, or the real one in the Live view). */
 export interface ConfigView {
   autoPostLoot: boolean;
-  testLootLogChannelId: string;
+  channelId: string;
 }
 
 export interface PipelineHealth {
@@ -59,11 +59,45 @@ export function ago(ms: number, now: number): string {
   return `${Math.round(m / 60)}h ago`;
 }
 
-const WAIT_FOR_LOOT_MS = 3 * 60 * 1000; // rolls resolve within a minute or two of a kill
-const STALE_PLACEHOLDER_MS = 10 * 60 * 1000;
-const EXPECT_POSTED_MS = 2 * 60 * 1000;
-const RECENT_WINDOW_MS = 6 * 60 * 60 * 1000;
-const isPlaceholder = (r: StoreRecordView) => r.source === 'chat-tail' || r.source === 'live';
+export const WAIT_FOR_LOOT_MS = 3 * 60 * 1000; // rolls resolve within a minute or two of a kill
+export const STALE_PLACEHOLDER_MS = 10 * 60 * 1000;
+export const EXPECT_POSTED_MS = 2 * 60 * 1000;
+export const RECENT_WINDOW_MS = 6 * 60 * 60 * 1000;
+export const isPlaceholder = (r: StoreRecordView) => r.source === 'chat-tail' || r.source === 'live';
+
+export type MonitorView = 'test' | 'live';
+
+/**
+ * The Setup checks that are about THIS PC and do not care which store is being watched: WoW found, the character, the
+ * addon installed and current, the chat log and the combat log being written. `view` only changes the names and the
+ * in-game commands in the advice (the test addon is /gtloottest, the real one /gtloot).
+ */
+export function localSetupChecks(snap: LootMonitorSnapshot, view: MonitorView): HealthCheck[] {
+  const now = snap.now;
+  const checks: HealthCheck[] = [];
+  const add = (group: CheckGroup, id: string, label: string, status: CheckStatus, detail: string) => checks.push({ group, id, label, status, detail });
+  const command = view === 'live' ? '/gtloot' : '/gtloottest';
+  const addonName = view === 'live' ? 'Loot addon (GuildToolsLoot)' : 'Test addon';
+
+  add('Setup', 'wow', 'WoW folder found', snap.wow.valid ? 'ok' : 'fail', snap.wow.valid ? (snap.wow.resolved ?? '') : 'Guild Tools cannot find WoW, so nothing below can work. Set the folder on Loot History.');
+  add('Setup', 'character', 'Character detected', snap.wow.characterName ? 'ok' : 'warn', snap.wow.characterName ? `${snap.wow.characterName} (from ${snap.wow.characterSource ?? 'unknown'})` : 'Your own wins ("You") cannot be matched to a name yet.');
+  const addonDetail = `installed ${snap.addon.installed ?? 'none'}, this build carries ${snap.addon.bundled ?? '?'}`;
+  add('Setup', 'addon', `${addonName} installed and current`, snap.addon.status === 'current' ? 'ok' : snap.addon.status === 'outdated' ? 'warn' : 'fail', snap.addon.status === 'current' ? addonDetail : snap.addon.status === 'outdated' ? `${addonDetail}: ${view === 'live' ? 'update it from the normal Guild Tools app (Loot History), not from this Test app,' : 'press Update addon now on Loot History,'} then /reload.` : 'The addon is not installed (or WoW was not found).');
+
+  if (!snap.chatLog.exists) add('Setup', 'chatlog', 'Chat log is being written', 'fail', `No WoWChatLog.txt: chat logging has never been on for this install. In game: ${command} chatlog.`);
+  else if (snap.chatLog.active) add('Setup', 'chatlog', 'Chat log is being written', 'ok', `last line ${snap.chatLog.lastWriteAt ? ago(snap.chatLog.lastWriteAt, now) : 'recently'}`);
+  else add('Setup', 'chatlog', 'Chat log is being written', 'warn', `last line ${snap.chatLog.lastWriteAt ? ago(snap.chatLog.lastWriteAt, now) : 'a long time ago'}: a quiet stretch, or logging is off. Say something in chat, or use Verify chat logging on Loot History.`);
+
+  if (!snap.combatLog.exists) add('Setup', 'combatlog', 'Combat log is being written', 'warn', 'No combat log: boss kills cannot be seen, so wins cannot be attributed live (they still arrive after a /reload).');
+  else add('Setup', 'combatlog', 'Combat log is being written', snap.combatLog.active ? 'ok' : 'warn', snap.combatLog.active ? 'writing' : 'Not written in the last 5 minutes: start combat logging (/combatlog) or the Warcraft Logs / Archon logger.');
+
+  return checks;
+}
+
+export function overallOf(checks: HealthCheck[]): CheckStatus {
+  const statuses = checks.map((c) => c.status);
+  return statuses.includes('fail') ? 'fail' : statuses.includes('warn') ? 'warn' : statuses.includes('ok') ? 'ok' : 'idle';
+}
 
 export function evaluateLootPipeline(snap: LootMonitorSnapshot, store: StoreRecordView[] | null, heartbeat: HeartbeatView | null, config: ConfigView | null = null): PipelineHealth {
   const now = snap.now;
@@ -75,22 +109,12 @@ export function evaluateLootPipeline(snap: LootMonitorSnapshot, store: StoreReco
   const sessionStart = snap.sessionStartedAt;
 
   // ---- Setup ----
-  add('Setup', 'wow', 'WoW folder found', snap.wow.valid ? 'ok' : 'fail', snap.wow.valid ? (snap.wow.resolved ?? '') : 'Guild Tools cannot find WoW, so nothing below can work. Set the folder on Loot History.');
-  add('Setup', 'character', 'Character detected', snap.wow.characterName ? 'ok' : 'warn', snap.wow.characterName ? `${snap.wow.characterName} (from ${snap.wow.characterSource ?? 'unknown'})` : 'Your own wins ("You") cannot be matched to a name yet.');
-  const addonDetail = `installed ${snap.addon.installed ?? 'none'}, this build carries ${snap.addon.bundled ?? '?'}`;
-  add('Setup', 'addon', 'Test addon installed and current', snap.addon.status === 'current' ? 'ok' : snap.addon.status === 'outdated' ? 'warn' : 'fail', snap.addon.status === 'current' ? addonDetail : snap.addon.status === 'outdated' ? `${addonDetail}: press Update addon now on Loot History, then /reload.` : 'The addon is not installed (or WoW was not found).');
-
-  if (!snap.chatLog.exists) add('Setup', 'chatlog', 'Chat log is being written', 'fail', 'No WoWChatLog.txt: chat logging has never been on for this install. In game: /gtloottest chatlog.');
-  else if (snap.chatLog.active) add('Setup', 'chatlog', 'Chat log is being written', 'ok', `last line ${snap.chatLog.lastWriteAt ? ago(snap.chatLog.lastWriteAt, now) : 'recently'}`);
-  else add('Setup', 'chatlog', 'Chat log is being written', 'warn', `last line ${snap.chatLog.lastWriteAt ? ago(snap.chatLog.lastWriteAt, now) : 'a long time ago'}: a quiet stretch, or logging is off. Say something in chat, or use Verify chat logging on Loot History.`);
-
-  if (!snap.combatLog.exists) add('Setup', 'combatlog', 'Combat log is being written', 'warn', 'No combat log: boss kills cannot be seen, so wins cannot be attributed live (they still arrive after a /reload).');
-  else add('Setup', 'combatlog', 'Combat log is being written', snap.combatLog.active ? 'ok' : 'warn', snap.combatLog.active ? 'writing' : 'Not written in the last 5 minutes: start combat logging (/combatlog) or the Warcraft Logs / Archon logger.');
+  checks.push(...localSetupChecks(snap, 'test'));
 
   // The server side: can this PC reach the proxy, and is a test channel set for posts to land in?
   add('Setup', 'proxy', 'Loot store reachable (proxy)', store === null ? 'fail' : 'ok', store === null ? 'The proxy did not answer the loot store request: check the internet connection, or the proxy is down. Nothing can sync until it does.' : `${store.length} record(s) in the test store`);
   if (config) {
-    add('Setup', 'test-channel', 'Test loot channel is set', config.testLootLogChannelId ? 'ok' : 'fail', config.testLootLogChannelId ? 'posts from this build go to the test Discord channel' : 'No test loot channel is set, so a test build can never post. Settings, "Test loot log channel".');
+    add('Setup', 'test-channel', 'Test loot channel is set', config.channelId ? 'ok' : 'fail', config.channelId ? 'posts from this build go to the test Discord channel' : 'No test loot channel is set, so a test build can never post. Settings, "Test loot log channel".');
     add('Setup', 'auto-post', 'Auto-post is on', config.autoPostLoot ? 'ok' : 'warn', config.autoPostLoot ? 'confirmed wins post on their own' : 'Auto-post is off, so confirmed wins will not post (the Post to Discord button on Loot History still works). Turn it on in Settings.');
   }
 
@@ -151,7 +175,5 @@ export function evaluateLootPipeline(snap: LootMonitorSnapshot, store: StoreReco
   else if (!heartbeat.reporting) add('Output', 'heartbeat', 'Proxy sees this PC reporting in', 'warn', 'The proxy has not heard from this app in the last 30 seconds.');
   else add('Output', 'heartbeat', 'Proxy sees this PC reporting in', heartbeat.chatLogActive ? 'ok' : 'warn', heartbeat.chatLogActive ? 'reporting, chat log active' : 'reporting, but its chat log reads as quiet');
 
-  const statuses = checks.map((c) => c.status);
-  const overall: CheckStatus = statuses.includes('fail') ? 'fail' : statuses.includes('warn') ? 'warn' : statuses.includes('ok') ? 'ok' : 'idle';
-  return { checks, overall };
+  return { checks, overall: overallOf(checks) };
 }

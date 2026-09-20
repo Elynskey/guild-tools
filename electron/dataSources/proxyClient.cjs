@@ -234,8 +234,9 @@ async function saveSettings(settings) {
   return proxyFetchJson('/settings', { method: 'PUT', body: JSON.stringify(settings) });
 }
 
-async function getSharedLootRecords() {
-  return proxyFetchJson('/loot-records');
+// `mode` overrides which side's store to read (a test build's Loot Logger Monitor looking at the real guild's, read-only); the default is this build's own.
+async function getSharedLootRecords(mode) {
+  return proxyFetchJson('/loot-records', mode ? { headers: { 'X-Guild-Tools-Mode': mode } } : undefined);
 }
 
 async function syncLootRecords(records, trades, needLosses) {
