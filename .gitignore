@@ -9,3 +9,4 @@ electron/dataSources/proxyConfig.generated.cjs
 *.log
 .claude/
 *.tsbuildinfo
+addon-test/
