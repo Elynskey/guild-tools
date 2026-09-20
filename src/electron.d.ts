@@ -249,6 +249,39 @@ export interface AnalyticsEvent {
   at: string;
 }
 
+/** One entry in the loot pipeline's in-memory diary (electron/dataSources/pipelineLog.cjs). */
+export interface PipelineEvent {
+  id: number;
+  at: number; // ms since epoch
+  kind: 'boss-kill' | 'chat-win' | 'enrich' | 'store-sync' | 'addon-sync';
+  text: string;
+  meta: Record<string, unknown> | null;
+}
+
+/** Everything the test-only Loot Logger Monitor reads from this PC in one go (main.cjs's testTools:lootMonitor). Null outside a test build. */
+export interface LootMonitorSnapshot {
+  now: number;
+  wow: WowPathConfig;
+  addon: AddonVersionInfo;
+  chatLog: { path: string | null; exists: boolean; active: boolean; lastWriteAt: number | null; sizeBytes: number | null };
+  combatLog: { exists: boolean; active: boolean; lastKill: { boss: string; difficultyId: number; endedAt: number } | null };
+  session: { lastPollAt: number | null; lastStatus: string | null; capturedThisSession: number; lastCaptureAt: number | null };
+  sessionStartedAt: number;
+  /** Newest first. */
+  kills: { boss: string; difficultyId: number; endedAt: number }[];
+  addonData: {
+    status: string;
+    wins: number;
+    losses: number;
+    trades: number;
+    /** unix seconds */
+    lastWinAt: number | null;
+    recentWins: { winner: string; itemLink: string; boss: string | null; zone: string | null; contentType: string | null; difficulty: string | null; time: number }[];
+  };
+  /** Oldest first. */
+  events: PipelineEvent[];
+}
+
 export interface ElectronAPI {
   /** True only in a "Guild Tools (Test)" build -- Raid Signups/GOTM tag every request as test-mode when this is true. Everything else in the app is unaffected. */
   isTestMode: () => Promise<boolean>;
@@ -257,7 +290,10 @@ export interface ElectronAPI {
   /** Logs one usage event (a screen visit or a key officer action) -- fire-and-forget, never throws in a way the caller needs to handle. `screen` and `meta` are optional context; `displayName`/`appVersion`/`mode` are filled in server-side, never passed from here. */
   trackEvent: (event: string, screen?: string | null, meta?: Record<string, unknown> | null) => Promise<{ ok: true }>;
   /** Raw, already-trimmed usage log for the Analytics screen -- scoped to this build's own mode (a test-mode build only ever sees test-mode events, same isolation as Raid Signups/GOTM). */
-  listAnalyticsEvents: () => Promise<AnalyticsEvent[]>;
+  /** Test builds only (a normal install gets an empty list). `which` picks whose events: 'prod' (default) is how officers actually use the real app, 'test' is test builds. */
+  listAnalyticsEvents: (which?: 'prod' | 'test') => Promise<AnalyticsEvent[]>;
+  /** Test builds only: a read-only snapshot of every stage of the loot pipeline on this PC; null in a normal install. */
+  getLootMonitorSnapshot: () => Promise<LootMonitorSnapshot | null>;
   getRoster: () => Promise<LiveRosterResult | null>;
   getProfessions: () => Promise<LiveProfessionsResult | null>;
   getCachedProfessions: () => Promise<LiveProfessionsResult | null>;

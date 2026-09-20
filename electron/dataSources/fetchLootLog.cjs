@@ -5,6 +5,11 @@ const { enrichWin } = require('./lootLiveEnrich.cjs');
 const { fetchBossLootTable } = require('./fetchBossLootTable.cjs');
 const proxyClient = require('./proxyClient.cjs');
 const lootRecordsStore = require('./lootRecordsStore.cjs');
+const pipelineLog = require('./pipelineLog.cjs');
+
+// What this PC's addon data looked like the last time it was offered to the shared store, so the
+// diary notes a CHANGE (a /reload flushed new wins) rather than repeating itself every sync.
+let lastAddonCounts = null;
 
 // Local capture (this PC's addon, if any) always happens first, then -- when the
 // proxy is configured -- gets pushed up to the shared store (a harmless no-op if
@@ -19,6 +24,11 @@ async function fetchLootLog() {
   try {
     if (local.records.length > 0 || local.trades.length > 0 || local.needLosses.length > 0) {
       await proxyClient.syncLootRecords(local.records, local.trades, local.needLosses);
+      const counts = `${local.records.length}/${local.trades.length}/${local.needLosses.length}`;
+      if (counts !== lastAddonCounts) {
+        lastAddonCounts = counts;
+        pipelineLog.record('addon-sync', `Addon data offered to the store: ${local.records.length} win(s), ${local.needLosses.length} lost roll(s), ${local.trades.length} trade(s)`, { records: local.records.length, needLosses: local.needLosses.length, trades: local.trades.length });
+      }
     }
     const shared = await proxyClient.getSharedLootRecords();
     const status = shared.records.length > 0 || shared.trades.length > 0 || local.status === 'ok' ? 'ok' : local.status;
@@ -75,12 +85,21 @@ async function syncChatTailCapture() {
   const kills = recentKills(Date.now());
   const filtered = newRecords.map((r) => enrichWin(r, { lootTable, kills }));
   if (filtered.length === 0) return { status, added: 0 };
+  for (const r of filtered) {
+    const attributed = r.source === 'live' && r.boss != null;
+    pipelineLog.record(
+      'enrich',
+      attributed ? `Attributed live: ${r.winner} -> ${r.boss}${r.difficulty ? ` (${r.difficulty})` : ''}` : `Left unattributed: ${r.winner}'s win (no boss/difficulty could be worked out yet)`,
+      { winner: r.winner, attributed, boss: r.boss ?? null, difficulty: r.difficulty ?? null },
+    );
+  }
 
   if (proxyClient.isAvailable()) {
     await proxyClient.syncLootRecords(filtered, [], []);
   } else {
     lootRecordsStore.sync(filtered, [], []);
   }
+  pipelineLog.record('store-sync', `Pushed ${filtered.length} live win(s) to the loot store`, { count: filtered.length });
   return { status, added: filtered.length };
 }
 

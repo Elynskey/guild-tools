@@ -36,7 +36,8 @@ export interface OfficerRow {
   lastSeen: string;
 }
 
-export function useAnalytics() {
+/** `which`: 'prod' = how officers use the real app (the point of analytics); 'test' = activity in test builds. */
+export function useAnalytics(which: 'prod' | 'test' = 'prod') {
   const available = !!window.electronAPI;
   const [events, setEvents] = useState<AnalyticsEvent[]>([]);
   const [loading, setLoading] = useState(available);
@@ -47,11 +48,11 @@ export function useAnalytics() {
     setLoading(true);
     setError(null);
     window.electronAPI!
-      .listAnalyticsEvents()
+      .listAnalyticsEvents(which)
       .then(setEvents)
       .catch((err: Error) => setError(err.message || 'Could not load analytics.'))
       .finally(() => setLoading(false));
-  }, [available]);
+  }, [available, which]);
 
   useEffect(() => {
     refresh();

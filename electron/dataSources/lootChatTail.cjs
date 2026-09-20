@@ -1,6 +1,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { resolveDataDir } = require('./dataDir.cjs');
+const pipelineLog = require('./pipelineLog.cjs');
 const { resolveWowPath, isRealWowPath, getCharacterName } = require('./lootLog.cjs');
 
 // Second, independent capture path alongside the addon's SavedVariables read (see
@@ -158,7 +159,10 @@ function pollChatLog() {
     if (buffer[i] !== NEWLINE) continue;
     const line = buffer.subarray(lineStart, i).toString('utf8').replace(/\r$/, '');
     const record = parseLine(line);
-    if (record) newRecords.push(record);
+    if (record) {
+      newRecords.push(record);
+      pipelineLog.record('chat-win', `${record.winner} won ${record.itemLink.replace(/^\[|\]$/g, '')} (Need)`, { winner: record.winner, itemLink: record.itemLink, selfWin: !!record.selfWin });
+    }
     lineStart = i + 1;
     consumedBytes = lineStart;
   }

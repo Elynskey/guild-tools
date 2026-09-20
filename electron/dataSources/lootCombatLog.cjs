@@ -1,5 +1,6 @@
 const fs = require('node:fs');
 const path = require('node:path');
+const pipelineLog = require('./pipelineLog.cjs');
 const { resolveWowPath, isRealWowPath } = require('./lootLog.cjs');
 
 // Tails WoW's combat log (Logs/WoWCombatLog-*.txt) for boss KILLS, so a Need win seen in
@@ -80,6 +81,7 @@ function remember(newKills) {
   for (const k of newKills) {
     if (kills.some((x) => x.endedAt === k.endedAt && x.encounterId === k.encounterId)) continue;
     kills.push(k);
+    pipelineLog.record('boss-kill', `Boss killed: ${k.boss}`, { boss: k.boss, difficultyId: k.difficultyId, endedAt: k.endedAt });
   }
   kills.sort((a, b) => a.endedAt - b.endedAt);
   if (kills.length > MAX_KILLS_KEPT) kills = kills.slice(-MAX_KILLS_KEPT);

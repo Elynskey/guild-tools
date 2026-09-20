@@ -12,7 +12,7 @@ async function trackAnalyticsEvent(payload, mode) {
 }
 
 async function listAnalyticsEvents(mode) {
-  if (proxyClient.isAvailable()) return proxyClient.listAnalyticsEvents();
+  if (proxyClient.isAvailable()) return proxyClient.listAnalyticsEvents(mode);
   return store.list(mode);
 }
 

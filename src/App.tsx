@@ -11,6 +11,8 @@ import { Settings } from './screens/Settings/Settings';
 import { RaidSignups } from './screens/RaidSignups/RaidSignups';
 import { GuildieOfTheMonth } from './screens/GuildieOfTheMonth/GuildieOfTheMonth';
 import { Analytics } from './screens/Analytics/Analytics';
+import { LootMonitor } from './testTools/LootMonitor';
+import { TestOnly } from './testTools/TestOnly';
 import { UpdateBanner } from './shared/UpdateBanner';
 import { VersionTag } from './shared/VersionTag';
 import { TestModeBanner } from './shared/TestModeBanner';
@@ -60,7 +62,8 @@ export function App() {
         <Route path="/settings" element={<Settings />} />
         <Route path="/raid-signups" element={<RaidSignups />} />
         <Route path="/gotm" element={<GuildieOfTheMonth />} />
-        <Route path="/analytics" element={<Analytics />} />
+        <Route path="/analytics" element={<TestOnly><Analytics /></TestOnly>} />
+        <Route path="/test-tools/loot-monitor" element={<TestOnly><LootMonitor /></TestOnly>} />
       </Routes>
     </HashRouter>
   );

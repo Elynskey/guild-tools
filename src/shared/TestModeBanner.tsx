@@ -37,7 +37,7 @@ export function TestModeBanner() {
         userSelect: 'none',
       }}
     >
-      Test Mode -- Raid Signups &amp; Guildie of the Month post to a staging server, not the real guild
+      Test Mode -- Raid Signups, Guildie of the Month and Loot are separate from the real guild (staging server, own test loot log)
     </div>
   );
 }

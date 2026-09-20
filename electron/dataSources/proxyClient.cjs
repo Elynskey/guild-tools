@@ -262,8 +262,9 @@ async function trackAnalyticsEvent(payload) {
   return proxyFetchJson('/analytics', { method: 'POST', body: JSON.stringify(payload) });
 }
 
-async function listAnalyticsEvents() {
-  return proxyFetchJson('/analytics');
+// `mode` overrides which side's events to read (a test build looking at real officer usage); the default is this build's own.
+async function listAnalyticsEvents(mode) {
+  return proxyFetchJson('/analytics', mode ? { headers: { 'X-Guild-Tools-Mode': mode } } : undefined);
 }
 
 module.exports = {

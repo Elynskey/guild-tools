@@ -28,7 +28,8 @@ function BarRow({ row, max }: { row: CountRow; max: number }) {
 }
 
 export function Analytics() {
-  const a = useAnalytics();
+  const [which, setWhich] = useState<'prod' | 'test'>('prod');
+  const a = useAnalytics(which);
   const [eventFilter, setEventFilter] = useState('all');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
@@ -65,6 +66,16 @@ export function Analytics() {
             </div>
           </Link>
           <div style={{ flex: 1 }} />
+          <Select
+            label="Showing"
+            value={which}
+            onChange={(e) => setWhich(e.target.value as 'prod' | 'test')}
+            options={[
+              { value: 'prod', label: 'Officers using the real app' },
+              { value: 'test', label: 'Test builds only' },
+            ]}
+            style={{ minWidth: 230 }}
+          />
           <RefreshButton onRefresh={a.refresh} refreshing={a.loading} />
         </div>
       </header>

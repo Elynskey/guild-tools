@@ -1,12 +1,15 @@
 import { Link } from 'react-router-dom';
 import { Crest } from '../../design-system/Crest';
 import { Icon } from '../../design-system/Icon';
+import { useTestMode } from '../../shared/useTestMode';
 
 interface NavCardDef {
   to: string;
   icon: string;
   title: string;
   description: string;
+  /** Only shown in the Guild Tools (Test) build. */
+  testOnly?: boolean;
 }
 
 const CARDS: NavCardDef[] = [
@@ -63,6 +66,14 @@ const CARDS: NavCardDef[] = [
     icon: 'activity',
     title: 'Analytics',
     description: 'Every screen visit and key action, filterable and timestamped -- plus which app version each officer is currently running.',
+    testOnly: true,
+  },
+  {
+    to: '/test-tools/loot-monitor',
+    icon: 'radar',
+    title: 'Loot Logger Monitor',
+    description: 'Watches the whole loot pipeline while you play: boss killed, loot rolled, win logged, saved, stored, posted -- and which hand-off broke if one did.',
+    testOnly: true,
   },
   {
     to: '/settings',
@@ -78,6 +89,9 @@ interface LandingProps {
 }
 
 export function Landing({ displayName, signOut }: LandingProps) {
+  const testMode = useTestMode();
+  const cards = CARDS.filter((c) => !c.testOnly);
+  const testCards = testMode ? CARDS.filter((c) => c.testOnly) : [];
   return (
     <div
       style={{
@@ -124,7 +138,7 @@ export function Landing({ displayName, signOut }: LandingProps) {
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 20, width: '100%', maxWidth: 760 }}>
-        {CARDS.map((card) => (
+        {cards.map((card) => (
           <Link
             key={card.to}
             to={card.to}
@@ -148,6 +162,23 @@ export function Landing({ displayName, signOut }: LandingProps) {
           </Link>
         ))}
       </div>
+
+      {testCards.length > 0 && (
+        <div style={{ width: '100%', maxWidth: 760, display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div className="crd-eyebrow" style={{ color: 'var(--text-gold)' }}>
+            Test tools · only in Guild Tools (Test)
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 20 }}>
+            {testCards.map((card) => (
+              <Link key={card.to} to={card.to} className="crd-card crd-card--interactive" style={{ display: 'block', padding: 24, textDecoration: 'none', border: '1px dashed var(--border-hairline)' }}>
+                <Icon name={card.icon} size={28} style={{ color: 'var(--gold-300)' }} />
+                <div style={{ marginTop: 14, fontFamily: 'var(--font-display)', fontSize: 'var(--text-title-l)', fontWeight: 600, letterSpacing: '.04em', color: 'var(--text-strong)' }}>{card.title}</div>
+                <div style={{ marginTop: 6, fontSize: 'var(--text-body-s)', lineHeight: 1.5, color: 'var(--text-muted)' }}>{card.description}</div>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

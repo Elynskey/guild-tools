@@ -32,14 +32,16 @@ const { listCraftRequests, addCraftRequest, fulfillCraftRequest, removeCraftRequ
 const { signIn: bnetSignIn } = require('./dataSources/bnetAuth.cjs');
 const { signIn: discordSignIn } = require('./dataSources/discordAuth.cjs');
 const { loadSession, saveSession, clearSession } = require('./dataSources/authSession.cjs');
-const { getWowPathConfig, setWowPath, installAddon, setCharacterName, getAddonVersionInfo } = require('./dataSources/lootLog.cjs');
+const { getWowPathConfig, setWowPath, installAddon, setCharacterName, getAddonVersionInfo, getLootRecords } = require('./dataSources/lootLog.cjs');
 const { getChatLogStatus } = require('./dataSources/lootChatTail.cjs');
-const { getCombatLogStatus } = require('./dataSources/lootCombatLog.cjs');
+const { getCombatLogStatus, recentKills } = require('./dataSources/lootCombatLog.cjs');
+const pipelineLog = require('./dataSources/pipelineLog.cjs');
 const { fetchLootLog, addManualLootRecord, updateLootRecord, removeLootRecord, removeLootTrade, deleteLootNight, syncChatTailCapture } = require('./dataSources/fetchLootLog.cjs');
 
 // In-memory only (not persisted) -- this session's record of whether live loot capture
 // is actually running, for Loot History's status card. Reset to zeros on every app
 // launch, which is exactly what "this session" should mean here.
+const appStartedAt = Date.now();
 const chatTailStatus = { lastPollAt: null, lastStatus: null, capturedThisSession: 0, lastCaptureAt: null };
 const { getItemIconUrls } = require('./dataSources/fetchItemIcons.cjs');
 const { fetchBossLootTable } = require('./dataSources/fetchBossLootTable.cjs');
@@ -107,7 +109,39 @@ ipcMain.handle('analytics:track', async (_event, event, screen, meta) => {
   track(event, screen, meta);
   return { ok: true };
 });
-ipcMain.handle('analytics:list', async () => listAnalyticsEvents(isTestModeBuild ? 'test' : 'prod'));
+// Analytics is a TEST-BUILD tool now: a normal install can't list anything. From a test build, `which` picks
+// what to look at -- 'prod' (default: how officers are actually using the real app) or 'test' (test builds).
+ipcMain.handle('analytics:list', async (_event, which) => {
+  if (!isTestModeBuild) return [];
+  return listAnalyticsEvents(which === 'test' ? 'test' : 'prod');
+});
+
+// Loot Logger Monitor (test builds only): one read-only snapshot of every stage of the loot pipeline on this PC.
+ipcMain.handle('testTools:lootMonitor', async () => {
+  if (!isTestModeBuild) return null;
+  const now = Date.now();
+  const addonData = getLootRecords();
+  const winTimes = addonData.records.map((r) => r.time).filter((t) => Number.isFinite(t));
+  return {
+    now,
+    wow: getWowPathConfig(),
+    addon: getAddonVersionInfo(),
+    chatLog: getChatLogStatus(),
+    combatLog: getCombatLogStatus(),
+    session: { ...chatTailStatus },
+    sessionStartedAt: appStartedAt,
+    kills: recentKills(now, 6 * 60 * 60 * 1000).slice(0, 25),
+    addonData: {
+      status: addonData.status,
+      wins: addonData.records.length,
+      losses: addonData.needLosses.length,
+      trades: addonData.trades.length,
+      lastWinAt: winTimes.length ? Math.max(...winTimes) : null,
+      recentWins: [...addonData.records].sort((a, b) => b.time - a.time).slice(0, 12).map((r) => ({ winner: r.winner, itemLink: r.itemLink, boss: r.boss ?? null, zone: r.zone ?? null, contentType: r.contentType ?? null, difficulty: r.difficulty ?? null, time: r.time })),
+    },
+    events: pipelineLog.recent(150),
+  };
+});
 
 ipcMain.handle('roster:fetch', async () => fetchRoster());
 ipcMain.handle('professions:getCached', async () => getCachedProfessions());
