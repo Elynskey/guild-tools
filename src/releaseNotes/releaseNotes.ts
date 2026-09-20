@@ -25,17 +25,22 @@ export const RELEASE_NOTES: ReleaseNote[] = [
   {
     version: '1.1.4',
     date: '2026-09-19',
-    title: 'Season Loot Report is just your raiders',
+    title: 'Season loot is just your raiders, and chat logging you can verify',
     highlights: [
       {
         heading: 'One-night guests are hidden',
         body: 'People who were in a raid group but are not on the roster or in the guild, and only showed up on a single night (pugs and visitors), no longer fill the Season Loot Report. A switch above the table shows them again, tagged Guest.',
       },
       {
+        heading: 'Verify chat logging, and restart it if it is not writing',
+        body: 'Loot History has a Verify chat logging button: say something in chat and it confirms the game is really writing your chat log. If the game says logging is ON but nothing is written, /gtloot chatlog restarts it. The status card also shows when the last chat line was written instead of just "off".',
+      },
+      {
         heading: 'Real raiders stay',
         body: 'Everyone on the roster, every guild character, and anyone who raided with the team on two or more nights stays in the report, even if they have since left or gone inactive.',
       },
     ],
+    headsUp: 'On Loot History, press "Update addon now" and type /reload in game to get addon v1.6 (it adds /gtloot chatlog).',
   },
   {
     version: '1.1.3',

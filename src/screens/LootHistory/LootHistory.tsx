@@ -212,6 +212,29 @@ function AutoPostRow({ lh }: { lh: ReturnType<typeof useLootHistory> }) {
   );
 }
 
+/** Proves chat logging is actually writing: the game can say ON while nothing reaches the log file, so this watches for a new line while you say something in chat. */
+function VerifyRow({ lh }: { lh: ReturnType<typeof useLootHistory> }) {
+  const v = lh.verify;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <Button size="sm" variant="secondary" onClick={() => void lh.startVerify()} disabled={v.phase === 'waiting'} iconLeft="check">
+          {v.phase === 'waiting' ? `Watching… ${v.secondsLeft}s` : 'Verify chat logging'}
+        </Button>
+        <HelpTooltip text="The game can say chat logging is ON while nothing is actually being written, and a quiet stretch looks the same as off. This watches your chat log for about 30 seconds -- say anything in chat (party, raid, guild) and it should confirm the moment a line is written." />
+        {v.phase === 'waiting' && <span style={{ fontSize: 'var(--text-body-s)', color: 'var(--text-body)' }}>Say something in chat now, in game (guild, party or raid all work).</span>}
+        {v.phase === 'verified' && <Badge tone="success">Verified: chat logging is writing</Badge>}
+        {v.phase === 'failed' && <Badge tone="warning">Nothing was written</Badge>}
+      </div>
+      {v.phase === 'failed' && (
+        <div style={{ fontSize: 'var(--text-micro)', color: 'var(--status-warning)', lineHeight: 1.5 }}>
+          Nothing reached the chat log in 30 seconds. If the game says logging is ON, it may not really be writing. In game, type <b>/gtloot chatlog</b> (or /chatlog twice: off, then on), then press Verify again. If it still fails, check that WoW is running on this PC and that its folder is the right one below.
+        </div>
+      )}
+    </div>
+  );
+}
+
 function LiveCaptureCard({ lh }: { lh: ReturnType<typeof useLootHistory> }) {
   const chatLog = lh.chatTailStatus?.chatLog;
   const nameSet = !!lh.wowPath?.characterName;
@@ -224,7 +247,7 @@ function LiveCaptureCard({ lh }: { lh: ReturnType<typeof useLootHistory> }) {
       statusText = "Can't find your WoW chat log yet -- type /chatlog in game (it works right away, no logout needed). The addon also turns it on for you at login.";
     } else if (!chatLog.active) {
       statusTone = 'warning';
-      statusText = 'Chat log found, but nothing written to it recently -- is WoW open and running on this PC?';
+      statusText = `Chat log found, but its last line was ${timeAgo(chatLog.lastWriteAt)}. That can be a quiet stretch or logging being off -- press Verify below to find out.`;
     } else if (!nameSet) {
       statusTone = 'warning';
       statusText = "Watching your chat log, but I can't tell which character you play yet -- set it below so your own wins are captured live.";
@@ -257,6 +280,7 @@ function LiveCaptureCard({ lh }: { lh: ReturnType<typeof useLootHistory> }) {
           </span>
         )}
       </div>
+      <VerifyRow lh={lh} />
       <RaidCoverageRow heartbeats={lh.captureHeartbeats} />
       <CharacterRow lh={lh} />
     </div>
@@ -340,6 +364,9 @@ export function LootHistory() {
             </div>
             <div>
               <code>/gtloot scan</code> -- pull in any wins Loot History caught but the addon missed live
+            </div>
+            <div>
+              <code>/gtloot chatlog</code> -- restart chat logging (off, then on) when the game says it's ON but Guild Tools says nothing is being written. Then press Verify chat logging above.
             </div>
             <div>
               <code>/chatlog</code> -- turns on live updates to this app. Works right away (no logout), but it switches itself off every time you log out to the character screen, so the addon now turns it back on at login and on <code>/gtloot on</code>. The Refresh button on the <code>/gtloot</code> popup re-checks it.

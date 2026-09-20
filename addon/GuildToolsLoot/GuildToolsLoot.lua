@@ -601,6 +601,41 @@ ensureChatLogging = function(explicit)
   end)
 end
 
+-- /gtloot chatlog: an explicit "restart chat logging" for when the game reads ON but
+-- Guild Tools says nothing is being written (seen live 2026-09-19: several officers had
+-- it ON in game while their apps reported no writes). Cycles it off, then on, which is what
+-- typing /chatlog twice does, and only ever runs because an officer asked for it. Uses the
+-- LoggingChat setter when this client has it, otherwise the /chatlog toggle guarded by the
+-- current reading so it can never flip the wrong way. Whether the file is really being
+-- written can't be checked from in-game Lua; the app's "Verify chat logging" button does that.
+local function restartChatLogging()
+  if not isChatLoggingAPI() then
+    announce("can't read chat logging on this client -- type /chatlog twice yourself (off, then on).")
+    return
+  end
+  local function setLogging(on)
+    if C_ChatInfo.IsLoggingChat() == on then return end
+    if LoggingChat then
+      LoggingChat(on)
+    elseif SlashCmdList and SlashCmdList["CHATLOG"] then
+      SlashCmdList["CHATLOG"]("")
+    end
+  end
+  announce("restarting chat logging…")
+  setLogging(false)
+  C_Timer.After(0.6, function()
+    setLogging(true)
+    C_Timer.After(0.6, function()
+      if C_ChatInfo.IsLoggingChat() then
+        chatLoggingSeenOnThisSession = true
+        announce("chat logging restarted and ON. In Guild Tools, press \"Verify chat logging\" to confirm it is really writing.")
+      else
+        announce("chat logging still reads OFF -- type /chatlog yourself.")
+      end
+    end)
+  end)
+end
+
 -- chatLoggingResult is true/false/nil, already resolved by sampleChatLogging above --
 -- kept as a plain parameter (not re-sampled in here) so this stays synchronous and
 -- StaticPopup_Show can be called directly from the sampleChatLogging callback.
@@ -617,7 +652,7 @@ local function buildStatusText(chatLoggingResult)
     chatLogging = "|cffa83232Chat logging is OFF|r -- type /chatlog (works right away, no logout needed). It resets whenever you log out to the character screen."
   end
   -- The check time is there so a Refresh visibly did something even when nothing changed.
-  return logging .. "\n" .. chatLogging .. "\n\n/gtloot on|off to change -- /gtloot scan to pull in anything missed\n|cff8a8a8aChecked " .. date("%H:%M:%S") .. "|r"
+  return logging .. "\n" .. chatLogging .. "\n\n/gtloot on|off to change -- /gtloot scan to pull in anything missed\n/gtloot chatlog if Guild Tools says nothing is being written\n|cff8a8a8aChecked " .. date("%H:%M:%S") .. "|r"
 end
 
 local function showStatusPopup()
@@ -805,6 +840,8 @@ SlashCmdList["GUILDTOOLSLOOT"] = function(msg)
     GuildToolsLootDB.enabled = true
     announce("logging Need wins.")
     ensureChatLogging(true)
+  elseif arg == "chatlog" then
+    restartChatLogging()
   elseif arg == "off" then
     GuildToolsLootDB.enabled = false
     announce("NOT logging -- use this for old-content or off-progression runs. /gtloot on to resume.")

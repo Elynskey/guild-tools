@@ -183,12 +183,15 @@ const ACTIVE_WINDOW_MS = 5 * 60 * 1000;
 
 function getChatLogStatus() {
   const p = chatLogPath();
-  if (!p) return { path: null, exists: false, active: false };
+  if (!p) return { path: null, exists: false, active: false, lastWriteAt: null, sizeBytes: null };
   try {
     const stats = fs.statSync(p);
-    return { path: p, exists: true, active: Date.now() - stats.mtimeMs < ACTIVE_WINDOW_MS };
+    // lastWriteAt/sizeBytes let the app run a "verify it's logging" check: the game can report
+    // chat logging ON while nothing reaches the file, and a quiet stretch (no chat for 5+
+    // minutes) looks identical to that from `active` alone. Only an actual new write proves it.
+    return { path: p, exists: true, active: Date.now() - stats.mtimeMs < ACTIVE_WINDOW_MS, lastWriteAt: stats.mtimeMs, sizeBytes: stats.size };
   } catch {
-    return { path: p, exists: false, active: false };
+    return { path: p, exists: false, active: false, lastWriteAt: null, sizeBytes: null };
   }
 }
 

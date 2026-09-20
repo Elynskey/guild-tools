@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { evaluateVerification, VERIFY_WINDOW_MS, type ChatLogSnapshot } from './chatLogVerify';
 import { annotateWithTrades, formatNightForDiscord, groupLootByNight, itemLabel, needWinTally, type NeedWinTally } from '../../raid/lootLogic';
 import type { LootNight } from '../../raid/lootLogic';
 import { sampleLootRecords, sampleLootTrades } from '../../data/sampleLoot';
@@ -112,6 +113,40 @@ export function useLootHistory() {
     const interval = setInterval(loadChatTailStatus, 10_000);
     return () => clearInterval(interval);
   }, [loadChatTailStatus]);
+
+  // "Verify chat logging": the officer says something in chat while this watches the log
+  // file for a NEW write (see chatLogVerify.ts for why the game's own ON isn't enough).
+  const [verify, setVerify] = useState<{ phase: 'idle' | 'waiting' | 'verified' | 'failed'; secondsLeft: number }>({ phase: 'idle', secondsLeft: 0 });
+  const verifyTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const stopVerifyTimer = useCallback(() => {
+    if (verifyTimer.current) clearInterval(verifyTimer.current);
+    verifyTimer.current = null;
+  }, []);
+  useEffect(() => stopVerifyTimer, [stopVerifyTimer]);
+
+  const snapshot = (s: Awaited<ReturnType<NonNullable<typeof window.electronAPI>['getChatTailStatus']>>): ChatLogSnapshot => ({ exists: s.chatLog.exists, lastWriteAt: s.chatLog.lastWriteAt, sizeBytes: s.chatLog.sizeBytes });
+
+  const startVerify = useCallback(async () => {
+    if (!electron) return;
+    stopVerifyTimer();
+    const baseline = snapshot(await electron.getChatTailStatus());
+    const startedAt = Date.now();
+    setVerify({ phase: 'waiting', secondsLeft: Math.ceil(VERIFY_WINDOW_MS / 1000) });
+    verifyTimer.current = setInterval(() => {
+      void electron.getChatTailStatus().then((status) => {
+        const elapsed = Date.now() - startedAt;
+        const result = evaluateVerification(baseline, snapshot(status), elapsed);
+        if (result === 'waiting') {
+          setVerify({ phase: 'waiting', secondsLeft: Math.max(0, Math.ceil((VERIFY_WINDOW_MS - elapsed) / 1000)) });
+          return;
+        }
+        stopVerifyTimer();
+        setVerify({ phase: result, secondsLeft: 0 });
+        setChatTailStatus(status);
+      });
+    }, 1000);
+  }, [electron, stopVerifyTimer]);
 
   // Raid-wide view of the same signal -- "am I logging" only answers half the real
   // question, which is "is the RAID covered by at least one officer's app right now."
@@ -379,6 +414,8 @@ export function useLootHistory() {
     setCharacterName,
     savingCharacterName,
     chatTailStatus,
+    verify,
+    startVerify,
     captureHeartbeats,
     addonVersion,
     autoPostLoot: settings?.autoPostLoot ?? false,
