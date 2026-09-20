@@ -25,6 +25,8 @@ export function useGuildieOfTheMonth() {
   const [remindError, setRemindError] = useState<string | null>(null);
   const [closing, setClosing] = useState(false);
   const [closeError, setCloseError] = useState<string | null>(null);
+  const [choosingTie, setChoosingTie] = useState(false);
+  const [tieError, setTieError] = useState<string | null>(null);
   const [announcing, setAnnouncing] = useState(false);
   const [announceError, setAnnounceError] = useState<string | null>(null);
 
@@ -95,6 +97,24 @@ export function useGuildieOfTheMonth() {
       .finally(() => setClosing(false));
   }, [electron, selected]);
 
+  const chooseTieWinner = useCallback(
+    (nomineeId: string) => {
+      if (!electron || !selected) return;
+      setChoosingTie(true);
+      setTieError(null);
+      electron
+        .chooseGotmTieWinner(selected.id, nomineeId)
+        .then((updated) => {
+          if (updated) setPosts((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+        })
+        .catch((err: Error) => {
+          setTieError(err.message || 'Could not lock in the winner.');
+        })
+        .finally(() => setChoosingTie(false));
+    },
+    [electron, selected],
+  );
+
   const announceWinner = useCallback(
     (winnerAnnounceText: string) => {
       if (!electron || !selected) return;
@@ -128,6 +148,9 @@ export function useGuildieOfTheMonth() {
     closeVoting,
     closing,
     closeError,
+    chooseTieWinner,
+    choosingTie,
+    tieError,
     announceWinner,
     announcing,
     announceError,

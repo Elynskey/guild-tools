@@ -185,8 +185,13 @@ async function remindGotmVoters(id, reminderText) {
   return proxyFetchJson(`/gotm/${encodeURIComponent(id)}/remind`, { method: 'POST', body: JSON.stringify({ reminderText }) });
 }
 
-async function closeGotmVoting(id) {
-  return proxyFetchJson(`/gotm/${encodeURIComponent(id)}/close`, { method: 'POST' });
+// officerTieBreak: a tie leaves the vote pending for an officer to pick, instead of the proxy's old random draw.
+async function closeGotmVoting(id, officerTieBreak = false) {
+  return proxyFetchJson(`/gotm/${encodeURIComponent(id)}/close`, { method: 'POST', body: JSON.stringify({ officerTieBreak }) });
+}
+
+async function chooseGotmTieWinner(id, nomineeId, chosenBy) {
+  return proxyFetchJson(`/gotm/${encodeURIComponent(id)}/tiebreak`, { method: 'POST', body: JSON.stringify({ nomineeId, chosenBy }) });
 }
 
 async function announceGotmWinner(id, winnerAnnounceText) {
@@ -295,6 +300,7 @@ module.exports = {
   createGotmPost,
   remindGotmVoters,
   closeGotmVoting,
+  chooseGotmTieWinner,
   announceGotmWinner,
   getItemIconUrls,
   getBossLootTable,

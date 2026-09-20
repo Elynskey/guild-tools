@@ -154,7 +154,7 @@ export interface GuildToolsSettings {
   testGotmChannelId: string;
   gates: { rio: number; ilvl: number };
   minDps: number;
-  /** Officer-wide: post addon-verified Need wins to the loot channel automatically as they sync in. Off by default. */
+  /** Officer-wide: post Need wins to the loot channel automatically as they come in. On by default; changed in Settings. */
   autoPostLoot: boolean;
   /** Boss names excluded from the DPS check this tier -- deaths/healer/tank percentile/pulls are unaffected. */
   excludedBossesFromDps: string[];
@@ -227,6 +227,11 @@ export interface GotmPost {
   winnerId: string | null;
   winnerUsername: string | null;
   winnerTieBrokeAmong: GotmTieEntry[] | null;
+  /** Set when voting closed on a tie and no winner is picked yet -- an officer chooses among `tiedNominees`. */
+  tieBreakPending?: boolean;
+  tiedNominees?: GotmTieEntry[] | null;
+  /** Who (the officer's display name) broke the tie, when an officer did. Absent for a clear winner or an old random draw. */
+  winnerChosenBy?: string | null;
   winnerAnnounceText: string | null;
   winnerAnnounceMessageId: string | null;
 }
@@ -323,7 +328,9 @@ export interface ElectronAPI {
   getCurrentGotmPost: () => Promise<GotmPost | null>;
   createGotmPost: (openedBy: string | null, introText: string) => Promise<GotmPost>;
   remindGotmVoters: (id: string, reminderText: string) => Promise<GotmPost | null>;
+  /** Closes voting. A tie for first is NOT drawn at random: the post comes back with `tieBreakPending` and `tiedNominees` for an officer to choose from (chooseGotmTieWinner). */
   closeGotmVoting: (id: string) => Promise<GotmPost | null>;
+  chooseGotmTieWinner: (id: string, nomineeId: string) => Promise<GotmPost | null>;
   announceGotmWinner: (id: string, winnerAnnounceText: string) => Promise<GotmPost | null>;
   listRaidNights: () => Promise<RaidNight[] | null>;
   getPullFeedback: (code: string) => Promise<PullFeedbackResult | null>;

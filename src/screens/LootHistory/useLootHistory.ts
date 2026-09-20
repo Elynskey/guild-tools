@@ -22,8 +22,6 @@ export function useLootHistory() {
   const [savingCharacterName, setSavingCharacterName] = useState(false);
   const [addonVersion, setAddonVersion] = useState<AddonVersionInfo | null>(null);
   const [settings, setSettings] = useState<GuildToolsSettings | null>(null);
-  const [savingAutoPost, setSavingAutoPost] = useState(false);
-  const [autoPostError, setAutoPostError] = useState<string | null>(null);
   const [installing, setInstalling] = useState(false);
   const [installMessage, setInstallMessage] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -68,28 +66,11 @@ export function useLootHistory() {
     loadAddonVersion();
   }, [loadAddonVersion]);
 
-  // Officer-wide settings (channel IDs, the auto-post toggle) -- only read here for the
-  // toggle and to warn when no loot channel is set.
+  // Officer-wide settings -- read here only to show whether auto-post is on (it is changed in
+  // Settings) and to warn when no loot channel is set.
   useEffect(() => {
     if (electron) electron.getSettings().then(setSettings).catch(() => {});
   }, [electron]);
-
-  // Saves the whole settings object (not just the one field) so the typed contract holds;
-  // the server merges either way. Reverts on failure so the switch never shows a state
-  // that didn't actually stick.
-  const setAutoPostLoot = useCallback(
-    (value: boolean) => {
-      if (!electron || !settings) return;
-      setSavingAutoPost(true);
-      setAutoPostError(null);
-      electron
-        .saveSettings({ ...settings, autoPostLoot: value })
-        .then(setSettings)
-        .catch((err: Error) => setAutoPostError(err.message || 'Could not save this setting.'))
-        .finally(() => setSavingAutoPost(false));
-    },
-    [electron, settings],
-  );
 
   // Loot syncs in from whoever's raiding right now, so this screen polls for it rather
   // than requiring a manual reopen -- 30s keeps it feeling live without hammering the
@@ -429,12 +410,9 @@ export function useLootHistory() {
     startVerify,
     captureHeartbeats,
     addonVersion,
-    autoPostLoot: settings?.autoPostLoot ?? false,
+    autoPostLoot: settings?.autoPostLoot ?? true,
     autoPostChannelSet: !!settings?.lootLogChannelId,
     autoPostReady: settings !== null,
-    setAutoPostLoot,
-    savingAutoPost,
-    autoPostError,
     installAddon,
     installing,
     installMessage,

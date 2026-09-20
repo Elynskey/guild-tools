@@ -58,6 +58,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   createGotmPost: (openedBy, introText) => ipcRenderer.invoke('gotm:create', openedBy, introText),
   remindGotmVoters: (id, reminderText) => ipcRenderer.invoke('gotm:remind', id, reminderText),
   closeGotmVoting: (id) => ipcRenderer.invoke('gotm:close', id),
+  chooseGotmTieWinner: (id, nomineeId) => ipcRenderer.invoke('gotm:tiebreak', id, nomineeId),
   announceGotmWinner: (id, winnerAnnounceText) => ipcRenderer.invoke('gotm:announce', id, winnerAnnounceText),
   listRaidNights: () => ipcRenderer.invoke('raidNights:list'),
   getPullFeedback: (code) => ipcRenderer.invoke('pullFeedback:fetch', code),

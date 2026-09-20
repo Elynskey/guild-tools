@@ -126,7 +126,8 @@ export function GuildieOfTheMonth() {
                   <Badge tone="success">Winner: {g.selected.winnerUsername}</Badge>
                   {g.selected.winnerTieBrokeAmong && (
                     <p style={{ margin: 0, fontSize: 'var(--text-micro)', color: 'var(--text-faint)' }}>
-                      Tied with {g.selected.winnerTieBrokeAmong.filter((t) => t.id !== g.selected!.winnerId).map((t) => t.username).join(', ')} -- {g.selected.winnerUsername} was picked at random.
+                      Tied with {g.selected.winnerTieBrokeAmong.filter((t) => t.id !== g.selected!.winnerId).map((t) => t.username).join(', ')} --{' '}
+                      {g.selected.winnerChosenBy ? `${g.selected.winnerChosenBy.split('#')[0]} chose ${g.selected.winnerUsername}.` : `${g.selected.winnerUsername} was picked at random.`}
                     </p>
                   )}
                 </div>
@@ -166,7 +167,7 @@ export function GuildieOfTheMonth() {
               )}
             </div>
 
-            {!g.selected.closedAt && (
+            {!g.selected.closedAt && !g.selected.tieBreakPending && (
               <div className="crd-card" style={{ marginBottom: 20, padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 14 }}>
                 <div className="crd-eyebrow" style={{ color: 'var(--text-gold)' }}>
                   Remind voters
@@ -193,13 +194,30 @@ export function GuildieOfTheMonth() {
               </div>
             )}
 
-            {!g.selected.closedAt ? (
+            {g.selected.tieBreakPending ? (
+              <div className="crd-card" style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 14, borderColor: 'rgba(192,144,47,.5)' }}>
+                <div className="crd-eyebrow" style={{ color: 'var(--text-gold)' }}>
+                  It's a tie -- an officer decides
+                </div>
+                <p style={{ margin: 0, fontSize: 'var(--text-body-s)', color: 'var(--text-body)', lineHeight: 1.6 }}>
+                  Voting is closed and {g.selected.tiedNominees?.length ?? 0} nominees tied for first with {g.selectedTally[0]?.count ?? 0} vote{g.selectedTally[0]?.count === 1 ? '' : 's'} each. Pick who is Guildie of the Month.
+                </p>
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                  {(g.selected.tiedNominees ?? []).map((n) => (
+                    <Button key={n.id} onClick={() => g.chooseTieWinner(n.id)} disabled={g.choosingTie} iconLeft="check">
+                      {g.choosingTie ? 'Saving…' : `Choose ${n.username}`}
+                    </Button>
+                  ))}
+                </div>
+                {g.tieError && <Toast tone="danger" title="Couldn't lock in the winner" message={g.tieError} />}
+              </div>
+            ) : !g.selected.closedAt ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'flex-start' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <Button onClick={g.closeVoting} disabled={g.closing || g.selected.votes.length === 0} iconLeft="check">
                     {g.closing ? 'Closing…' : 'Close voting'}
                   </Button>
-                  <HelpTooltip text="Locks in the winner from the current tally -- a tie is broken with a random draw among everyone tied for first." />
+                  <HelpTooltip text="Locks in the winner from the current tally. If two or more nominees tie for first, voting still closes and an officer chooses the winner from those who tied." />
                 </div>
                 {g.closeError && <Toast tone="danger" title="Couldn't close voting" message={g.closeError} />}
               </div>

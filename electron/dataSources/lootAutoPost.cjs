@@ -3,7 +3,7 @@ const settingsStore = require('./settingsStore.cjs');
 const lootRecordsStore = require('./lootRecordsStore.cjs');
 
 // Optional automatic announcement of Need wins to the loot channel -- the shared
-// "Auto-post to Discord" toggle on Loot History (settings.autoPostLoot, off by default).
+// "Auto-post to Discord" toggle in Settings (settings.autoPostLoot, on by default).
 // Runs on the proxy, off the /loot-records/sync route, so it fires whenever ANY officer's
 // addon data lands.
 //

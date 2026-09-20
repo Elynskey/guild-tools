@@ -10,7 +10,7 @@ const EMPTY: GuildToolsSettings = {
   testGotmChannelId: '',
   gates: { ...config.gates },
   minDps: 0,
-  autoPostLoot: false,
+  autoPostLoot: true,
   excludedBossesFromDps: [],
 };
 

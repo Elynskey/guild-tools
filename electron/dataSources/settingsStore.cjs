@@ -44,8 +44,8 @@ const DEFAULTS = {
   testGotmChannelId: '',
   gates: { rio: 1000, ilvl: 285 },
   minDps: 0,
-  /** Shared, officer-wide: when true, addon-verified Need wins are posted to lootLogChannelId automatically as they sync in (see lootAutoPost.cjs). Off by default -- posting is an officer's deliberate choice. */
-  autoPostLoot: false,
+  /** Shared, officer-wide: when true, Need wins are posted to lootLogChannelId automatically as they come in (see lootAutoPost.cjs). On by default; nothing posts until a loot channel is set, and an officer can switch it off in Settings (an explicit false is kept). */
+  autoPostLoot: true,
   /** Boss names (exact fight-name match, same names bossIcons.ts/bossLootTable.cjs use) excluded from the DPS check -- deaths, healer/tank percentile, and pull counts are unaffected either way. */
   excludedBossesFromDps: [],
 };

@@ -6,6 +6,7 @@ import { Button } from '../../design-system/Button';
 import { Toast } from '../../design-system/Toast';
 import { Icon } from '../../design-system/Icon';
 import { HelpTooltip } from '../../design-system/HelpTooltip';
+import { Switch } from '../../design-system/Switch';
 import { BossIcon } from '../../raid/BossIcon';
 import { TIER_BOSS_NAMES } from '../../raid/bossIcons';
 import { useSettings } from './useSettings';
@@ -35,6 +36,11 @@ export function Settings() {
 
   const field = (key: 'raidSignupsChannelId' | 'lootLogChannelId' | 'gotmChannelId' | 'testRaidSignupsChannelId' | 'testGotmChannelId', value: string) => {
     setDraft({ ...draft, [key]: value });
+    setDirty(true);
+  };
+
+  const setAutoPostLoot = (value: boolean) => {
+    setDraft({ ...draft, autoPostLoot: value });
     setDirty(true);
   };
 
@@ -114,6 +120,20 @@ export function Settings() {
               value={draft.gotmChannelId}
               onChange={(e) => field('gotmChannelId', e.target.value)}
             />
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                <Switch checked={draft.autoPostLoot} onChange={setAutoPostLoot} aria-label="Auto-post new wins to Discord" />
+                <span style={{ fontWeight: 600, color: 'var(--text-strong)', fontSize: 'var(--text-body-s)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  Auto-post new wins to Discord
+                  <HelpTooltip text="Posts each Need win to the loot channel on its own, one message per boss headed by the difficulty. Never posts wins it can't tie to this tier's boss and a Normal/Heroic kill, wins older than 6 hours, or the same win twice." />
+                </span>
+              </div>
+              <div style={{ fontSize: 'var(--text-micro)', color: 'var(--text-faint)', lineHeight: 1.5 }}>
+                On by default and shared by every officer. A win posts within about 10 seconds of the roll while at least one officer's PC is running chat logging and combat logging (the combat log tells Guild Tools which boss you killed
+                and the difficulty); otherwise it posts after the addon syncs (a /reload in game). Nothing posts until a loot log channel is set above. The "Post to Discord" button on Loot History works either way.
+              </div>
+            </div>
 
             <Button onClick={submit} disabled={saving || !dirty} iconLeft="check">
               {saving ? 'Saving…' : 'Save'}

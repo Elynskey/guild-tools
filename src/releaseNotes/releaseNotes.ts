@@ -23,6 +23,25 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '1.1.5',
+    date: '2026-09-20',
+    title: 'Officers break the Guildie tie, and auto-post moves to Settings',
+    highlights: [
+      {
+        heading: 'Officers break a Guildie of the Month tie',
+        body: 'When voting closes with a tie for first, nobody is picked at random. Voting closes, the tied nominees are listed, and an officer chooses the winner. The result shows who chose.',
+      },
+      {
+        heading: 'Anyone in the Discord server can be voted for',
+        body: 'A vote can now be a write-in for anyone in the server, not only people with a member role. Voting itself still needs a member role, and bots cannot be picked.',
+      },
+      {
+        heading: 'Auto-post to Discord is on by default, and lives in Settings',
+        body: 'The switch moved from Loot History to Settings. It is on for all officers unless someone turns it off, and nothing posts until a loot channel is set. Loot History still shows whether it is on.',
+      },
+    ],
+  },
+  {
     version: '1.1.4',
     date: '2026-09-19',
     title: 'Season loot is just your raiders, and chat logging you can verify',

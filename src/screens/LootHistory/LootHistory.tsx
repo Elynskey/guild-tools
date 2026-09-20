@@ -6,7 +6,7 @@ import { PostToDiscordDialog } from './PostToDiscordDialog';
 import { DeleteNightDialog } from './DeleteNightDialog';
 import { Button } from '../../design-system/Button';
 import { Badge } from '../../design-system/Badge';
-import { Switch } from '../../design-system/Switch';
+import { Link } from 'react-router-dom';
 import { HelpTooltip } from '../../design-system/HelpTooltip';
 import { useLootHistory } from './useLootHistory';
 import { NEED_WIN_CAP, type LootEntry } from '../../raid/lootLogic';
@@ -185,6 +185,7 @@ function combatLogLine(lh: ReturnType<typeof useLootHistory>): { text: string; o
   };
 }
 
+/** Read-only: whether auto-post is on (it is changed in Settings) and this PC's half of live posting. */
 function AutoPostRow({ lh }: { lh: ReturnType<typeof useLootHistory> }) {
   if (!lh.available || !lh.autoPostReady) return null;
   const on = lh.autoPostLoot;
@@ -192,22 +193,19 @@ function AutoPostRow({ lh }: { lh: ReturnType<typeof useLootHistory> }) {
   return (
     <div className="crd-card" style={{ padding: '14px 20px', marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-        <Switch checked={on} onChange={lh.setAutoPostLoot} disabled={lh.savingAutoPost} aria-label="Auto-post new wins to Discord" />
         <span style={{ fontWeight: 600, color: 'var(--text-strong)', fontSize: 'var(--text-body-s)', display: 'flex', alignItems: 'center', gap: 6 }}>
           Auto-post new wins to Discord
           <HelpTooltip text="Posts each Need win to the loot channel on its own, one message per boss headed by the difficulty. Live (within about 10 seconds) when an officer's PC has chat logging and combat logging on; otherwise once the addon syncs. Never posts wins it can't tie to this tier's boss and a Normal/Heroic kill, wins older than 6 hours, or the same win twice." />
         </span>
         <Badge tone={on ? 'gold' : 'neutral'}>{on ? 'On for all officers' : 'Off'}</Badge>
-      </div>
-      <div style={{ fontSize: 'var(--text-micro)', color: 'var(--text-faint)', lineHeight: 1.5 }}>
-        Shared by every officer. A win posts within about 10 seconds of the roll as long as at least one officer's PC is running both chat logging and combat logging -- the combat log is how Guild Tools
-        knows which boss you just killed and the difficulty. Otherwise it posts after the addon syncs (a /reload in game). Off by default; the "Post to Discord" button below still works either way.
+        <Link to="/settings" style={{ fontSize: 'var(--text-micro)' }}>
+          Change in Settings
+        </Link>
       </div>
       {combat && <div style={{ fontSize: 'var(--text-micro)', color: combat.ok ? 'var(--text-faint)' : 'var(--status-warning)', lineHeight: 1.5 }}>{combat.text}</div>}
       {on && !lh.autoPostChannelSet && (
         <div style={{ fontSize: 'var(--text-micro)', color: 'var(--status-warning)' }}>No loot channel is set yet -- add one in Settings or nothing will be posted.</div>
       )}
-      {lh.autoPostError && <div style={{ fontSize: 'var(--text-micro)', color: 'var(--status-danger)' }}>{lh.autoPostError}</div>}
     </div>
   );
 }

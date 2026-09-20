@@ -35,9 +35,14 @@ async function remindGotmVoters(id, reminderText) {
   return store.sendReminder(id, reminderText);
 }
 
-async function closeGotmVoting(id) {
-  if (proxyClient.isAvailable()) return proxyClient.closeGotmVoting(id);
-  return store.resolveWinner(id);
+async function closeGotmVoting(id, officerTieBreak = false) {
+  if (proxyClient.isAvailable()) return proxyClient.closeGotmVoting(id, officerTieBreak);
+  return store.resolveWinner(id, 'prod', { officerTieBreak });
+}
+
+async function chooseGotmTieWinner(id, nomineeId, chosenBy) {
+  if (proxyClient.isAvailable()) return proxyClient.chooseGotmTieWinner(id, nomineeId, chosenBy);
+  return store.chooseTieWinner(id, nomineeId, chosenBy);
 }
 
 async function announceGotmWinner(id, winnerAnnounceText) {
@@ -45,4 +50,4 @@ async function announceGotmWinner(id, winnerAnnounceText) {
   return store.announceWinner(id, winnerAnnounceText);
 }
 
-module.exports = { listGotmPosts, getGotmPost, getCurrentGotmPost, createGotmPost, remindGotmVoters, closeGotmVoting, announceGotmWinner };
+module.exports = { listGotmPosts, getGotmPost, getCurrentGotmPost, createGotmPost, remindGotmVoters, closeGotmVoting, chooseGotmTieWinner, announceGotmWinner };

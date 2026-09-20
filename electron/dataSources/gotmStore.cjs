@@ -105,7 +105,7 @@ async function sendReminder(id, reminderText, mode = 'prod') {
   if (!reminderText) throw new Error('reminderText is required.');
   const entry = get(id, mode);
   if (!entry) return null;
-  if (entry.closedAt) throw new Error('Voting is already closed -- nothing to remind anyone about.');
+  if (entry.closedAt || entry.tieBreakPending) throw new Error('Voting is already closed -- nothing to remind anyone about.');
   if (!entry.discordChannelId) throw new Error('No Discord channel configured for this vote.');
   await discordPost.postMessage(entry.discordChannelId, { content: reminderText });
   return entry;
@@ -115,7 +115,7 @@ async function sendReminder(id, reminderText, mode = 'prod') {
 function recordVote(id, { voterId, voterUsername, nomineeId, nomineeUsername }, mode = 'prod') {
   const posts = load(mode);
   const entry = posts.find((p) => p.id === id);
-  if (!entry || entry.closedAt) return null;
+  if (!entry || entry.closedAt || entry.tieBreakPending) return null;
 
   entry.votes = entry.votes.filter((v) => v.voterId !== voterId);
   entry.votes.push({ voterId, voterUsername, nomineeId, nomineeUsername, votedAt: new Date().toISOString() });
@@ -135,22 +135,59 @@ function tally(entry) {
   return [...counts.values()].sort((a, b) => b.count - a.count);
 }
 
-/** Resolves (but does not announce) a winner -- random draw among anyone tied for first, so the officer can see who won before writing the announcement post. Idempotent: a repeat call (double-click, a race between two officers) must not re-roll the tiebreak and flip the winner after it may have already been announced. */
-function resolveWinner(id, mode = 'prod') {
+/**
+ * Resolves (but does not announce) a winner, so the officer can see who won before writing the announcement post.
+ *
+ * A tie for first is broken one of two ways. With `options.officerTieBreak` (what the app asks for), voting is
+ * closed but NO winner is picked: the record is marked `tieBreakPending` with the tied nominees, and an officer
+ * chooses among them (see chooseTieWinner). Without it (older app versions that don't know about officer
+ * tie-breaks) it stays a random draw, exactly as before, so an old client's Close button still works.
+ *
+ * Idempotent: a repeat call (double-click, a race between two officers) must not re-roll a random tiebreak or
+ * reset a pending one, or flip a winner after it may have already been announced.
+ */
+function resolveWinner(id, mode = 'prod', options = {}) {
   const posts = load(mode);
   const entry = posts.find((p) => p.id === id);
   if (!entry) return null;
-  if (entry.closedAt) return entry;
+  if (entry.closedAt || entry.tieBreakPending) return entry;
   const standings = tally(entry);
   if (standings.length === 0) return entry;
 
   const topCount = standings[0].count;
   const tied = standings.filter((s) => s.count === topCount);
+  if (tied.length > 1 && options.officerTieBreak) {
+    entry.tieBreakPending = true;
+    entry.tiedNominees = tied.map((t) => ({ id: t.nomineeId, username: t.nomineeUsername }));
+    save(posts, mode);
+    return entry;
+  }
   const winner = tied[Math.floor(Math.random() * tied.length)];
 
   entry.winnerId = winner.nomineeId;
   entry.winnerUsername = winner.nomineeUsername;
   entry.winnerTieBrokeAmong = tied.length > 1 ? tied.map((t) => ({ id: t.nomineeId, username: t.nomineeUsername })) : null;
+  entry.closedAt = new Date().toISOString();
+  save(posts, mode);
+  return entry;
+}
+
+/** An officer's pick among the nominees who tied for first -- locks in the winner and closes the vote. Idempotent once closed (a second click, or two officers picking at once, returns the winner already chosen instead of changing it). Only someone who actually tied can be picked. */
+function chooseTieWinner(id, nomineeId, chosenBy, mode = 'prod') {
+  const posts = load(mode);
+  const entry = posts.find((p) => p.id === id);
+  if (!entry) return null;
+  if (entry.closedAt) return entry;
+  if (!entry.tieBreakPending) throw new Error('There is no tie to break on this vote.');
+  const pick = (entry.tiedNominees ?? []).find((t) => t.id === nomineeId);
+  if (!pick) throw new Error('Pick one of the nominees who tied for first.');
+
+  entry.winnerId = pick.id;
+  entry.winnerUsername = pick.username;
+  entry.winnerTieBrokeAmong = entry.tiedNominees;
+  entry.winnerChosenBy = chosenBy || null;
+  entry.tieBreakPending = false;
+  entry.tiedNominees = null;
   entry.closedAt = new Date().toISOString();
   save(posts, mode);
   return entry;
@@ -181,4 +218,4 @@ async function announceWinner(id, winnerAnnounceText, mode = 'prod') {
   return entry;
 }
 
-module.exports = { load, get, getCurrent, create, sendReminder, recordVote, tally, resolveWinner, announceWinner };
+module.exports = { load, get, getCurrent, create, sendReminder, recordVote, tally, resolveWinner, chooseTieWinner, announceWinner };

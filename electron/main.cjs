@@ -61,6 +61,7 @@ const {
   createGotmPost,
   remindGotmVoters,
   closeGotmVoting,
+  chooseGotmTieWinner,
   announceGotmWinner,
 } = require('./dataSources/fetchGotm.cjs');
 
@@ -276,8 +277,14 @@ ipcMain.handle('gotm:remind', async (_event, id, reminderText) => {
   return result;
 });
 ipcMain.handle('gotm:close', async (_event, id) => {
-  const result = await closeGotmVoting(id);
+  // A tie is left for an officer to break (see gotm:tiebreak), not drawn at random.
+  const result = await closeGotmVoting(id, true);
   track('gotm_closed', 'Guildie of the Month');
+  return result;
+});
+ipcMain.handle('gotm:tiebreak', async (_event, id, nomineeId) => {
+  const result = await chooseGotmTieWinner(id, nomineeId, authState?.displayName ?? null);
+  track('gotm_tie_broken', 'Guildie of the Month');
   return result;
 });
 ipcMain.handle('gotm:announce', async (_event, id, winnerAnnounceText) => {
