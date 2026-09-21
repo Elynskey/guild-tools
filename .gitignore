@@ -10,3 +10,5 @@ electron/dataSources/proxyConfig.generated.cjs
 .claude/
 *.tsbuildinfo
 addon-test/
+
+web-dist/

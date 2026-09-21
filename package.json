@@ -19,7 +19,10 @@
     "dist:win:test": "node scripts/dist-test.mjs",
     "addon:test": "node scripts/make-test-addon.mjs",
     "addon:test:install": "node scripts/make-test-addon.mjs --install",
-    "addon:test:check": "node scripts/make-test-addon.mjs && node scripts/run-lua.mjs scripts/test-addon/check-coexist.lua && node scripts/run-lua.mjs scripts/test-addon/check-tracking.lua && node scripts/run-lua.mjs scripts/test-addon/check-drops.lua"
+    "addon:test:check": "node scripts/make-test-addon.mjs && node scripts/run-lua.mjs scripts/test-addon/check-coexist.lua && node scripts/run-lua.mjs scripts/test-addon/check-tracking.lua && node scripts/run-lua.mjs scripts/test-addon/check-drops.lua",
+    "web:dev": "vite --config web/vite.config.ts",
+    "web:build": "tsc -p web/tsconfig.json && vite build --config web/vite.config.ts",
+    "web:typecheck": "tsc -p web/tsconfig.json"
   },
   "dependencies": {
     "dotenv": "^17.4.2",

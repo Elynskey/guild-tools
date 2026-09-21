@@ -1,0 +1,15 @@
+{
+  "name": "Guild Tools",
+  "short_name": "Guild Tools",
+  "description": "Casual Raid Days officer view: raider status, loot, and loot capture.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#12100c",
+  "theme_color": "#12100c",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}
