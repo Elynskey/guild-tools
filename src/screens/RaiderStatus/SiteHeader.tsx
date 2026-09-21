@@ -59,7 +59,7 @@ export function SiteHeader({ windowTabs, windowValue, setWindow, progressionFrac
           </div>
         </Link>
         <div style={{ flex: 1 }} />
-        <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
           <img
             src={config.expansionLogo}
             alt="Midnight"
