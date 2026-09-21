@@ -35,9 +35,16 @@ interface LedgerTableProps {
   ilvlGateText: string;
 }
 
+// The grid's fixed columns (3 + 122 + 78 + 58 + 62 + 104), the Raider column's
+// minmax floor (140), and the 6 inter-column gaps (12px each) -- the narrowest
+// this row can render before its columns start crushing into each other. Below
+// that, LEDGER_SCROLL_WRAPPER_STYLE below scrolls the row horizontally instead.
+export const LEDGER_MIN_WIDTH = 3 + 140 + 122 + 78 + 58 + 62 + 104 + 12 * 6 + 18;
+
 export function LedgerTable({ perfHeader, trendHeader, rows, toggleRow, rioGateText, ilvlGateText }: LedgerTableProps) {
   return (
     <div className="crd-card" style={{ padding: 0, overflow: 'hidden' }}>
+      <div style={{ overflowX: 'auto' }}>
       <div
         style={{
           display: 'grid',
@@ -47,6 +54,7 @@ export function LedgerTable({ perfHeader, trendHeader, rows, toggleRow, rioGateT
           padding: '8px 18px 8px 0',
           background: 'var(--grad-header)',
           borderBottom: '1px solid var(--border-hairline)',
+          minWidth: LEDGER_MIN_WIDTH,
         }}
       >
         <div />
@@ -73,6 +81,7 @@ export function LedgerTable({ perfHeader, trendHeader, rows, toggleRow, rioGateT
       {rows.map((r) => (
         <RaiderRow key={r.name} raider={r} onToggle={() => toggleRow(r.name)} rioGateText={rioGateText} ilvlGateText={ilvlGateText} />
       ))}
+      </div>
     </div>
   );
 }

@@ -3,7 +3,7 @@ import { Badge } from '../../design-system/Badge';
 import { ordinal, DEATH_RATE_RED_SIGMA, DEATH_RATE_YELLOW_SIGMA } from '../../scoring/scoring';
 import type { DisplayRaider } from './useRaiderStatus';
 import { BADGE_TONE, ROW_COLOR } from './bandVisuals';
-import { LEDGER_GRID_TEMPLATE } from './LedgerTable';
+import { LEDGER_GRID_TEMPLATE, LEDGER_MIN_WIDTH } from './LedgerTable';
 import { RaiderDetailPanel } from './RaiderDetailPanel';
 
 interface RaiderRowProps {
@@ -56,6 +56,7 @@ export function RaiderRow({ raider: r, onToggle, rioGateText, ilvlGateText }: Ra
           gap: 12,
           alignItems: 'center',
           padding: '0 18px 0 0',
+          minWidth: LEDGER_MIN_WIDTH,
           cursor: 'pointer',
           opacity: dim,
           transition: 'background-color var(--dur-fast) var(--ease-standard)',
