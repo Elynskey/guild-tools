@@ -1,22 +1,24 @@
-# Handoff: Raider Status (Casual Raid Days)
+# Guild Tools (Casual Raid Days)
 
-## Overview
+## Current status
 
-An officer-facing dashboard for the WoW guild **Casual Raid Days** (The Scryers, US-Horde). It shows every raider's performance status for a raid window — **Green / Yellow / Red / Ineligible** — plus generated feedback text. The purpose is triage: an officer opens it after Friday/Saturday raid and can see in one screen who is doing well and who needs support in rotation or gear.
+This started as a design handoff for one screen (Raider Status) and has since shipped as a full app: **React + Vite + TypeScript**, packaged as an **Electron desktop app** (`electron-builder`, Windows NSIS installer) for its primary distribution. Eleven screens now exist under `src/screens/`: Landing, Raider Status, Professions, Pull Feedback, Loot History, Season Loot Report, Mythic+, Settings, Raid Signups, Guildie of the Month, and Analytics. Real data (Warcraft Logs, Raider.IO, wowaudit, Blizzard, Discord) flows through a proxy server the Electron main process talks to over IPC (`electron/dataSources/`, `electron/main.cjs`); credentials never enter the renderer or the web bundle.
 
-It is read-only. No editing, no admin. Audience is officers only.
+**It also runs as a plain website**, and this was verified directly (not assumed): `npm run build && npm run preview` serves a working app with zero console errors across every route. Screens backed by read-mostly data (Raider Status, Professions, Pull Feedback, Loot History, Loot Report, Mythic+) fall back to bundled sample data when there's no Electron IPC bridge (`src/data/rosterSource.ts` and siblings — `window.electronAPI` is checked, sample data used when absent). Screens needing officer actions or live Discord data (Settings, Raid Signups, GOTM, Analytics) show a clean "requires the desktop app" message instead of crashing.
+
+**Mobile**: Raider Status was audited at a 390px viewport with Playwright and three real overflow bugs were found and fixed (not just the one the original spec below flagged) — see commits `7fac1c9` and `c36737d`. The header's tier/tabs cluster now wraps instead of cramming into one row; the role-tabs control bar and the ledger table both scroll horizontally within their own containers instead of blowing out the page. Desktop layout is unchanged (verified via screenshot diff). The other 10 screens have not had the same mobile pass yet.
+
+**Not yet done — live data in the browser.** The sample-data fallback above is real but static; nothing in the web build talks to the proxy directly. That needs: a browser-side OAuth callback (the proxy's Discord/Battle.net exchange currently only knows the Electron loopback redirect `http://localhost:53136/callback`), a session-token auth model to replace the shared `X-Proxy-Key` (which can't ship in a public JS bundle — anyone could read it via view-source), and CORS on the proxy for the new web origin. Blocked on access to the proxy's own source (`server.cjs` and friends aren't tracked in this repo — they live only on the deploy target). Planned to run **Tailscale-only** (private to the guild's own devices), not on the public internet, which simplifies the redirect URI and skips public DNS/TLS entirely.
 
 ## About the Design Files
 
-The files in this bundle are **design references created in HTML** — a prototype showing intended look and behavior, not production code to lift. `Raider Status.dc.html` is a self-contained streaming-HTML component (custom `<x-dc>` runtime in `support.js`); it is **not** a React/Vue component and should not be ported literally.
+The files below (`Raider Status.dc.html`, `support.js`, `_ds/`) are the **original design references** the Raider Status screen was built from — a prototype showing intended look and behavior, kept here as the authoritative source for colors, spacing, and interaction states, not as something still to be ported. The real implementation is `src/screens/RaiderStatus/` (and the rest of `src/`), built against the same `_ds/` design system.
 
-The task is to **recreate this design in the target codebase's environment** (React, Vue, SwiftUI, native, whatever exists) using its established patterns, component library, and data layer. If no environment exists yet, pick the appropriate framework and implement there. The bundled `_ds/` folder is the guild's design system (CSS tokens + React primitives) — those token values are authoritative and should be carried across.
-
-All roster data in the prototype is **hardcoded sample data** (30 fabricated raiders using real officer names). The real implementation pulls from the pipeline described in "Data Model" below.
+All roster data in the prototype below is **hardcoded sample data** (30 fabricated raiders using real officer names) — the same shape `src/data/sampleRoster.ts` uses for the web build's fallback. The real (Electron) pipeline is described in "Data Model" below.
 
 ## Fidelity
 
-**High-fidelity.** Colors, typography, spacing, and interaction states are final and come from the bound CRD Guild Design System. Recreate pixel-accurately using the codebase's own primitives where they exist; use the exact token values below where they don't.
+**High-fidelity**, and the shipped app follows it pixel-for-pixel where the two have been compared. Colors, typography, spacing, and interaction states below are final and come from the bound CRD Guild Design System.
 
 ## Screens / Views
 
@@ -126,7 +128,7 @@ When filters match nothing: `padding: 48px`, centered, `1px dashed var(--border-
 
 No loading or error states are designed — the prototype is synchronous. In the real app, the ledger is the natural skeleton target (keep the header row, show 6 shimmer rows per section).
 
-Responsive: not designed for mobile. The ledger grid has fixed numeric columns and needs ~900px. On narrow viewports, either allow horizontal scroll on the ledger card or collapse columns to Raider / Score / Band with the rest inside the expanded panel.
+Responsive: the original design was not built for mobile — the ledger grid has fixed numeric columns and needs ~900px. **This has since been addressed in the shipped app** (see "Current status" above): the ledger card scrolls horizontally below that width rather than breaking page layout, which was the simpler of the two options this doc originally proposed (the other being a column-collapse into the expanded panel — not done, scrolling was sufficient).
 
 Motion (from the design system): 90ms press, 140ms hover/color, 220ms dialog/toast, 380ms reveals; easing `cubic-bezier(.16,1,.3,1)`. No bounce, no spring, no scale-up entrances.
 
@@ -232,4 +234,8 @@ All local in this bundle — nothing hot-links.
 - `screenshots/` — five reference captures: top of page, the ledger, an expanded feedback row, the Ineligible band filter, and the kills strip.
 - `SEASON-UPDATE.md` — what has to change at the start of each raid tier (gates, band cutoffs, tier name, kill shots) versus what never changes.
 
-To view the prototype: open `Raider Status.dc.html` in a browser from this folder, keeping the relative paths intact.
+To view the original design prototype (reference only, not the real app): open `Raider Status.dc.html` in a browser from this folder, keeping the relative paths intact.
+
+**To run the real app:**
+- Desktop (Electron, full functionality): `npm install`, then `npm run electron:dev`.
+- Browser (sample data, read-mostly screens only — see "Current status" above): `npm install`, `npm run dev` for a live-reloading dev server, or `npm run build && npm run preview` to check the production bundle.
