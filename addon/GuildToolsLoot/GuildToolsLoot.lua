@@ -424,6 +424,7 @@ local function recordNeedLoss(loserName, itemLink, bossOverride, encounterIDOver
     slot = slotLabel(itemLink),
     time = now,
     difficulty = difficultyOverride or currentDifficulty,
+    encounterId = encounterIDOverride or currentEncounterID,
   })
 end
 

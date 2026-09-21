@@ -219,13 +219,13 @@ zone(true, "party", "Some Dungeon", 23)
 local function hasItem(o, id) return o:find("%] " .. id .. " %-%-") end
 
 out = say("GUILDTOOLSLOOTTEST", "checklist text")
-check("the text checklist lists only what is still to be tested (10 items)", select(2, out:gsub("%[[ x!]%]", "")) == 10, out:sub(1, 200))
+check("the text checklist lists only what is still to be tested (11 items)", select(2, out:gsub("%[[ x!]%]", "")) == 11, out:sub(1, 200))
 check("...nothing starts ticked", not out:find("%[x%]") and not out:find("%[!%]"), out:sub(1, 120))
 local gone = { "loaded", "chatlog", "tracking", "selftest", "marker", "win", "loss", "raid", "live_app", "reload", "discord", "verify" }
 local stillThere = {}
 for _, id in ipairs(gone) do if hasItem(out, id) then stillThere[#stillThere + 1] = id end end
 check("...and everything already proven working is gone", #stillThere == 0, table.concat(stillThere, ","))
-local wanted = { "flush", "syncbtn", "syncclick", "app_sync", "once", "chatpath", "selfwin", "dungeon", "delve", "legacy" }
+local wanted = { "flush", "syncbtn", "syncclick", "synccover", "app_sync", "once", "chatpath", "selfwin", "dungeon", "delve", "legacy" }
 local missingItems = {}
 for _, id in ipairs(wanted) do if not hasItem(out, id) then missingItems[#missingItems + 1] = id end end
 check("...and what is left to do is there", #missingItems == 0, table.concat(missingItems, ","))
@@ -520,6 +520,125 @@ check("...and it stays hidden", not buttonShown())
 out = say("GUILDTOOLSLOOTTEST", "syncoff")
 tick()
 check("...until switched back on", buttonShown() and out:find("ON"), out)
+GuildToolsLootTestDB.syncPromptOff = nil
+
+-- =========================== another officer's sync closes our button ===========================
+local peerFrame
+for i = #frames, 1, -1 do if frames[i].events.CHAT_MSG_ADDON then peerFrame = frames[i] break end end
+check("a frame listens for other officers' sync messages", peerFrame ~= nil)
+local sent = {}
+local sendResults = {}
+C_ChatInfo.RegisterAddonMessagePrefix = function() end
+C_ChatInfo.SendAddonMessage = function(prefix, msg, channel)
+  sent[#sent + 1] = prefix .. "|" .. msg .. "|" .. channel
+  return table.remove(sendResults, 1) or 0
+end
+local lockdown = false
+C_ChatInfo.InChatMessagingLockdown = function() return lockdown end
+local function peer(text, channel, sender) peerFrame.scripts.OnEvent(peerFrame, "CHAT_MSG_ADDON", "GTLSYNC", text, channel or "PARTY", sender or "Odasa-ArgentDawn") end
+local function freshBatch(records, losses)
+  GuildToolsLootTestDB.records = {}
+  GuildToolsLootTestDB.needLosses = {}
+  GuildToolsLootTestDB.trades = {}
+  GuildToolsLootTestDB.syncNote = nil
+  GuildToolsLootTestDB.syncPromptOff = nil
+  loginFrame.scripts.OnEvent(loginFrame, "PLAYER_LOGIN") -- a new baseline: nothing pending
+  for _, r in ipairs(records or {}) do GuildToolsLootTestDB.records[#GuildToolsLootTestDB.records + 1] = r end
+  for _, r in ipairs(losses or {}) do GuildToolsLootTestDB.needLosses[#GuildToolsLootTestDB.needLosses + 1] = r end
+  clock = clock + 5
+  tick()
+  clock = clock + 20
+  printed = {}
+  tick()
+end
+local t0 = time()
+
+freshBatch({ { itemId = 1, winner = "Tester", time = t0, encounterId = 3470 }, { itemId = 2, winner = "Other", time = t0, encounterId = 3470 } }, { { itemId = 4, name = "Loser", time = t0, encounterId = 3470 } })
+check("a captured batch shows the button and says what it holds", buttonShown() and table.concat(printed, " "):find("Loot logged: 2 Need win%(s%) and 1 lost roll%(s%)"), table.concat(printed, " "):sub(1, 160))
+printed = {}
+peer("S1;3470")
+tick()
+check("another officer's sync of that encounter closes our button", not buttonShown())
+check("...and chat says who already logged it and that our own copy is still saved", table.concat(printed, " "):find("Odasa already logged this loot") and table.concat(printed, " "):find("still saved"), table.concat(printed, " "):sub(1, 200))
+check("...and ticks 'synccover' on the checklist", GuildToolsLootTestDB.checklist.synccover == "pass")
+GuildToolsLootTestDB.records[#GuildToolsLootTestDB.records + 1] = { itemId = 9, winner = "Later", time = time() + 100, encounterId = 3470 }
+clock = clock + 5
+tick()
+clock = clock + 20
+tick()
+check("a win captured AFTER that message is new loot: the button comes back", buttonShown())
+
+freshBatch({ { itemId = 1, winner = "Tester", time = t0, encounterId = 3470 }, { itemId = 3, winner = "Untagged", time = t0 } }, {})
+peer("S1;3470")
+tick()
+check("loot with no encounter recorded cannot be covered by anyone else's message, so the button stays", buttonShown())
+
+freshBatch({ { itemId = 1, winner = "Tester", time = t0, encounterId = 3470 } }, {})
+peer("S1;3471")
+tick()
+check("a message about a DIFFERENT encounter does not close it", buttonShown())
+peer("S1;3470", "PARTY", "Tester-ArgentDawn")
+tick()
+check("our own message echoed back does not close it", buttonShown())
+peer("S1;3470", "WHISPER")
+peer("S1;3470", "GUILD")
+tick()
+check("messages outside the raid/party/instance channels are ignored", buttonShown())
+for _, bad in ipairs({ "S1;abc", "S1;3470;evil", "S2;3470", "S1;", "3470", "S1;3470 3471", ("S1;" .. string.rep("9", 500)) }) do peer(bad) end
+tick()
+check("malformed messages are ignored", buttonShown())
+issecretvalue = function(v) return v == "S1;3470" end
+peer("S1;3470")
+issecretvalue = nil
+tick()
+check("a protected (secret) message is skipped without error", buttonShown())
+freshBatch({ { itemId = 1, winner = "Tester", time = t0, encounterId = 9999 } }, {})
+peer("S1;1,2,3,4,5,6,7,8,9,10,11,12,9999")
+tick()
+check("only the first 12 encounter ids of a message count", buttonShown())
+peer("S1;9999")
+tick()
+check("...while a normal message does", not buttonShown())
+
+-- sending our own sync's message after the reload
+sent = {}
+GuildToolsLootTestDB.syncNote = { wins = 1, losses = 0, trades = 0, encounters = { 3470, 3471 }, at = time() }
+loginFrame.scripts.OnEvent(loginFrame, "PLAYER_LOGIN")
+check("after our reload we tell the group which encounters we synced", #sent == 1 and sent[1] == "GTLSYNC|S1;3470,3471|PARTY", table.concat(sent, ";"))
+sent = {}
+lockdown = true
+GuildToolsLootTestDB.syncNote = { wins = 1, losses = 0, trades = 0, encounters = { 3470 }, at = time() }
+loginFrame.scripts.OnEvent(loginFrame, "PLAYER_LOGIN")
+check("nothing is sent while the game restricts addon chat (an encounter in progress)", #sent == 0, table.concat(sent, ";"))
+lockdown = false
+sent = {}
+sendResults = { 3, 3 }
+GuildToolsLootTestDB.syncNote = { wins = 1, losses = 0, trades = 0, encounters = { 3470 }, at = time() }
+loginFrame.scripts.OnEvent(loginFrame, "PLAYER_LOGIN")
+check("a throttled send is retried until it goes through", #sent == 3, tostring(#sent))
+sent = {}
+GuildToolsLootTestDB.syncNote = { wins = 1, losses = 0, trades = 0, encounters = {}, at = time() }
+loginFrame.scripts.OnEvent(loginFrame, "PLAYER_LOGIN")
+check("a sync with nothing that has an encounter recorded sends nothing", #sent == 0)
+sent = {}
+local realInGroup = IsInGroup
+IsInGroup = function() return false end
+GuildToolsLootTestDB.syncNote = { wins = 1, losses = 0, trades = 0, encounters = { 3470 }, at = time() }
+loginFrame.scripts.OnEvent(loginFrame, "PLAYER_LOGIN")
+IsInGroup = realInGroup
+check("and nothing is sent when we are not in a group", #sent == 0)
+
+-- the self-test command
+freshBatch({ { itemId = 1, winner = "Tester", time = t0, encounterId = 3470 } }, {})
+out = say("GUILDTOOLSLOOTTEST", "synctest")
+tick()
+check("/gtloottest synctest pretends a peer synced and the button closes", out:find("is closed %(works%)") and not buttonShown(), out:sub(1, 240))
+freshBatch({}, {})
+out = say("GUILDTOOLSLOOTTEST", "synctest")
+check("...and with nothing captured it says so instead of pretending", out:find("nothing pending"), out)
+freshBatch({ { itemId = 3, winner = "Untagged", time = t0 } }, {})
+out = say("GUILDTOOLSLOOTTEST", "synctest")
+check("...and warns when the pending loot has no encounter to cover", out:find("nothing pending that has an encounter"), out)
 GuildToolsLootTestDB.syncPromptOff = nil
 
 -- =========================== the flush test ===========================

@@ -11,6 +11,7 @@
 --   /gtloottest debug                where you are, how loot is handed out, what logging is on (saved too)
 --   /gtloottest lootlines [n]        the raw CHAT_MSG_LOOT text the game handed this addon, and whether it matches
 --   /gtloottest sync                 reload the UI now so Guild Tools gets your loot (also the click-to-sync button)
+--   /gtloottest synctest             pretend another officer already synced (your sync button closes)
 --   /gtloottest flushtest            try ways to make WoW write WoWChatLog.txt now, without a reload
 --   /gtloottest help                 list every test command
 --
@@ -148,6 +149,7 @@ local CHECKS = {
   { id = "flush", kind = "auto", text = "Ran /gtloottest flushtest (Claude reads which step worked)", hint = "four steps, 20 s apart, ~65 s: keep chatting, then tell Claude it finished" },
   { id = "syncbtn", kind = "auto", text = "The 'Loot ready: click to sync' button appeared", hint = "after a win or lost roll, ~15 s of quiet, out of combat" },
   { id = "syncclick", kind = "auto", text = "Sync reloaded the UI (button click or /gtloottest sync)", hint = "if it says 'type /reload yourself', tell Claude what it printed" },
+  { id = "synccover", kind = "auto", text = "Another officer's sync closed your button (/gtloottest synctest pretends one)", hint = "needs a captured win with an encounter recorded" },
   { id = "app_sync", kind = "manual", text = "Test app + Discord got the win within ~15 s of the sync", hint = "Loot History (Guild Tools (Test)) and CRD-TEST #loot-need-wins" },
   { id = "once", kind = "manual", text = "Each win was posted to Discord exactly ONCE", hint = "no duplicates (a bug on 9/19: every win posted twice)" },
   { id = "chatpath", kind = "auto", text = "The chat-text path saw a win (lootlines shows [NEED WIN])", hint = "addon 1.7 fix: the game now writes ', Main-Spec' in the roll" },
@@ -555,10 +557,45 @@ local function syncCounts()
   return { r = #(db.records or {}), l = #(db.needLosses or {}), t = #(db.trades or {}) }
 end
 
+-- Loot another raid member has already synced. Their sync message names the encounters it covered; anything of ours from those
+-- encounters captured up to that moment is the same rolls (every roll is broadcast to the whole group), so our own sync
+-- would only repeat it. Kept in memory only: a reload or logout clears it, and our own data is saved either way, so hiding
+-- the button never loses anything -- at worst our copy reaches Guild Tools at our next reload or logout instead.
+local SYNC_PREFIX = "GTLSYNC"
+local syncCovered = {} -- encounterId -> time() the covering message arrived
+
+local function syncIsCovered(rec)
+  local at = rec.encounterId and syncCovered[rec.encounterId]
+  return at ~= nil and (rec.time or 0) <= at
+end
+
+-- What a sync would carry that nobody else has already synced: wins, lost rolls, trades, and the encounters they belong to.
+local function syncPendingParts()
+  if not syncBase then return 0, 0, 0, {} end
+  local db = GuildToolsLootTestDB or {}
+  local wins, losses = 0, 0
+  local encounters, seen = {}, {}
+  local function noteEncounter(rec)
+    if rec.encounterId and not seen[rec.encounterId] then
+      seen[rec.encounterId] = true
+      encounters[#encounters + 1] = rec.encounterId
+    end
+  end
+  for i = syncBase.r + 1, #(db.records or {}) do
+    local rec = db.records[i]
+    if not syncIsCovered(rec) then wins = wins + 1; noteEncounter(rec) end
+  end
+  for i = syncBase.l + 1, #(db.needLosses or {}) do
+    local rec = db.needLosses[i]
+    if not syncIsCovered(rec) then losses = losses + 1; noteEncounter(rec) end
+  end
+  local trades = math.max(0, #(db.trades or {}) - syncBase.t)
+  return wins, losses, trades, encounters
+end
+
 local function syncPending()
-  if not syncBase then return 0 end
-  local c = syncCounts()
-  return math.max(0, c.r - syncBase.r) + math.max(0, c.l - syncBase.l) + math.max(0, c.t - syncBase.t)
+  local wins, losses, trades = syncPendingParts()
+  return wins + losses + trades
 end
 
 -- "3 Need win(s) and 12 lost roll(s)": what a sync will carry, in words.
@@ -569,12 +606,6 @@ local function describeLoot(wins, losses, trades)
   if trades > 0 then parts[#parts + 1] = trades .. " trade(s)" end
   if #parts == 0 then return "nothing new" end
   return table.concat(parts, " and ")
-end
-
-local function syncPendingParts()
-  if not syncBase then return 0, 0, 0 end
-  local c = syncCounts()
-  return math.max(0, c.r - syncBase.r), math.max(0, c.l - syncBase.l), math.max(0, c.t - syncBase.t)
 end
 
 local syncAnnouncedFor = 0 -- the pending count the chat message was last printed for, so it is said once per batch
@@ -590,8 +621,8 @@ local function syncNow()
   -- Ticked BEFORE the reload: the reload is what writes this table to disk. The note is what the chat message after the
   -- reload reads (it is written to disk by the same reload).
   states.syncclick = "pass"
-  local wins, losses, trades = syncPendingParts()
-  GuildToolsLootTestDB.syncNote = { wins = wins, losses = losses, trades = trades, at = time() }
+  local wins, losses, trades, encounters = syncPendingParts()
+  GuildToolsLootTestDB.syncNote = { wins = wins, losses = losses, trades = trades, encounters = encounters, at = time() }
   local ok, err = pcall(ReloadUI)
   if not ok then
     states.syncclick = "fail"
@@ -679,6 +710,32 @@ local function initSyncBaseline()
   syncSeen = syncBase
   syncChangedAt = GetTime()
   syncAnnouncedFor = 0
+  syncCovered = {} -- a fresh session (login or reload): whatever others synced earlier is already in the baseline
+end
+
+-- Tells the rest of the group which encounters this sync covered, so their sync buttons close (they would only repeat it).
+-- Sent AFTER the reload, once the chat channels are ready: a message queued at the moment of the click can be lost to
+-- the reload, and ReloadUI must be called from the click itself so it cannot wait for the message. Not sent while the game
+-- restricts addon chat (an encounter in progress); tried again a few times. Only ever a convenience: nothing depends on it.
+local function broadcastSynced(encounters)
+  if not encounters or #encounters == 0 then return end
+  if not (C_ChatInfo and C_ChatInfo.SendAddonMessage) then return end
+  local ids = {}
+  for i = 1, math.min(#encounters, 12) do ids[#ids + 1] = tostring(encounters[i]) end
+  local message = "S1;" .. table.concat(ids, ",")
+  local attempts = 0
+  local function try()
+    attempts = attempts + 1
+    local channel = groupChannel()
+    if not channel then return end
+    local sent = false
+    if not (C_ChatInfo.InChatMessagingLockdown and C_ChatInfo.InChatMessagingLockdown()) then
+      local ok, result = pcall(C_ChatInfo.SendAddonMessage, SYNC_PREFIX, message, channel)
+      sent = ok and (result == nil or result == 0 or result == true)
+    end
+    if not sent and attempts < 4 then C_Timer.After(10, try) end
+  end
+  C_Timer.After(5, try)
 end
 
 -- The confirmation after a sync's reload. All the addon can honestly say is that the loot is logged and saved to disk;
@@ -688,7 +745,58 @@ local function announceSyncNote()
   GuildToolsLootTestDB.syncNote = nil
   if note and (time() - (note.at or 0)) < 300 then
     announce("Loot logged and saved: " .. describeLoot(note.wins or 0, note.losses or 0, note.trades or 0) .. ". Guild Tools picks it up within a few seconds if it is open.")
+    broadcastSynced(note.encounters)
   end
+end
+
+-- A message from another raid member's addon: "S1;3470,3471" = "I synced the loot for these encounters". Only ever closes our
+-- own sync button; accepted from group channels only, digits and commas only, and never from ourselves.
+local function coverFromPeer(text, sender)
+  local ids = text:match("^S1;([%d,]+)$")
+  if not ids then return false end
+  local before = syncPending()
+  local now = time()
+  local count = 0
+  for id in ids:gmatch("%d+") do
+    count = count + 1
+    if count > 12 then break end
+    syncCovered[tonumber(id)] = now
+  end
+  if before > 0 and syncPending() == 0 then
+    checklistStates().synccover = "pass"
+    announce((sender:match("^[^-]+") or sender) .. " already logged this loot and synced it to Guild Tools, so your sync button is closed. Your own copy is still saved when you reload or log out.")
+  end
+  updateSyncPrompt()
+  return true
+end
+
+do
+  local peerFrame = CreateFrame("Frame")
+  if C_ChatInfo and C_ChatInfo.RegisterAddonMessagePrefix then pcall(C_ChatInfo.RegisterAddonMessagePrefix, SYNC_PREFIX) end
+  peerFrame:RegisterEvent("CHAT_MSG_ADDON")
+  peerFrame:SetScript("OnEvent", function(_, _, prefix, text, channel, sender)
+    if prefix ~= SYNC_PREFIX then return end
+    if issecretvalue and (issecretvalue(text) or issecretvalue(sender)) then return end
+    if type(text) ~= "string" or type(sender) ~= "string" then return end
+    if channel ~= "RAID" and channel ~= "PARTY" and channel ~= "INSTANCE_CHAT" then return end
+    local me = UnitName("player")
+    if me and sender:match("^[^-]+") == me then return end
+    coverFromPeer(text, sender)
+  end)
+end
+
+-- /gtloottest synctest: pretend another officer just synced what we have pending, to see the button close without needing
+-- a second officer running this addon.
+local function syncPeerTest()
+  local _, _, _, encounters = syncPendingParts()
+  if #encounters == 0 then
+    announce("synctest: nothing pending that has an encounter recorded -- capture a win or lost roll first.")
+    return
+  end
+  announce("synctest: pretending another officer just synced encounter(s) " .. table.concat(encounters, ", ") .. "...")
+  coverFromPeer("S1;" .. table.concat(encounters, ","), "TestOfficer-Realm")
+  local left = syncPending()
+  announce("synctest: your sync button " .. (left == 0 and "is closed (works)." or "is still open: " .. left .. " item(s) have no encounter recorded, so nobody's message can cover them."))
 end
 
 -- ---------------------------------------------------------------------------------------------
@@ -759,6 +867,7 @@ local function testHelp()
   announce("  /gtloottest checklist [text|reset]      -- the on-screen test checklist (drag it; ticks itself)")
   announce("  /gtloottest check <id>                  -- tick a manual item: app_sync, once, legacy")
   announce("  /gtloottest sync                        -- reload now so Guild Tools gets your loot (also the click-to-sync button that appears after loot)")
+  announce("  /gtloottest synctest                    -- pretend another officer synced: your sync button should close")
   announce("  /gtloottest flushtest                   -- try ways to make WoW write WoWChatLog.txt without a reload (four steps, ~65 s)")
   announce("  /gtloottest help                        -- this list")
   announce("This test addon keeps its own data (GuildToolsLootTestDB) and never reaches the Guild Tools app.")
@@ -781,6 +890,8 @@ SlashCmdList["GUILDTOOLSLOOTTEST"] = function(msg)
     checkCommand(rest)
   elseif arg == "sync" then
     syncNow()
+  elseif arg == "synctest" then
+    syncPeerTest()
   elseif arg == "syncoff" then
     GuildToolsLootTestDB.syncPromptOff = not GuildToolsLootTestDB.syncPromptOff
     if syncFrame then syncFrame:Hide() end
