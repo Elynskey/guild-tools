@@ -102,6 +102,14 @@ function resolveWinnerName(rawWinner) {
   return getCharacterName();
 }
 
+// A win older than this when the app reads it is not "live". WoW writes the chat log only when a player logs out, so a win read
+// hours after it happened is a buffered dump, never a live capture -- and recording it does harm: for content the addon does not track
+// (Raid Finder, a pug, a dungeon) no authoritative addon record ever arrives to confirm it, so it stayed in the shared store as a
+// phantom "unconfirmed" win, counted in Loot History and the Season report. Confirmed live 2026-09-21: the real app on the same PC as a
+// TEST raid read the flushed chat log 15 hours later and put the test raid's wins into the live store. The addon's own SavedVariables
+// record (written at the same logout, with boss, difficulty and the tracking rules applied) is what covers every real win.
+const MAX_LINE_AGE_SECONDS = 10 * 60;
+
 function parseLine(line, nowMs = Date.now()) {
   const wonMatch = line.match(WON_ROLL_PATTERN);
   if (!wonMatch) return null;
@@ -145,13 +153,13 @@ function parseLine(line, nowMs = Date.now()) {
  */
 function pollChatLog() {
   const p = chatLogPath();
-  if (!p) return { status: 'not_configured', newRecords: [] };
+  if (!p) return { status: 'not_configured', newRecords: [], staleSkipped: 0 };
 
   let stats;
   try {
     stats = fs.statSync(p);
   } catch {
-    return { status: 'not_configured', newRecords: [] };
+    return { status: 'not_configured', newRecords: [], staleSkipped: 0 };
   }
 
   const state = loadState();
@@ -160,12 +168,12 @@ function pollChatLog() {
     // file. Starting at 0 would ingest the file's whole pre-existing history as "new"
     // wins with no boss and nothing for the addon to ever reconcile them against.
     saveState({ path: p, offset: stats.size });
-    return { status: 'ok', newRecords: [] };
+    return { status: 'ok', newRecords: [], staleSkipped: 0 };
   }
 
   let offset = state.offset;
   if (stats.size < offset) offset = 0; // Log recreated/truncated across a WoW relaunch.
-  if (stats.size === offset) return { status: 'ok', newRecords: [] };
+  if (stats.size === offset) return { status: 'ok', newRecords: [], staleSkipped: 0 };
 
   const buffer = Buffer.alloc(stats.size - offset);
   const fd = fs.openSync(p, 'r');
@@ -177,13 +185,17 @@ function pollChatLog() {
 
   const NEWLINE = 0x0a;
   const newRecords = [];
+  let staleSkipped = 0;
+  const nowMs = Date.now();
   let lineStart = 0;
   let consumedBytes = 0;
   for (let i = 0; i < buffer.length; i++) {
     if (buffer[i] !== NEWLINE) continue;
     const line = buffer.subarray(lineStart, i).toString('utf8').replace(/\r$/, '');
-    const record = parseLine(line);
-    if (record) {
+    const record = parseLine(line, nowMs);
+    if (record && nowMs / 1000 - record.time > MAX_LINE_AGE_SECONDS) {
+      staleSkipped += 1; // a buffered dump: left to the addon's own record
+    } else if (record) {
       newRecords.push(record);
       pipelineLog.record('chat-win', `${record.winner} won ${record.itemLink.replace(/^\[|\]$/g, '')} (Need)`, { winner: record.winner, itemLink: record.itemLink, selfWin: !!record.selfWin });
     }
@@ -195,7 +207,10 @@ function pollChatLog() {
   // gets appended after, once the line is actually complete.
 
   saveState({ path: p, offset: offset + consumedBytes });
-  return { status: 'ok', newRecords };
+  if (staleSkipped > 0) {
+    pipelineLog.record('chat-stale', `Ignored ${staleSkipped} Need win(s) in a chat log flush older than ${MAX_LINE_AGE_SECONDS / 60} minutes: WoW writes the log only at logout, so the addon's own record covers them`, { staleSkipped });
+  }
+  return { status: 'ok', newRecords, staleSkipped };
 }
 
 // A narrow, clearly-labeled freshness check for the app's own "is live capture
@@ -250,4 +265,4 @@ function classifyLootLine(line) {
   return { kind: 'loot-other', text };
 }
 
-module.exports = { pollChatLog, getChatLogStatus, classifyLootLine, chatLogPath, lineTimeSeconds };
+module.exports = { pollChatLog, getChatLogStatus, classifyLootLine, chatLogPath, lineTimeSeconds, MAX_LINE_AGE_SECONDS };

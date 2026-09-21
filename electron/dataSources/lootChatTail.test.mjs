@@ -35,8 +35,15 @@ afterEach(() => {
 // brackets around "Loot", an optional ", Main-Spec"/"Off-Spec" qualifier, and no item
 // hyperlink at all, just the plain item name. See lootChatTail.cjs's own comment for
 // why this differs from the addon's in-game CHAT_MSG_LOOT text.
-const WON_LINE = "9/18 21:49:26.420  Loot: Dharma (Need - 92, Main-Spec) Won: Cincture of the Abyssal Grotto";
-const WON_LINE_SELF = '9/18 21:49:28.730  Loot: You (Need - 94, Main-Spec) Won: Tomb-Creeper\'s Claw';
+// A line's own stamp is local time, "month/day hh:mm:ss.mmm". Wins older than 10 minutes when read are ignored (see
+// MAX_LINE_AGE_SECONDS), so a test win needs a stamp from just now.
+const stampAgo = (secondsAgo) => {
+  const d = new Date(Date.now() - secondsAgo * 1000);
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getMonth() + 1}/${d.getDate()} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}.${String(d.getMilliseconds()).padStart(3, '0')}`;
+};
+const WON_LINE = `${stampAgo(4)}  Loot: Dharma (Need - 92, Main-Spec) Won: Cincture of the Abyssal Grotto`;
+const WON_LINE_SELF = `${stampAgo(3)}  Loot: You (Need - 94, Main-Spec) Won: Tomb-Creeper's Claw`;
 
 describe('pollChatLog', () => {
   it('seeks to EOF on the very first poll of a new path and captures nothing pre-existing', () => {
@@ -145,8 +152,45 @@ describe('pollChatLog', () => {
     // Only meaningful if this dev machine has no real WoW install at lootLog.cjs's
     // hardcoded Windows default path for resolveWowPath() to fall back to.
     if (badLootLog.isRealWowPath('C:\\Program Files (x86)\\World of Warcraft\\_retail_')) return;
-    expect(unconfiguredTail.pollChatLog()).toEqual({ status: 'not_configured', newRecords: [] });
+    expect(unconfiguredTail.pollChatLog()).toEqual({ status: 'not_configured', newRecords: [], staleSkipped: 0 });
     expect(unconfiguredTail.getChatLogStatus()).toMatchObject({ path: null, exists: false, active: false, state: 'unknown' });
+  });
+});
+
+describe('a chat log flush (a buffered dump) is not live capture', () => {
+  it('ignores a win older than 10 minutes when read, and says how many it skipped', () => {
+    writeFileSync(chatLogFile, 'old\n');
+    tail.pollChatLog();
+    appendFileSync(chatLogFile, `${stampAgo(15 * 60 * 60)}  Loot: Mooingshots (Need - 75, Main-Spec) Won: Amani Summoning Shawl\n${stampAgo(11 * 60)}  Loot: Dharma (Need - 92, Main-Spec) Won: Crown\n`);
+    const r = tail.pollChatLog();
+    expect(r.newRecords).toHaveLength(0);
+    expect(r.staleSkipped).toBe(2);
+  });
+
+  it('keeps a win that is a few seconds or minutes old, and skips only the stale ones in the same read', () => {
+    writeFileSync(chatLogFile, 'old\n');
+    tail.pollChatLog();
+    appendFileSync(chatLogFile, `${stampAgo(14 * 3600)}  Loot: Stale (Need - 75, Main-Spec) Won: Old Thing\n${stampAgo(9 * 60)}  Loot: Recent (Need - 60, Main-Spec) Won: New Thing\n${stampAgo(5)}  Loot: Fresh (Need - 50, Main-Spec) Won: Newer Thing\n`);
+    const r = tail.pollChatLog();
+    expect(r.newRecords.map((x) => x.winner)).toEqual(['Recent', 'Fresh']);
+    expect(r.staleSkipped).toBe(1);
+  });
+
+  it('skipped lines are consumed: they are not re-read on the next poll', () => {
+    writeFileSync(chatLogFile, 'old\n');
+    tail.pollChatLog();
+    appendFileSync(chatLogFile, `${stampAgo(20 * 3600)}  Loot: Stale (Need - 75, Main-Spec) Won: Old Thing\n`);
+    expect(tail.pollChatLog().staleSkipped).toBe(1);
+    expect(tail.pollChatLog().staleSkipped).toBe(0);
+  });
+
+  it('a line with no readable stamp is treated as read-time (the old behaviour) and kept', () => {
+    writeFileSync(chatLogFile, 'old\n');
+    tail.pollChatLog();
+    appendFileSync(chatLogFile, 'Loot: Nostamp (Need - 92, Main-Spec) Won: Some Thing\n');
+    const r = tail.pollChatLog();
+    expect(r.newRecords).toHaveLength(1);
+    expect(r.staleSkipped).toBe(0);
   });
 });
 
