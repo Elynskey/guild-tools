@@ -79,7 +79,7 @@ describe('the Live view report', () => {
   });
 
   it('lists the officer apps and does not pretend the test diary is the live timeline', () => {
-    expect(live).toContain('Officer apps reporting: Quixhea (chat log on), Odasa (chat log quiet)');
+    expect(live).toContain('Officer apps reporting: Quixhea (chat logging on), Odasa (chat logging not confirmed on)');
     expect(live).toContain('not applicable in the Live view');
     expect(live).not.toContain('[chat-win]');
   });

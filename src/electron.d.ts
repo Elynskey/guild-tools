@@ -273,6 +273,27 @@ export interface RawPull {
   at: number;
 }
 
+/** `writing`: the file was written recently. `on-buffered`: the game says logging is on, the file is behind (WoW writes it when you log out). `off`: the game says it is off. `unknown`: no reading and a quiet file. */
+export type ChatLogState = 'writing' | 'on-buffered' | 'off' | 'unknown';
+
+/**
+ * This PC's chat log, as the app can honestly read it. WoW writes WoWChatLog.txt only when you log out (a /reload does not write it), so a quiet
+ * file usually means "on, not written yet" rather than "off": `active` (written recently) is proof that logging works,
+ * never proof that it doesn't. `gameReading` is the game's own reading, saved by the addon (1.7+) at login and at every
+ * reload/logout; `state` combines the two.
+ */
+export interface ChatLogView {
+  path: string | null;
+  exists: boolean;
+  active: boolean;
+  /** ms since epoch of the chat log's last write, null if there is no file. */
+  lastWriteAt: number | null;
+  sizeBytes: number | null;
+  /** The game's own chat-logging reading as of `at` (ms), or null if the addon has not recorded one. Optional so older callers and fixtures still type-check. */
+  gameReading?: { on: boolean; at: number } | null;
+  state?: ChatLogState;
+}
+
 export interface LootRawFeeds {
   lootLines: { available: boolean; lines: RawLootLine[] };
   pulls: { available: boolean; pulls: RawPull[] };
@@ -283,7 +304,7 @@ export interface LootMonitorSnapshot {
   now: number;
   wow: WowPathConfig;
   addon: AddonVersionInfo;
-  chatLog: { path: string | null; exists: boolean; active: boolean; lastWriteAt: number | null; sizeBytes: number | null };
+  chatLog: ChatLogView;
   combatLog: { exists: boolean; active: boolean; lastKill: { boss: string; difficultyId: number; endedAt: number } | null };
   session: { lastPollAt: number | null; lastStatus: string | null; capturedThisSession: number; lastCaptureAt: number | null };
   sessionStartedAt: number;
@@ -359,7 +380,7 @@ export interface ElectronAPI {
     lastStatus: 'ok' | 'not_configured' | 'error' | null;
     capturedThisSession: number;
     lastCaptureAt: number | null;
-    chatLog: { path: string | null; exists: boolean; active: boolean; /** ms since epoch of the chat log's last write, null if there is no file. */ lastWriteAt: number | null; sizeBytes: number | null };
+    chatLog: ChatLogView;
     /** The combat log is what tells Guild Tools which boss was just killed, so a win can be attributed (and auto-posted) with no /reload. */
     combatLog: { exists: boolean; active: boolean; lastKill: { boss: string; difficultyId: number; endedAt: number } | null };
   }>;

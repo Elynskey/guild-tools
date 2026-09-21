@@ -52,7 +52,7 @@ function RaidCoverageRow({ heartbeats }: { heartbeats: { officerName: string; ch
       <span style={{ fontSize: 'var(--text-body-s)', color: 'var(--text-body)' }}>
         {covered
           ? `${activeOfficers.length} of ${heartbeats.length} officer app${heartbeats.length === 1 ? '' : 's'} reporting in has chat logging active (${activeOfficers.map((h) => h.officerName).join(', ')}).`
-          : `${heartbeats.length} officer app${heartbeats.length === 1 ? '' : 's'} reporting in, but none have chat logging active -- live capture won't work for anyone until someone turns chat logging on (the addon does it automatically at login, or type /chatlog).`}
+          : `${heartbeats.length} officer app${heartbeats.length === 1 ? '' : 's'} reporting in, but none has chat logging confirmed on -- live capture won't work for anyone until someone turns chat logging on (the addon does it automatically at login, or type /chatlog). The addon has to be version 1.7 or newer for the game to report its state; before that an officer whose file is just behind can look off here.`}
       </span>
     </div>
   );
@@ -210,11 +210,12 @@ function AutoPostRow({ lh }: { lh: ReturnType<typeof useLootHistory> }) {
   );
 }
 
-/** Proves chat logging is really writing -- for this PC and every other officer at once. The game can say ON while nothing reaches the log file; a line said in raid or party chat lands in everyone's log, so watching for it verifies all the loggers. */
+/** Checks chat logging for this PC and every other officer at once. WoW writes the log file only when you log out (a /reload does not write it), so a quiet file during play is normal: this tells a real write (verified) from "on, the file is behind" (buffered) from "not on" (failed). */
 function VerifyRow({ lh }: { lh: ReturnType<typeof useLootHistory> }) {
   const v = lh.verify;
   const failedNames = [...(v.self === 'failed' ? ['this PC'] : []), ...v.others.filter((o) => o.status === 'failed').map((o) => o.name.split('#')[0])];
-  const chip = (label: string, status: 'verified' | 'waiting' | 'failed') => (
+  const bufferedNames = [...(v.self === 'buffered' ? ['this PC'] : []), ...v.others.filter((o) => o.status === 'buffered').map((o) => o.name.split('#')[0])];
+  const chip = (label: string, status: 'verified' | 'waiting' | 'buffered' | 'failed') => (
     <span
       key={label}
       style={{
@@ -223,12 +224,13 @@ function VerifyRow({ lh }: { lh: ReturnType<typeof useLootHistory> }) {
         gap: 5,
         padding: '2px 9px',
         borderRadius: 999,
-        border: `1px solid ${status === 'verified' ? 'rgba(95,158,74,.6)' : status === 'failed' ? 'rgba(192,144,47,.6)' : 'var(--border-hairline)'}`,
+        border: `1px solid ${status === 'verified' ? 'rgba(95,158,74,.6)' : status === 'failed' ? 'rgba(192,144,47,.6)' : status === 'buffered' ? 'rgba(201,169,97,.5)' : 'var(--border-hairline)'}`,
         fontSize: 'var(--text-micro)',
-        color: status === 'verified' ? 'var(--status-success)' : status === 'failed' ? 'var(--status-warning)' : 'var(--text-muted)',
+        color: status === 'verified' ? 'var(--status-success)' : status === 'failed' ? 'var(--status-warning)' : status === 'buffered' ? 'var(--text-gold)' : 'var(--text-muted)',
       }}
     >
-      {status === 'verified' ? '✓' : status === 'failed' ? '✕' : '…'} {label}
+      {status === 'verified' ? '✓' : status === 'failed' ? '✕' : status === 'buffered' ? '●' : '…'} {label}
+      {status === 'buffered' ? ' (on, file behind)' : ''}
     </span>
   );
   return (
@@ -237,10 +239,11 @@ function VerifyRow({ lh }: { lh: ReturnType<typeof useLootHistory> }) {
         <Button size="sm" variant="secondary" onClick={() => void lh.startVerify()} disabled={v.phase === 'waiting'} iconLeft="check">
           {v.phase === 'waiting' ? `Watching… ${v.secondsLeft}s` : 'Verify chat logging'}
         </Button>
-        <HelpTooltip text="The game can say chat logging is ON while nothing is actually being written, and a quiet stretch looks the same as off. Say ONE line in raid or party chat while this watches: it lands in every officer's chat log at once, so it verifies everyone who is logging. Officers who aren't in your raid group won't see it, so they'll show as not written." />
+        <HelpTooltip text="WoW keeps chat lines in memory and writes the chat log file only when you log out (a /reload does not write it), so a quiet file during play is normal and does NOT mean logging is off. Say ONE line in raid or party chat while this watches: a check mark means that officer's file really got written just now (usually right after a reload). A gold dot means their game says logging is ON and the file will catch up when you next log out. A cross means logging is not on, or can't be confirmed (the addon must be version 1.7+ for the game to report its state). Officers not in your raid group show the same way." />
         {v.phase === 'waiting' && <span style={{ fontSize: 'var(--text-body-s)', color: 'var(--text-body)' }}>Say one line in raid or party chat now, in game.</span>}
-        {v.phase === 'done' && failedNames.length === 0 && <Badge tone="success">Verified: everyone is writing</Badge>}
-        {v.phase === 'done' && failedNames.length > 0 && <Badge tone="warning">{failedNames.length} not writing</Badge>}
+        {v.phase === 'done' && failedNames.length === 0 && bufferedNames.length === 0 && <Badge tone="success">Verified: everyone is writing</Badge>}
+        {v.phase === 'done' && failedNames.length === 0 && bufferedNames.length > 0 && <Badge tone="gold">Logging is on; files catch up at a reload</Badge>}
+        {v.phase === 'done' && failedNames.length > 0 && <Badge tone="warning">{failedNames.length} not confirmed on</Badge>}
       </div>
       {v.phase !== 'idle' && (
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -248,9 +251,14 @@ function VerifyRow({ lh }: { lh: ReturnType<typeof useLootHistory> }) {
           {v.others.map((o) => chip(o.name.split('#')[0], o.status))}
         </div>
       )}
+      {v.phase === 'done' && bufferedNames.length > 0 && (
+        <div style={{ fontSize: 'var(--text-micro)', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+          Chat logging is ON for <b>{bufferedNames.join(', ')}</b>, but WoW hasn't written the file yet. It only does that when you log out (a /reload doesn't), so live loot from the chat log shows up then; the addon's own capture is not affected.
+        </div>
+      )}
       {v.phase === 'done' && failedNames.length > 0 && (
         <div style={{ fontSize: 'var(--text-micro)', color: 'var(--status-warning)', lineHeight: 1.5 }}>
-          No new line reached the chat log for: <b>{failedNames.join(', ')}</b>. If someone is in the raid and the game says logging is ON, it may not really be writing: in game, type <b>/gtloot chatlog</b> (or /chatlog twice: off, then on), then verify again. Officers not in this raid group are expected to show here.
+          Chat logging is not confirmed on for: <b>{failedNames.join(', ')}</b>. In game, type <b>/chatlog</b> (or <b>/gtloot chatlog</b>), and make sure the addon is version 1.7 or newer so the game can report its state. Officers who aren't in this raid group can show here too.
         </div>
       )}
     </div>
@@ -263,13 +271,24 @@ function LiveCaptureCard({ lh }: { lh: ReturnType<typeof useLootHistory> }) {
 
   let statusTone: 'success' | 'warning' | 'neutral' = 'neutral';
   let statusText = 'Checking…';
+  let statusLabel: string | null = null;
+  const state = chatLog ? (chatLog.state ?? (chatLog.active ? 'writing' : 'unknown')) : null;
   if (chatLog) {
     if (!chatLog.exists) {
       statusTone = 'warning';
       statusText = "Can't find your WoW chat log yet -- type /chatlog in game (it works right away, no logout needed). The addon also turns it on for you at login.";
-    } else if (!chatLog.active) {
+    } else if (state === 'off') {
       statusTone = 'warning';
-      statusText = `Chat log found, but its last line was ${timeAgo(chatLog.lastWriteAt)}. That can be a quiet stretch or logging being off -- press Verify below to find out.`;
+      statusLabel = 'Chat logging is off';
+      statusText = `The game reported chat logging OFF (${timeAgo(chatLog.gameReading?.at ?? null)}). Type /chatlog in game -- it works right away, and the addon also turns it on at login.`;
+    } else if (state === 'on-buffered') {
+      statusTone = 'success';
+      statusLabel = 'Logging is on';
+      statusText = `Chat logging is ON (the game said so ${timeAgo(chatLog.gameReading?.at ?? null)}). WoW writes the chat log file only when you log out (a /reload does not write it), so live loot from it updates then -- its last write was ${timeAgo(chatLog.lastWriteAt)}.`;
+    } else if (state === 'unknown') {
+      statusTone = 'neutral';
+      statusLabel = "Can't tell yet";
+      statusText = `The chat log file was last written ${timeAgo(chatLog.lastWriteAt)}, which is normal: WoW writes it only when you log out. The game hasn't reported whether logging is on yet -- that needs the addon at version 1.7 or newer and one reload.`;
     } else if (!nameSet) {
       statusTone = 'warning';
       statusText = "Watching your chat log, but I can't tell which character you play yet -- set it below so your own wins are captured live.";
@@ -293,7 +312,7 @@ function LiveCaptureCard({ lh }: { lh: ReturnType<typeof useLootHistory> }) {
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
         <Badge tone={statusTone === 'success' ? 'gold' : statusTone === 'warning' ? 'warning' : 'neutral'} dot>
-          {statusTone === 'success' ? 'Live for this raid' : statusTone === 'warning' ? 'Needs attention' : 'Checking'}
+          {statusLabel ?? (statusTone === 'success' ? 'Live for this raid' : statusTone === 'warning' ? 'Needs attention' : 'Checking')}
         </Badge>
         <span style={{ fontSize: 'var(--text-body-s)', color: 'var(--text-body)' }}>{statusText}</span>
         {(lh.chatTailStatus?.capturedThisSession ?? 0) > 0 && (
@@ -388,7 +407,7 @@ export function LootHistory() {
               <code>/gtloot scan</code> -- pull in any wins Loot History caught but the addon missed live
             </div>
             <div>
-              <code>/gtloot chatlog</code> -- restart chat logging (off, then on) when the game says it's ON but Guild Tools says nothing is being written. Then press Verify chat logging above.
+              <code>/gtloot chatlog</code> -- restart chat logging (off, then on) if it reads OFF. A quiet chat log file is normal: WoW writes it only when you log out.
             </div>
             <div>
               <code>/chatlog</code> -- turns on live updates to this app. Works right away (no logout), but it switches itself off every time you log out to the character screen, so the addon now turns it back on at login and on <code>/gtloot on</code>. The Refresh button on the <code>/gtloot</code> popup re-checks it.

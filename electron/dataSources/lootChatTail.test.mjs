@@ -146,7 +146,7 @@ describe('pollChatLog', () => {
     // hardcoded Windows default path for resolveWowPath() to fall back to.
     if (badLootLog.isRealWowPath('C:\\Program Files (x86)\\World of Warcraft\\_retail_')) return;
     expect(unconfiguredTail.pollChatLog()).toEqual({ status: 'not_configured', newRecords: [] });
-    expect(unconfiguredTail.getChatLogStatus()).toEqual({ path: null, exists: false, active: false });
+    expect(unconfiguredTail.getChatLogStatus()).toMatchObject({ path: null, exists: false, active: false, state: 'unknown' });
   });
 });
 
@@ -217,5 +217,74 @@ describe('getChatLogStatus', () => {
     expect(status.exists).toBe(false);
     expect(status.active).toBe(false);
     expect(status.path).toBe(chatLogFile);
+  });
+});
+
+describe('getChatLogStatus: the game own reading beats a stale file (WoW buffers the chat log until you log out)', () => {
+  const savedVarsDir = () => path.join(wowPath, 'WTF', 'Account', 'ACCT', 'SavedVariables');
+  const writeReading = (on, at = 1_800_000_000) => {
+    mkdirSync(savedVarsDir(), { recursive: true });
+    writeFileSync(path.join(savedVarsDir(), 'GuildToolsLoot.lua'), `GuildToolsLootDB = {
+  ["records"] = {},
+  ["trades"] = {},
+  ["needLosses"] = {},
+  ["chatLogging"] = {
+    ["on"] = ${on},
+    ["at"] = ${at},
+  },
+}
+`);
+  };
+  const staleLog = () => {
+    writeFileSync(chatLogFile, `${WON_LINE}
+`);
+    const old = new Date(Date.now() - 60 * 60 * 1000);
+    utimesSync(chatLogFile, old, old);
+  };
+
+  it('a stale file with the game saying ON is "on-buffered", not off', () => {
+    staleLog();
+    writeReading('true');
+    const status = tail.getChatLogStatus();
+    expect(status.active).toBe(false);
+    expect(status.state).toBe('on-buffered');
+    expect(status.gameReading).toEqual({ on: true, at: 1_800_000_000_000 });
+  });
+
+  it('only the game saying OFF is reported as off', () => {
+    staleLog();
+    writeReading('false');
+    expect(tail.getChatLogStatus().state).toBe('off');
+  });
+
+  it('a stale file and no reading (older addon) is "unknown", never "off"', () => {
+    staleLog();
+    const status = tail.getChatLogStatus();
+    expect(status.gameReading).toBeNull();
+    expect(status.state).toBe('unknown');
+  });
+
+  it('a file written just now is "writing" whatever an old reading says', () => {
+    writeFileSync(chatLogFile, `${WON_LINE}
+`);
+    writeReading('false');
+    expect(tail.getChatLogStatus().state).toBe('writing');
+  });
+
+  it('a new reading is picked up when the saved file changes, not served from the cache', () => {
+    staleLog();
+    writeReading('true');
+    expect(tail.getChatLogStatus().state).toBe('on-buffered');
+    writeReading('false');
+    const later = new Date(Date.now() + 5000);
+    utimesSync(path.join(savedVarsDir(), 'GuildToolsLoot.lua'), later, later);
+    expect(tail.getChatLogStatus().state).toBe('off');
+  });
+
+  it('the file being missing does not stop the game reading from counting', () => {
+    writeReading('true');
+    const status = tail.getChatLogStatus();
+    expect(status.exists).toBe(false);
+    expect(status.state).toBe('on-buffered');
   });
 });

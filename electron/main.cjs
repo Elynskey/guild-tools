@@ -37,6 +37,7 @@ const { getChatLogStatus } = require('./dataSources/lootChatTail.cjs');
 const { getCombatLogStatus, recentKills } = require('./dataSources/lootCombatLog.cjs');
 const pipelineLog = require('./dataSources/pipelineLog.cjs');
 const { recentLootLines, recentEncounters } = require('./dataSources/rawFeeds.cjs');
+const { isLoggingOn } = require('./dataSources/chatLogState.cjs');
 const { fetchLootLog, syncAddonDataIfChanged, addManualLootRecord, updateLootRecord, removeLootRecord, removeLootTrade, deleteLootNight, syncChatTailCapture } = require('./dataSources/fetchLootLog.cjs');
 
 // In-memory only (not persisted) -- this session's record of whether live loot capture
@@ -507,7 +508,9 @@ app.whenReady().then(() => {
 
     if (proxyClient.isAvailable() && authState?.displayName) {
       const chatLog = getChatLogStatus();
-      proxyClient.sendLootCaptureHeartbeat(authState.displayName, chatLog.active, chatLog.sizeBytes).catch(() => {});
+      // "Logging is on" for the raid-wide coverage: recently written OR the game says it is on (WoW buffers the file, so a
+      // quiet file is not evidence of off). The size still goes along so the proxy can tell when a write really lands.
+      proxyClient.sendLootCaptureHeartbeat(authState.displayName, isLoggingOn(chatLog.state), chatLog.sizeBytes).catch(() => {});
     }
   };
   runChatTailPoll();

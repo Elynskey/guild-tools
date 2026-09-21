@@ -408,7 +408,7 @@ end
 local MAX_LOOT_LINES = 80
 
 local function testMatchesNeedWin(message)
-  local winner, rollType = message:match(WON_ROLL_PATTERN)
+  local winner, rollType = plainLootText(message):match(WON_ROLL_PATTERN)
   if winner and rollType and rollType:lower():find("need") then return true, winner, rollType end
   return false, winner, rollType
 end
@@ -539,7 +539,7 @@ local function showDebug()
 end
 
 -- ---------------------------------------------------------------------------------------------
--- One-click sync. WoW writes this addon's saved data (and buffers the chat log) only at /reload or logout, and
+-- One-click sync. WoW writes this addon's saved data at /reload or logout (the chat log only at logout), and
 -- ReloadUI() needs a real click or key press, so it cannot be done on a timer. Instead: once new loot results have
 -- been captured and things have been quiet for a moment, a small button offers the reload. One click, and Guild
 -- Tools has the wins within seconds. Never shown in combat or during an encounter.
@@ -650,7 +650,7 @@ local function initSyncBaseline()
 end
 
 -- ---------------------------------------------------------------------------------------------
--- /gtloottest flushtest: WoW keeps chat lines in memory and writes WoWChatLog.txt only at /reload or logout
+-- /gtloottest flushtest: WoW keeps chat lines in memory and writes WoWChatLog.txt only at logout (a /reload does not, confirmed 2026-09-20)
 -- (confirmed live 2026-09-19). This tries the ways an addon can ask for the file to be closed and reopened, one
 -- every 20 seconds, and records the exact time of each so an outside watcher can match them to the moment the file
 -- grew. Whichever one makes it grow can then run automatically after every boss, with no reload.

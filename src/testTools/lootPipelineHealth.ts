@@ -84,9 +84,15 @@ export function localSetupChecks(snap: LootMonitorSnapshot, view: MonitorView): 
   const addonDetail = `installed ${snap.addon.installed ?? 'none'}, this build carries ${snap.addon.bundled ?? '?'}`;
   add('Setup', 'addon', `${addonName} installed and current`, snap.addon.status === 'current' ? 'ok' : snap.addon.status === 'outdated' ? 'warn' : 'fail', snap.addon.status === 'current' ? addonDetail : snap.addon.status === 'outdated' ? `${addonDetail}: ${view === 'live' ? 'update it from the normal Guild Tools app (Loot History), not from this Test app,' : 'press Update addon now on Loot History,'} then /reload.` : 'The addon is not installed (or WoW was not found).');
 
-  if (!snap.chatLog.exists) add('Setup', 'chatlog', 'Chat log is being written', 'fail', `No WoWChatLog.txt: chat logging has never been on for this install. In game: ${command} chatlog.`);
-  else if (snap.chatLog.active) add('Setup', 'chatlog', 'Chat log is being written', 'ok', `last line ${snap.chatLog.lastWriteAt ? ago(snap.chatLog.lastWriteAt, now) : 'recently'}`);
-  else add('Setup', 'chatlog', 'Chat log is being written', 'warn', `last line ${snap.chatLog.lastWriteAt ? ago(snap.chatLog.lastWriteAt, now) : 'a long time ago'}: a quiet stretch, or logging is off. Say something in chat, or use Verify chat logging on Loot History.`);
+  // WoW writes WoWChatLog.txt only when you log out (a /reload does not; confirmed live 2026-09-19), so a quiet file is NOT evidence that logging
+  // is off. Only the game's own reading (saved by the addon) can say off; a recent write proves on.
+  const chatState = snap.chatLog.state ?? (snap.chatLog.active ? 'writing' : 'unknown');
+  const lastWrite = snap.chatLog.lastWriteAt ? ago(snap.chatLog.lastWriteAt, now) : null;
+  const readingAge = snap.chatLog.gameReading ? ago(snap.chatLog.gameReading.at, now) : null;
+  if (chatState === 'writing') add('Setup', 'chatlog', 'Chat logging is on', 'ok', `the file was written ${lastWrite ?? 'recently'}`);
+  else if (chatState === 'on-buffered') add('Setup', 'chatlog', 'Chat logging is on', 'ok', `the game says it is ON (${readingAge}). WoW writes the chat log file only when you log out (a /reload does not write it), so its last write (${lastWrite ?? 'none yet'}) is normal; wins from the chat log arrive then. The addon's own capture is not affected.`);
+  else if (chatState === 'off') add('Setup', 'chatlog', 'Chat logging is on', 'fail', `the game reported chat logging OFF (${readingAge}). In game: ${command} chatlog, or /chatlog.`);
+  else add('Setup', 'chatlog', 'Chat logging is on', 'warn', `can't tell: ${snap.chatLog.exists ? `the file was last written ${lastWrite ?? 'a long time ago'}, which is normal` : 'there is no WoWChatLog.txt yet (WoW creates and writes it when you log out)'}, and the game has not reported whether logging is on. That needs the addon at version 1.7 or newer and one reload.`);
 
   if (!snap.combatLog.exists) add('Setup', 'combatlog', 'Combat log is being written', 'warn', 'No combat log: boss kills cannot be seen, so wins cannot be attributed live (they still arrive after a /reload).');
   else add('Setup', 'combatlog', 'Combat log is being written', snap.combatLog.active ? 'ok' : 'warn', snap.combatLog.active ? 'writing' : 'Not written in the last 5 minutes: start combat logging (/combatlog) or the Warcraft Logs / Archon logger.');

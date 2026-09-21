@@ -54,7 +54,7 @@ describe('a healthy, quiet start (nothing has happened yet)', () => {
 describe('setup problems', () => {
   it('no WoW folder fails; no chat log fails; a quiet chat log only warns', () => {
     expect(byId(evaluateLootPipeline(snapshot({ wow: { ...snapshot().wow, valid: false, resolved: null } }), [], null), 'wow').status).toBe('fail');
-    expect(byId(evaluateLootPipeline(snapshot({ chatLog: { path: null, exists: false, active: false, lastWriteAt: null, sizeBytes: null } }), [], null), 'chatlog').status).toBe('fail');
+    expect(byId(evaluateLootPipeline(snapshot({ chatLog: { path: null, exists: false, active: false, lastWriteAt: null, sizeBytes: null } }), [], null), 'chatlog').status).toBe('warn');
     const quiet = evaluateLootPipeline(snapshot({ chatLog: { path: 'x', exists: true, active: false, lastWriteAt: NOW - 12 * MIN, sizeBytes: 1 } }), [], null);
     expect(byId(quiet, 'chatlog').status).toBe('warn');
     expect(byId(quiet, 'chatlog').detail).toContain('12m ago');
@@ -171,5 +171,39 @@ describe('heartbeat and the overall verdict', () => {
     expect(evaluateLootPipeline(snapshot({ chatLog: { path: 'x', exists: true, active: false, lastWriteAt: NOW - 20 * MIN, sizeBytes: 1 } }), [], heartbeatOk).overall).toBe('warn');
     const allIdle = evaluateLootPipeline(snapshot({ wow: { ...snapshot().wow, valid: true }, addon: { bundled: null, installed: null, status: 'current' } }), [], null);
     expect(['ok', 'idle']).toContain(allIdle.overall);
+  });
+});
+
+describe('chat logging is judged by the game own reading, not by the file timestamp (WoW writes the file only when you log out)', () => {
+  const quietFile = { path: 'x', exists: true, active: false, lastWriteAt: NOW - 40 * MIN, sizeBytes: 1000 };
+  const chatlog = (over: Partial<LootMonitorSnapshot['chatLog']>) => byId(evaluateLootPipeline(snapshot({ chatLog: { ...quietFile, ...over } }), [], null), 'chatlog');
+
+  it('a quiet file with the game saying ON is fine, and says why the file is behind', () => {
+    const c = chatlog({ state: 'on-buffered', gameReading: { on: true, at: NOW - 20 * MIN } });
+    expect(c.status).toBe('ok');
+    expect(c.detail).toContain('only when you log out (a /reload does not write it)');
+    expect(c.detail).toContain('40m ago');
+  });
+
+  it('only the game saying OFF is a failure', () => {
+    const c = chatlog({ state: 'off', gameReading: { on: false, at: NOW - 5 * MIN } });
+    expect(c.status).toBe('fail');
+    expect(c.detail).toContain('OFF');
+  });
+
+  it('a quiet file and no reading is a warning (cannot tell), never a failure', () => {
+    const c = chatlog({ state: 'unknown', gameReading: null });
+    expect(c.status).toBe('warn');
+    expect(c.detail).toContain("can't tell");
+    expect(c.detail).toContain('1.7');
+  });
+
+  it('a recent write is on, whatever an older reading said', () => {
+    expect(chatlog({ state: 'writing', active: true, lastWriteAt: NOW - 10 * SEC, gameReading: { on: false, at: NOW - 60 * MIN } }).status).toBe('ok');
+  });
+
+  it('the overall verdict is not dragged to broken by a buffered file', () => {
+    const h = evaluateLootPipeline(snapshot({ chatLog: { ...quietFile, state: 'on-buffered', gameReading: { on: true, at: NOW - 20 * MIN } } }), [], { reporting: true, chatLogActive: true });
+    expect(h.overall).not.toBe('fail');
   });
 });

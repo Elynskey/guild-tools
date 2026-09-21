@@ -114,7 +114,12 @@ export function useLootHistory() {
   }, []);
   useEffect(() => stopVerifyTimer, [stopVerifyTimer]);
 
-  const snapshot = (s: Awaited<ReturnType<NonNullable<typeof window.electronAPI>['getChatTailStatus']>>): ChatLogSnapshot => ({ exists: s.chatLog.exists, lastWriteAt: s.chatLog.lastWriteAt, sizeBytes: s.chatLog.sizeBytes });
+  const snapshot = (s: Awaited<ReturnType<NonNullable<typeof window.electronAPI>['getChatTailStatus']>>): ChatLogSnapshot => ({
+    exists: s.chatLog.exists,
+    lastWriteAt: s.chatLog.lastWriteAt,
+    sizeBytes: s.chatLog.sizeBytes,
+    loggingOn: s.chatLog.state === 'writing' || s.chatLog.state === 'on-buffered',
+  });
 
   const startVerify = useCallback(async () => {
     if (!electron) return;

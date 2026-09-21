@@ -117,6 +117,24 @@ check("...maps the word 'You' to this character (not a stranger named You)", Gui
 local before = #GuildToolsLootDB.records
 realFrame.scripts.OnEvent(realFrame, "CHAT_MSG_LOOT", "[Loot]: Tester (Need - 12, Off-Spec) Won: " .. link(2000 + n))
 check("...so a second path reporting the same win under the real name does not record it twice", #GuildToolsLootDB.records == before, tostring(#GuildToolsLootDB.records))
+-- the game's CURRENT wording (live 2026-09-20, WoW 12.1.0): "Loot" is a hyperlink and the item link opens with a named colour
+local RAW_YOU = "|HlootHistory:3470|h[Loot]|h: You (Need - 51, Main-Spec) Won: |cnIQ4:|Hitem:270930::::::::90:577::4:3:6652:13332:12825::::::|h[Tomb-Creeper's Claw]|h|r"
+local RAW_OTHER = "|HlootHistory:3470|h[Loot]|h: Meteos (Need - 89, Main-Spec) Won: |cnIQ4:|Hitem:268203::::::::90:577::4:3:6652:13332:12825::::::|h[Hexing Spiritrender]|h|r"
+local RAW_GREED = "|HlootHistory:3470|h[Loot]|h: Odasa (Greed - 12) Won: |cnIQ2:|Hitem:268204::::::::90:577::4:3:6652:13332:12825::::::|h[Some Cloak]|h|r"
+GuildToolsLootDB.records = {}
+zone(true, "raid", "The Venomous Abyss", 15)
+realFrame.scripts.OnEvent(realFrame, "ENCOUNTER_START", 222, "Raid Boss")
+realFrame.scripts.OnEvent(realFrame, "CHAT_MSG_LOOT", RAW_OTHER)
+check("REAL addon reads a win in the game's CURRENT wording (hyperlinked [Loot], named-colour item link)", #GuildToolsLootDB.records == 1 and GuildToolsLootDB.records[1].winner == "Meteos" and GuildToolsLootDB.records[1].itemId == 268203, tostring(#GuildToolsLootDB.records))
+check("...and keeps the real item link (for the icon and slot)", GuildToolsLootDB.records[1].itemLink:find("Hitem:268203", 1, true) ~= nil, tostring(GuildToolsLootDB.records[1].itemLink))
+realFrame.scripts.OnEvent(realFrame, "CHAT_MSG_LOOT", RAW_YOU)
+check("...maps 'You' to this character in the current wording too", GuildToolsLootDB.records[2] and GuildToolsLootDB.records[2].winner == "Tester" and GuildToolsLootDB.records[2].self == true, GuildToolsLootDB.records[2] and tostring(GuildToolsLootDB.records[2].winner))
+realFrame.scripts.OnEvent(realFrame, "CHAT_MSG_LOOT", RAW_GREED)
+check("...and a Greed win is still ignored", #GuildToolsLootDB.records == 2, tostring(#GuildToolsLootDB.records))
+issecretvalue = function(v) return v == "SECRET" end
+local okSecret = pcall(realFrame.scripts.OnEvent, realFrame, "CHAT_MSG_LOOT", "SECRET")
+issecretvalue = nil
+check("...and a protected (secret) chat message is skipped instead of raising", okSecret and #GuildToolsLootDB.records == 2)
 GuildToolsLootDB.records = realRecordsSoFar
 
 -- =========================== the TEST addon tracks everything ===========================
@@ -308,6 +326,10 @@ check("every loot line is kept as the game sent it, with where it happened", #ke
 check("...and marked as a Need win or not by the addon's own pattern", kept[1].matches == true and kept[2].matches == false and kept[3].matches == false)
 out = say("GUILDTOOLSLOOTTEST", "checklist text")
 check("a line the chat-text pattern matches ticks 'chatpath' on the checklist", out:find("%[x%] chatpath"), out:sub(1, 200))
+lootLineFrame.scripts.OnEvent(lootLineFrame, "CHAT_MSG_LOOT", "|HlootHistory:3470|h[Loot]|h: Meteos (Need - 89, Main-Spec) Won: |cnIQ4:|Hitem:268203::::::::90:577::4:3:6652:13332:12825::::::|h[Hexing Spiritrender]|h|r")
+check("the game's CURRENT wording (hyperlinked [Loot]) is recognised as a Need win by the raw-line tagger too", GuildToolsLootTestDB.lootLines[#GuildToolsLootTestDB.lootLines].matches == true)
+GuildToolsLootTestDB.lootLines[#GuildToolsLootTestDB.lootLines] = nil
+GuildToolsLootTestDB.lootLineStats.seen = GuildToolsLootTestDB.lootLineStats.seen - 1
 lootLineFrame.scripts.OnEvent(lootLineFrame, "CHAT_MSG_LOOT", "[Loot]: Mooingshots (Need - 75, Main-Spec) Won: " .. link(4004))
 check("the game's newer ', Main-Spec' wording is recognised as a Need win", GuildToolsLootTestDB.lootLines[#GuildToolsLootTestDB.lootLines].matches == true)
 GuildToolsLootTestDB.lootLines[#GuildToolsLootTestDB.lootLines] = nil
@@ -379,6 +401,25 @@ check("...and missing logging APIs read 'unavailable'", out:find("combat logging
 
 out = say("GUILDTOOLSLOOTTEST", "help")
 check("help lists debug and lootlines", out:find("debug") and out:find("lootlines"), "")
+
+-- =========================== the game's chat logging reading is saved for Guild Tools ===========================
+local realApiReading = C_ChatInfo.IsLoggingChat
+GuildToolsLootDB.chatLogging = nil
+state = true
+realFrame.scripts.OnEvent(realFrame, "PLAYER_LOGOUT")
+check("the REAL addon saves the game's chat logging reading at PLAYER_LOGOUT (ON)", GuildToolsLootDB.chatLogging ~= nil and GuildToolsLootDB.chatLogging.on == true and type(GuildToolsLootDB.chatLogging.at) == "number", tostring(GuildToolsLootDB.chatLogging))
+state = false
+realFrame.scripts.OnEvent(realFrame, "PLAYER_LOGOUT")
+check("...and OFF, so the app can tell off from 'on but WoW has not written the file'", GuildToolsLootDB.chatLogging.on == false)
+state = false
+realFrame.scripts.OnEvent(realFrame, "PLAYER_LOGIN")
+check("at login the reading is taken AFTER the automatic re-enable, so it is not a false OFF", GuildToolsLootDB.chatLogging.on == true, tostring(GuildToolsLootDB.chatLogging.on))
+GuildToolsLootDB.chatLogging = { on = true, at = 1 }
+C_ChatInfo.IsLoggingChat = nil
+local okNoApi = pcall(realFrame.scripts.OnEvent, realFrame, "PLAYER_LOGOUT")
+check("on a client that can't report chat logging it saves nothing and does not raise", okNoApi and GuildToolsLootDB.chatLogging.at == 1)
+C_ChatInfo.IsLoggingChat = realApiReading
+state = true
 
 -- =========================== one-click sync ===========================
 local clock = 0

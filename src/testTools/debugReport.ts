@@ -38,6 +38,7 @@ export function buildDebugReport({ appVersion, snapshot, health, feeds, store, c
   out.push(`WoW: ${snapshot.wow.valid ? 'found' : 'NOT FOUND'}; character: ${snapshot.wow.characterName ?? 'unknown'} (${snapshot.wow.characterSource ?? 'n/a'})`);
   out.push(`Addon: installed ${snapshot.addon.installed ?? 'none'}, bundled ${snapshot.addon.bundled ?? '?'}, ${snapshot.addon.status}`);
   out.push(`Chat log: ${snapshot.chatLog.exists ? `exists, last line ${snapshot.chatLog.lastWriteAt ? ago(snapshot.chatLog.lastWriteAt, now) : 'unknown'}, ${snapshot.chatLog.sizeBytes ?? '?'} bytes` : 'missing'}`);
+  out.push(`Chat logging: ${snapshot.chatLog.state ?? 'not reported'}${snapshot.chatLog.gameReading ? ` (the game said ${snapshot.chatLog.gameReading.on ? 'ON' : 'OFF'} ${ago(snapshot.chatLog.gameReading.at, now)}; WoW writes the file only when you log out)` : ''}`);
   out.push(`Combat log: ${snapshot.combatLog.exists ? (snapshot.combatLog.active ? 'writing' : 'not written in 5 min') : 'missing'}`);
   out.push(`Live capture this session: ${snapshot.session.capturedThisSession} win(s); last poll ${snapshot.session.lastPollAt ? ago(snapshot.session.lastPollAt, now) : 'never'} (${snapshot.session.lastStatus ?? 'n/a'})`);
   out.push(`Addon saved data: ${snapshot.addonData.wins} win(s), ${snapshot.addonData.losses} lost roll(s), ${snapshot.addonData.trades} trade(s) [${snapshot.addonData.status}]`);
@@ -48,7 +49,7 @@ export function buildDebugReport({ appVersion, snapshot, health, feeds, store, c
   } else {
     out.push(`${live ? 'Live store' : 'Test store'}: could not be read`);
   }
-  if (live) out.push(`Officer apps reporting: ${officers === null ? 'not checked' : officers.length === 0 ? 'none' : officers.map((o) => `${o.officerName} (chat log ${o.chatLogActive ? 'on' : 'quiet'})`).join(', ')}`);
+  if (live) out.push(`Officer apps reporting: ${officers === null ? 'not checked' : officers.length === 0 ? 'none' : officers.map((o) => `${o.officerName} (chat logging ${o.chatLogActive ? 'on' : 'not confirmed on'})`).join(', ')}`);
   out.push('');
   out.push('== Boss kills seen (newest first) ==');
   out.push(...(snapshot.kills.length ? snapshot.kills.map((k) => `${clock(k.endedAt)}  ${k.boss} (${difficultyName(k.difficultyId)})`) : ['none']));

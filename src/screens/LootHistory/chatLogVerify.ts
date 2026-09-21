@@ -1,9 +1,9 @@
 /**
- * "Is chat logging really writing?" check. The game can say chat logging is ON while
- * nothing reaches WoWChatLog.txt, and a quiet stretch (no chat lines for a few minutes)
- * looks the same from the file's timestamp alone. So the officer says something in chat
- * while the app watches the file: a NEW write after the check started proves it, and
- * nothing within the window means it is not being written.
+ * "Is chat logging really writing?" check. A NEW write to WoWChatLog.txt after the check started proves it is. But WoW keeps
+ * chat lines in memory and writes the file only when you log out (a /reload does not; confirmed live 2026-09-19), so during play no new
+ * write is the NORMAL case, not a sign that logging is off. So silence within the window is only "failed" when logging is
+ * not on as far as anyone can tell (the game says off, or there is no way to know); when the game says it is on, the answer
+ * is "buffered": on, and the file catches up when you next log out.
  */
 export const VERIFY_WINDOW_MS = 30_000;
 
@@ -11,9 +11,11 @@ export interface ChatLogSnapshot {
   exists: boolean;
   lastWriteAt: number | null;
   sizeBytes: number | null;
+  /** Is logging on as far as anyone can tell: the file was written recently, or the game says it is on. */
+  loggingOn?: boolean;
 }
 
-export type VerifyResult = 'waiting' | 'verified' | 'failed';
+export type VerifyResult = 'waiting' | 'verified' | 'buffered' | 'failed';
 
 /** `baseline` is the file as it stood when the check began; `current` is a fresh reading. */
 export function evaluateVerification(baseline: ChatLogSnapshot, current: ChatLogSnapshot, elapsedMs: number, windowMs: number = VERIFY_WINDOW_MS): VerifyResult {
@@ -21,7 +23,8 @@ export function evaluateVerification(baseline: ChatLogSnapshot, current: ChatLog
   const touched = current.exists && current.lastWriteAt !== null && (baseline.lastWriteAt === null || current.lastWriteAt > baseline.lastWriteAt);
   // A file that appeared after the check began (chat logging just got switched on) counts as written.
   if (grew || touched) return 'verified';
-  return elapsedMs >= windowMs ? 'failed' : 'waiting';
+  if (elapsedMs < windowMs) return 'waiting';
+  return current.loggingOn ? 'buffered' : 'failed';
 }
 
 /**
@@ -32,18 +35,20 @@ export function evaluateVerification(baseline: ChatLogSnapshot, current: ChatLog
  */
 export const RAID_VERIFY_WINDOW_MS = 45_000;
 
-export type OfficerVerifyStatus = 'verified' | 'waiting' | 'failed';
+export type OfficerVerifyStatus = 'verified' | 'waiting' | 'buffered' | 'failed';
 
 export interface OfficerWrite {
   officerName: string;
   lastWriteSeenAt?: number | null;
+  /** Their app reports logging as on (recently written, or the game says on). Without it, silence is a failure; with it, silence is buffering. */
+  chatLogActive?: boolean;
 }
 
 export function evaluateRaidVerification(startedAtServer: number, officers: OfficerWrite[], elapsedMs: number, windowMs: number = RAID_VERIFY_WINDOW_MS) {
   const expired = elapsedMs >= windowMs;
   const results = officers.map((o) => ({
     name: o.officerName,
-    status: ((o.lastWriteSeenAt ?? 0) > startedAtServer ? 'verified' : expired ? 'failed' : 'waiting') as OfficerVerifyStatus,
+    status: ((o.lastWriteSeenAt ?? 0) > startedAtServer ? 'verified' : !expired ? 'waiting' : o.chatLogActive ? 'buffered' : 'failed') as OfficerVerifyStatus,
   }));
   return { officers: results, allVerified: results.every((r) => r.status === 'verified'), expired };
 }

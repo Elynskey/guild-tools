@@ -232,6 +232,21 @@ function getAddonDataStamp() {
   }
 }
 
+// The game's own chat-logging reading, as the addon last saved it (at login and at every /reload or logout). Cached on the
+// saved file's timestamp so the frequent status polls never re-parse a large SavedVariables file.
+let chatLoggingCache = { stamp: null, addon: null, value: null };
+/** @returns {{ on: boolean, at: number } | null} `at` in ms since the epoch; null if the addon has not recorded one (older than 1.7) */
+function getAddonChatLogging() {
+  const stamp = getAddonDataStamp();
+  if (stamp === null) return null;
+  const addon = addonIdentity().name;
+  if (chatLoggingCache.stamp === stamp && chatLoggingCache.addon === addon) return chatLoggingCache.value;
+  const reading = readAddonDb()?.chatLogging;
+  const value = reading && typeof reading.on === 'boolean' && Number(reading.at) > 0 ? { on: reading.on, at: Number(reading.at) * 1000 } : null;
+  chatLoggingCache = { stamp, addon, value };
+  return value;
+}
+
 function getWowPathConfig() {
   const character = resolveCharacter();
   return {
@@ -308,6 +323,7 @@ module.exports = {
   withAddonFlavor,
   getLootRecords,
   getAddonDataStamp,
+  getAddonChatLogging,
   getWowPathConfig,
   setWowPath,
   installAddon,

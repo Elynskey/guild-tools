@@ -192,6 +192,17 @@ local function recordCharacter()
   if name then GuildToolsLootDB.character = { name = name, realm = realm, at = time() } end
 end
 
+-- The game's own reading of whether chat logging is on, saved so Guild Tools can tell "logging is ON and WoW just has
+-- not written the file yet" from "logging is OFF". WoW keeps chat lines in memory and writes WoWChatLog.txt only at a
+-- /reload or logout (confirmed live 2026-09-19, WoW 12.1.0), so the file's timestamp alone says "not logging" during
+-- any quiet or buffered stretch. Recorded a few seconds after login (once the automatic re-enable has run) and at
+-- PLAYER_LOGOUT, which fires just before SavedVariables are written on both /reload and logout, so the reading that
+-- reaches disk is the current one.
+local function recordChatLogging()
+  if not isChatLoggingAPI() then return end
+  GuildToolsLootDB.chatLogging = { on = C_ChatInfo.IsLoggingChat() and true or false, at = time() }
+end
+
 -- True when the winner is this very character. The app pairs the chat log's anonymous
 -- "You" win (which can't say WHO) with this addon's own record of it by matching on
 -- this flag -- exact even if the app guessed the wrong character name before a reload.
@@ -214,8 +225,18 @@ end
 -- the two paths dedupe against each other instead of recording one win twice.
 local WON_ROLL_PATTERN = "%[Loot%]: (.-) %((.-) %- %d+[^%)]*%) Won: "
 
+-- Live 2026-09-20 (WoW 12.1.0), the exact text the game hands CHAT_MSG_LOOT for a roll:
+--   |HlootHistory:3470|h[Loot]|h: You (Need - 51, Main-Spec) Won: |cnIQ4:|Hitem:270930::...::|h[Tomb-Creeper's Claw]|h|r
+-- Two more changes since this parser was written: the word "Loot" is now a hyperlink to the loot-history window (the number
+-- is the encounter ID), and item links open with a named color ("|cnIQ4:") instead of hex digits. Neither matched, so this
+-- whole chat-text path captured nothing, and only the C_LootHistory path below was working. plainLootText() strips
+-- hyperlink wrappers (keeping the text they show) for the pattern; the item link is still taken from the original message.
+local function plainLootText(message)
+  return (message:gsub("|H.-|h(.-)|h", "%1"))
+end
+
 local function extractItemLink(message)
-  return message:match("(|c%x+|Hitem:.-|h|r)")
+  return message:match("(|c[^|]+|Hitem:.-|h|r)")
 end
 
 local function itemIdFromLink(link)
@@ -689,6 +710,7 @@ StaticPopupDialogs["GUILDTOOLSLOOT_STATUS"] = {
 local frame = CreateFrame("Frame")
 frame:RegisterEvent("PLAYER_LOGIN")
 frame:RegisterEvent("PLAYER_ENTERING_WORLD")
+frame:RegisterEvent("PLAYER_LOGOUT")
 frame:RegisterEvent("ENCOUNTER_START")
 frame:RegisterEvent("ENCOUNTER_END")
 frame:RegisterEvent("CHAT_MSG_LOOT")
@@ -721,8 +743,14 @@ frame:SetScript("OnEvent", function(_, event, ...)
     -- only nags if that didn't work.
     C_Timer.After(5, function()
       if GuildToolsLootDB.enabled then ensureChatLogging(false) end
-      C_Timer.After(1, remindChatLoggingIfOff)
+      C_Timer.After(1, function()
+        recordChatLogging()
+        remindChatLoggingIfOff()
+      end)
     end)
+
+  elseif event == "PLAYER_LOGOUT" then
+    recordChatLogging()
 
   elseif event == "PLAYER_ENTERING_WORLD" then
     recordCharacter()
@@ -783,7 +811,10 @@ frame:SetScript("OnEvent", function(_, event, ...)
 
   elseif event == "CHAT_MSG_LOOT" then
     local message = ...
-    local winner, rollType = message:match(WON_ROLL_PATTERN)
+    -- Chat text is a protected value while an encounter is in progress (WoW 12): nothing here can read it, and rolls
+    -- only resolve after the boss is down, so skipping it costs nothing.
+    if issecretvalue and issecretvalue(message) then return end
+    local winner, rollType = plainLootText(message):match(WON_ROLL_PATTERN)
     if winner and rollType and rollType:lower():find("need") then
       if winner == "You" then winner = UnitName("player") or winner end
       local link = extractItemLink(message)

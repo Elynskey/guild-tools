@@ -2,13 +2,14 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { resolveDataDir } = require('./dataDir.cjs');
 const pipelineLog = require('./pipelineLog.cjs');
-const { resolveWowPath, isRealWowPath, getCharacterName } = require('./lootLog.cjs');
+const { resolveWowPath, isRealWowPath, getCharacterName, getAddonChatLogging } = require('./lootLog.cjs');
+const { deriveChatLogState } = require('./chatLogState.cjs');
 
 // Second, independent capture path alongside the addon's SavedVariables read (see
 // lootLog.cjs) -- WoW's own chat log (enabled in-game via /chatlog). It was long assumed to
 // be written to disk continuously, unlike SavedVariables, which only flushes on /reload or
 // logout. CONFIRMED WRONG live 2026-09-19 (WoW 12.1.0): the client holds chat lines in
-// memory and writes them in one burst at /reload or logout -- 24 KB covering half an hour
+// memory and writes them in one burst when you LOG OUT (a /reload does not write them: confirmed 2026-09-20) -- 24 KB covering half an hour
 // (22:34-23:03) landed in a single write at 23:04:05, the same moment as the addon's
 // SavedVariables. So this path is only "live" when chat volume fills the client's buffer;
 // otherwise it sees a whole session's wins at once, at the flush. That is why every record
@@ -208,17 +209,27 @@ function pollChatLog() {
 // running right now.
 const ACTIVE_WINDOW_MS = 5 * 60 * 1000;
 
+//
+// `active` is only ever PROOF that logging works, never proof that it doesn't: WoW writes this file only at a /reload or
+// logout (confirmed live 2026-09-19), so a stale file usually just means "on, not written yet". `gameReading` (the game's own
+// reading, saved by the addon) and `state` (chatLogState.cjs) say what can honestly be concluded.
 function getChatLogStatus() {
   const p = chatLogPath();
-  if (!p) return { path: null, exists: false, active: false, lastWriteAt: null, sizeBytes: null };
+  let gameReading = null;
+  try {
+    gameReading = getAddonChatLogging();
+  } catch {
+    // an unreadable saved-variables file just means "no reading yet"
+  }
+  const derive = (exists, active) => ({ gameReading, state: deriveChatLogState({ active, gameReading }), exists, active });
+  if (!p) return { path: null, lastWriteAt: null, sizeBytes: null, ...derive(false, false) };
   try {
     const stats = fs.statSync(p);
-    // lastWriteAt/sizeBytes let the app run a "verify it's logging" check: the game can report
-    // chat logging ON while nothing reaches the file, and a quiet stretch (no chat for 5+
-    // minutes) looks identical to that from `active` alone. Only an actual new write proves it.
-    return { path: p, exists: true, active: Date.now() - stats.mtimeMs < ACTIVE_WINDOW_MS, lastWriteAt: stats.mtimeMs, sizeBytes: stats.size };
+    // lastWriteAt/sizeBytes let the app notice a write (Verify, the raid-wide coverage); the raw timestamp is still
+    // reported, just no longer treated as the last word on whether logging is on.
+    return { path: p, lastWriteAt: stats.mtimeMs, sizeBytes: stats.size, ...derive(true, Date.now() - stats.mtimeMs < ACTIVE_WINDOW_MS) };
   } catch {
-    return { path: p, exists: false, active: false, lastWriteAt: null, sizeBytes: null };
+    return { path: p, lastWriteAt: null, sizeBytes: null, ...derive(false, false) };
   }
 }
 

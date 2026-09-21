@@ -37,6 +37,56 @@ describe('evaluateVerification', () => {
   });
 });
 
+describe('evaluateVerification: silence is only a failure when logging is not on (WoW buffers the file until you log out)', () => {
+  const baseline = file(1_000_000, 5000);
+  const quiet = { ...file(1_000_000, 5000) };
+
+  it('no new write but the game says logging is on: buffered, not failed', () => {
+    expect(evaluateVerification(baseline, { ...quiet, loggingOn: true }, VERIFY_WINDOW_MS)).toBe('buffered');
+  });
+
+  it('no new write and logging is not on (off, or no way to know): failed', () => {
+    expect(evaluateVerification(baseline, { ...quiet, loggingOn: false }, VERIFY_WINDOW_MS)).toBe('failed');
+    expect(evaluateVerification(baseline, quiet, VERIFY_WINDOW_MS)).toBe('failed');
+  });
+
+  it('a real write still wins over everything', () => {
+    expect(evaluateVerification(baseline, { ...file(1_004_000, 5200), loggingOn: false }, 4_000)).toBe('verified');
+  });
+
+  it('still waits while the window is open, whatever the reading says', () => {
+    expect(evaluateVerification(baseline, { ...quiet, loggingOn: true }, VERIFY_WINDOW_MS - 1)).toBe('waiting');
+  });
+});
+
+describe('evaluateRaidVerification: officers whose logging is on but whose file is behind are buffered, not failed', () => {
+  const START = 1_000_000;
+
+  it('at the end of the window: wrote = verified, on but quiet = buffered, not on = failed', () => {
+    const r = evaluateRaidVerification(
+      START,
+      [
+        { officerName: 'Quixhea', lastWriteSeenAt: START + 4_000, chatLogActive: true },
+        { officerName: 'Odasa', lastWriteSeenAt: null, chatLogActive: true },
+        { officerName: 'Shrty', lastWriteSeenAt: null, chatLogActive: false },
+        { officerName: 'Old', lastWriteSeenAt: null },
+      ],
+      RAID_VERIFY_WINDOW_MS,
+    );
+    expect(r.officers.map((o) => [o.name, o.status])).toEqual([
+      ['Quixhea', 'verified'],
+      ['Odasa', 'buffered'],
+      ['Shrty', 'failed'],
+      ['Old', 'failed'],
+    ]);
+  });
+
+  it('while the window is open nobody is buffered or failed yet', () => {
+    const r = evaluateRaidVerification(START, [{ officerName: 'Odasa', lastWriteSeenAt: null, chatLogActive: true }], 5_000);
+    expect(r.officers[0].status).toBe('waiting');
+  });
+});
+
 describe('evaluateRaidVerification (one chat line verifies every officer at once)', () => {
   const START = 1_000_000;
   const officers = [
