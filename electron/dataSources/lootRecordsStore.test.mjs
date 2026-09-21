@@ -94,6 +94,62 @@ describe('sync duplicate detection (two capture paths/clients observing the same
   });
 });
 
+describe('several officers syncing the same win: click timing must not matter, and it is announced once', () => {
+  const win = (over = {}) => ({ itemId: 268248, itemLink: '|cnIQ4:|Hitem:268248::::|h[Amani Summoning Shawl]|h|r', winner: 'Mooingshots', boss: "Nek'zali the Soulcoiler", slot: 'Back', time: 1_800_000_000, difficulty: 'Looking For Raid', encounterId: 3470, ...over });
+
+  it('two officers whose addons saw the roll seconds apart: one record, one announcement, however late the second syncs', () => {
+    const first = store.sync([win()], [], []);
+    expect(first.addedRecords).toHaveLength(1);
+    expect(first.verifiedRecords).toHaveLength(1);
+    const second = store.sync([win({ time: 1_800_000_002 })], [], []); // uploaded minutes later; its capture time is what counts
+    expect(second.records).toHaveLength(1);
+    expect(second.addedRecords).toHaveLength(0);
+    expect(second.verifiedRecords).toHaveLength(0); // nothing new to announce, so nothing is posted again
+  });
+
+  it('the same officer clicking sync again and again adds nothing', () => {
+    store.sync([win()], [], []);
+    for (let i = 0; i < 3; i++) expect(store.sync([win()], [], []).addedRecords).toHaveLength(0);
+    expect(store.load().records).toHaveLength(1);
+  });
+
+  it('a late backfill scan (capture time 20 minutes later) is the same win when the encounter is recorded (addon 1.7)', () => {
+    store.sync([win()], [], []);
+    const late = store.sync([win({ time: 1_800_000_000 + 20 * 60 })], [], []);
+    expect(late.records).toHaveLength(1);
+    expect(late.verifiedRecords).toHaveLength(0);
+  });
+
+  it('older addons (no encounter info) fall back to the 60-second window, so a much later backfill is still recorded twice', () => {
+    const { encounterId, ...old } = win();
+    void encounterId;
+    store.sync([old], [], []);
+    expect(store.sync([{ ...old, time: old.time + 20 * 60 }], [], []).records).toHaveLength(2);
+  });
+
+  it('the same item won by the same person on a DIFFERENT boss is a separate win', () => {
+    store.sync([win()], [], []);
+    expect(store.sync([win({ encounterId: 3471, boss: 'Another Boss', time: 1_800_000_600 })], [], []).records).toHaveLength(2);
+  });
+
+  it('the same boss on a different difficulty is a separate win', () => {
+    store.sync([win({ difficulty: 'Heroic' })], [], []);
+    expect(store.sync([win({ difficulty: 'Normal', time: 1_800_000_900 })], [], []).records).toHaveLength(2);
+  });
+
+  it('a different winner of the same item in the same encounter is a separate win', () => {
+    store.sync([win()], [], []);
+    expect(store.sync([win({ winner: 'Shammrow' })], [], []).records).toHaveLength(2);
+  });
+
+  it('a win the first officer never saw is still added when the second officer syncs it', () => {
+    store.sync([win({ winner: 'Shammrow', itemId: 270162, itemLink: '|cnIQ4:|Hitem:270162::::|h[Soulcoiler Ritual Vessel]|h|r' })], [], []);
+    const r = store.sync([win(), win({ winner: 'Shammrow', itemId: 270162, itemLink: '|cnIQ4:|Hitem:270162::::|h[Soulcoiler Ritual Vessel]|h|r', time: 1_800_000_003 })], [], []);
+    expect(r.records).toHaveLength(2);
+    expect(r.addedRecords).toHaveLength(1);
+  });
+});
+
 describe('chat-tail reconciliation', () => {
   it('upgrades a chat-tail placeholder in place when the addon syncs the same win hours later', () => {
     const first = store.sync([{ itemId: 268232, itemLink: '[Cincture of the Abyssal Grotto]', winner: 'Dharma', boss: null, slot: null, source: 'chat-tail', time: 1000 }], [], []);

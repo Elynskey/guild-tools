@@ -214,6 +214,13 @@ function findSyncDuplicate(existingRecords, candidate) {
       const selfPair = (r.selfWin && isPlaceholder(r) && candidate.self === true) || (candidate.selfWin && isPlaceholder(candidate) && r.self === true);
       if (!selfPair && r.winner.toLowerCase() !== candidate.winner.toLowerCase()) return false;
       if (extractItemName(r.itemLink)?.toLowerCase() !== candidateName) return false;
+      // Both records say which encounter and difficulty the win came from (addon 1.7+): the same winner + item + encounter +
+      // difficulty is the same win, however far apart two officers' capture times are. A backfill scan or a mid-raid reload
+      // stamps a much later time than the officer who saw the roll live, and the 60 s window alone would record that a second
+      // time (and post it to Discord a second time). Only ever merges records that already match on winner and item.
+      if (r.encounterId != null && candidate.encounterId != null && r.encounterId === candidate.encounterId && (r.difficulty ?? null) === (candidate.difficulty ?? null) && Math.abs(r.time - candidate.time) <= DUPLICATE_WINDOW_SECONDS) {
+        return true;
+      }
       // A chat-tail placeholder's authoritative (addon-sourced) counterpart might not
       // land until the officer's next reload -- possibly hours later, at the very end
       // of the raid -- so either side being a chat-tail record widens the window to the

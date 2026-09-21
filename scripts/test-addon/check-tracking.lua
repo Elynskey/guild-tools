@@ -126,6 +126,7 @@ zone(true, "raid", "The Venomous Abyss", 15)
 realFrame.scripts.OnEvent(realFrame, "ENCOUNTER_START", 222, "Raid Boss")
 realFrame.scripts.OnEvent(realFrame, "CHAT_MSG_LOOT", RAW_OTHER)
 check("REAL addon reads a win in the game's CURRENT wording (hyperlinked [Loot], named-colour item link)", #GuildToolsLootDB.records == 1 and GuildToolsLootDB.records[1].winner == "Meteos" and GuildToolsLootDB.records[1].itemId == 268203, tostring(#GuildToolsLootDB.records))
+check("...and records which encounter it came from (from the hyperlink's ID), so officers' copies of one win merge", GuildToolsLootDB.records[1].encounterId == 3470, tostring(GuildToolsLootDB.records[1].encounterId))
 check("...and keeps the real item link (for the icon and slot)", GuildToolsLootDB.records[1].itemLink:find("Hitem:268203", 1, true) ~= nil, tostring(GuildToolsLootDB.records[1].itemLink))
 realFrame.scripts.OnEvent(realFrame, "CHAT_MSG_LOOT", RAW_YOU)
 check("...maps 'You' to this character in the current wording too", GuildToolsLootDB.records[2] and GuildToolsLootDB.records[2].winner == "Tester" and GuildToolsLootDB.records[2].self == true, GuildToolsLootDB.records[2] and tostring(GuildToolsLootDB.records[2].winner))
@@ -454,9 +455,18 @@ check("no button while nothing new has been captured", not buttonShown())
 GuildToolsLootTestDB.records[#GuildToolsLootTestDB.records + 1] = { itemId = 1, winner = "Tester", time = time() }
 tick()
 check("a fresh capture does not show the button yet (waits for things to go quiet)", not buttonShown())
+printed = {}
+tick()
+check("no chat message while it is still busy (the batch is not ready)", not table.concat(printed, " "):find("Loot logged"))
 clock = 16
+printed = {}
 tick()
 check("after 15 quiet seconds the click-to-sync button appears", buttonShown())
+check("...and says so in chat: 'Loot logged: 1 Need win(s)... click to sync'", table.concat(printed, " "):find("Loot logged: 1 Need win%(s%)") and table.concat(printed, " "):find("Click the sync button"), table.concat(printed, " "):sub(1, 200))
+printed = {}
+tick()
+tick()
+check("...once per batch, not on every tick", not table.concat(printed, " "):find("Loot logged"), table.concat(printed, " "):sub(1, 120))
 check("...and ticks 'syncbtn' on the checklist", GuildToolsLootTestDB.checklist.syncbtn == "pass")
 
 combat = true
@@ -471,6 +481,7 @@ tick()
 check("...and returns once it is safe", buttonShown())
 
 syncButton().scripts.OnClick(syncButton())
+check("clicking remembers what was synced, for the message after the reload", GuildToolsLootTestDB.syncNote ~= nil and GuildToolsLootTestDB.syncNote.wins == 1 and GuildToolsLootTestDB.syncNote.losses == 0)
 check("clicking the button reloads the UI (a real click is the hardware event ReloadUI needs)", reloads == 1, tostring(reloads))
 check("...and ticks 'syncclick' BEFORE the reload writes the table to disk", GuildToolsLootTestDB.checklist.syncclick == "pass")
 out = say("GUILDTOOLSLOOTTEST", "sync")
@@ -481,11 +492,21 @@ ReloadUI = function() error("ADDON_ACTION_FORBIDDEN") end
 out = say("GUILDTOOLSLOOTTEST", "sync")
 check("if the game refuses the reload it says so and points at /reload instead of raising", out:find("would not reload") and out:find("/reload"), out)
 check("...and marks 'syncclick' FAILED so it is not mistaken for working", GuildToolsLootTestDB.checklist.syncclick == "fail")
+check("...and does not leave a note that would claim a sync that never happened", GuildToolsLootTestDB.syncNote == nil)
+GuildToolsLootTestDB.syncNote = { wins = 1, losses = 12, trades = 0, at = time() }
 ReloadUI = realReload
 
+printed = {}
 loginFrame.scripts.OnEvent(loginFrame, "PLAYER_LOGIN")
+local afterReload = table.concat(printed, " ")
 tick()
 check("after the reload (a new PLAYER_LOGIN) nothing is pending, so the button goes away", not buttonShown())
+check("...and chat confirms: 'Loot logged and saved: 1 Need win(s) and 12 lost roll(s)'", afterReload:find("Loot logged and saved: 1 Need win%(s%) and 12 lost roll%(s%)") and afterReload:find("picks it up within a few seconds"), afterReload:sub(1, 240))
+check("...and the note is cleared so it is only said once", GuildToolsLootTestDB.syncNote == nil)
+GuildToolsLootTestDB.syncNote = { wins = 3, losses = 0, trades = 0, at = time() - 3600 }
+printed = {}
+loginFrame.scripts.OnEvent(loginFrame, "PLAYER_LOGIN")
+check("a stale note (an hour old) is not announced", not table.concat(printed, " "):find("Loot logged and saved"))
 
 GuildToolsLootTestDB.needLosses[#GuildToolsLootTestDB.needLosses + 1] = { itemId = 2, name = "Someone", time = time() }
 tick()

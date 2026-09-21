@@ -377,6 +377,9 @@ local function recordNeedWin(winnerName, itemLink, bossOverride, encounterIDOver
     slot = slotLabel(itemLink),
     time = now,
     difficulty = difficultyOverride or currentDifficulty,
+    -- Which encounter this came from. Lets the store tell that two officers' records (or a late backfill scan's) are the
+    -- SAME win however far apart their capture times are, instead of relying on a 60-second window.
+    encounterId = encounterIDOverride or currentEncounterID,
     self = isSelf(winnerName) or nil,
   })
   capturedInGeneration = encounterGeneration
@@ -818,7 +821,9 @@ frame:SetScript("OnEvent", function(_, event, ...)
     if winner and rollType and rollType:lower():find("need") then
       if winner == "You" then winner = UnitName("player") or winner end
       local link = extractItemLink(message)
-      if link then recordNeedWin(winner, link) end
+      -- The link around the word "Loot" carries the encounter ID: |HlootHistory:3470|h[Loot]|h
+      local linkedEncounterID = tonumber(message:match("|HlootHistory:(%d+)|h"))
+      if link then recordNeedWin(winner, link, nil, linkedEncounterID) end
     end
 
   elseif event == "LOOT_HISTORY_UPDATE_DROP" then

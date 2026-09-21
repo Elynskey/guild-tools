@@ -561,6 +561,24 @@ local function syncPending()
   return math.max(0, c.r - syncBase.r) + math.max(0, c.l - syncBase.l) + math.max(0, c.t - syncBase.t)
 end
 
+-- "3 Need win(s) and 12 lost roll(s)": what a sync will carry, in words.
+local function describeLoot(wins, losses, trades)
+  local parts = {}
+  if wins > 0 then parts[#parts + 1] = wins .. " Need win(s)" end
+  if losses > 0 then parts[#parts + 1] = losses .. " lost roll(s)" end
+  if trades > 0 then parts[#parts + 1] = trades .. " trade(s)" end
+  if #parts == 0 then return "nothing new" end
+  return table.concat(parts, " and ")
+end
+
+local function syncPendingParts()
+  if not syncBase then return 0, 0, 0 end
+  local c = syncCounts()
+  return math.max(0, c.r - syncBase.r), math.max(0, c.l - syncBase.l), math.max(0, c.t - syncBase.t)
+end
+
+local syncAnnouncedFor = 0 -- the pending count the chat message was last printed for, so it is said once per batch
+
 local function syncNow()
   announce("syncing: reloading the UI so Guild Tools gets your loot...")
   local states = checklistStates()
@@ -569,11 +587,15 @@ local function syncNow()
     announce("this client has no ReloadUI here -- type /reload yourself.")
     return
   end
-  -- Ticked BEFORE the reload: the reload is what writes this table to disk.
+  -- Ticked BEFORE the reload: the reload is what writes this table to disk. The note is what the chat message after the
+  -- reload reads (it is written to disk by the same reload).
   states.syncclick = "pass"
+  local wins, losses, trades = syncPendingParts()
+  GuildToolsLootTestDB.syncNote = { wins = wins, losses = losses, trades = trades, at = time() }
   local ok, err = pcall(ReloadUI)
   if not ok then
     states.syncclick = "fail"
+    GuildToolsLootTestDB.syncNote = nil
     announce("the game would not reload from here (" .. tostring(err) .. ") -- type /reload yourself.")
   end
 end
@@ -624,6 +646,15 @@ updateSyncPrompt = function()
     syncChangedAt = GetTime()
   end
   local show = shouldShowSync()
+  if show then
+    local pending = syncPending()
+    if syncAnnouncedFor ~= pending then
+      syncAnnouncedFor = pending
+      announce("Loot logged: " .. describeLoot(syncPendingParts()) .. ". Click the sync button (or type /gtloottest sync) to send it to Guild Tools.")
+    end
+  elseif syncPending() == 0 then
+    syncAnnouncedFor = 0
+  end
   if not show and not syncFrame then return end
   if not syncFrame then
     local ok, result = pcall(buildSyncFrame)
@@ -647,6 +678,17 @@ local function initSyncBaseline()
   syncBase = syncCounts()
   syncSeen = syncBase
   syncChangedAt = GetTime()
+  syncAnnouncedFor = 0
+end
+
+-- The confirmation after a sync's reload. All the addon can honestly say is that the loot is logged and saved to disk;
+-- whether Guild Tools has picked it up is up to the app (it does within a few seconds when it is open).
+local function announceSyncNote()
+  local note = GuildToolsLootTestDB.syncNote
+  GuildToolsLootTestDB.syncNote = nil
+  if note and (time() - (note.at or 0)) < 300 then
+    announce("Loot logged and saved: " .. describeLoot(note.wins or 0, note.losses or 0, note.trades or 0) .. ". Guild Tools picks it up within a few seconds if it is open.")
+  end
 end
 
 -- ---------------------------------------------------------------------------------------------
@@ -764,6 +806,7 @@ do
     announce("TEST addon loaded, tracking " .. (testTrackAll() and "ALL content" or "STRICT") .. " -- type /gtloottest help. The real /gtloot addon is unaffected.")
     pollChecklist()
     initSyncBaseline()
+    announceSyncNote()
     if not GuildToolsLootTestDB.checklistHidden then showChecklist() end
   end)
 end
