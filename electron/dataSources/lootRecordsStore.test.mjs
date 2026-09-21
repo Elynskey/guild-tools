@@ -150,6 +150,70 @@ describe('several officers syncing the same win: click timing must not matter, a
   });
 });
 
+describe('lost rolls: two officers\' copies of one roll merge on the game\'s drop ID; two rolls on two copies do not', () => {
+  const loss = (over = {}) => ({ itemId: 268248, itemLink: '|cnIQ4:|Hitem:268248::::|h[Amani Summoning Shawl]|h|r', name: 'Victorix', boss: "Nek'zali the Soulcoiler", time: 1_800_000_000, difficulty: 'Looking For Raid', encounterId: 3470, lootListId: 1, ...over });
+
+  it('the same roll seen by two officers a few seconds apart is one entry', () => {
+    store.sync([], [], [loss()]);
+    const r = store.sync([], [], [loss({ time: 1_800_000_002 })]);
+    expect(r.needLosses).toHaveLength(1);
+    expect(r.addedNeedLosses).toHaveLength(0);
+  });
+
+  it('...however late the second officer\'s (backfill) copy is stamped', () => {
+    store.sync([], [], [loss()]);
+    expect(store.sync([], [], [loss({ time: 1_800_000_000 + 30 * 60 })]).needLosses).toHaveLength(1);
+  });
+
+  it('rolling Need on BOTH copies of a drop is two lost rolls (different drop IDs), each still merged across officers', () => {
+    store.sync([], [], [loss({ lootListId: 2 }), loss({ lootListId: 3 })]);
+    const r = store.sync([], [], [loss({ lootListId: 2, time: 1_800_000_001 }), loss({ lootListId: 3, time: 1_800_000_001 })]);
+    expect(r.needLosses).toHaveLength(2);
+  });
+
+  it('the same drop ID on a different boss, or a different difficulty, or another night, is another roll', () => {
+    store.sync([], [], [loss()]);
+    expect(store.sync([], [], [loss({ encounterId: 3471 })]).needLosses).toHaveLength(2);
+    expect(store.sync([], [], [loss({ difficulty: 'Heroic', time: 1_800_000_500 })]).needLosses).toHaveLength(3);
+    expect(store.sync([], [], [loss({ time: 1_800_000_000 + 24 * 3600 })]).needLosses).toHaveLength(4);
+  });
+
+  it('older addons (no drop ID) keep the exact-timestamp rule: an identical entry merges, a differently-stamped one does not', () => {
+    const { encounterId, lootListId, ...old } = loss();
+    void encounterId;
+    void lootListId;
+    store.sync([], [], [old]);
+    expect(store.sync([], [], [{ ...old }]).needLosses).toHaveLength(1);
+    expect(store.sync([], [], [{ ...old, time: old.time + 2 }]).needLosses).toHaveLength(2);
+  });
+
+  it('a different roller of the same drop is a different lost roll', () => {
+    store.sync([], [], [loss()]);
+    expect(store.sync([], [], [loss({ name: 'Beep' })]).needLosses).toHaveLength(2);
+  });
+});
+
+describe('wins: the game\'s drop ID decides between two copies and one sighting', () => {
+  const win = (over = {}) => ({ itemId: 268248, itemLink: '|cnIQ4:|Hitem:268248::::|h[Amani Summoning Shawl]|h|r', winner: 'Greedy', boss: "Nek'zali the Soulcoiler", slot: 'Back', time: 1_800_000_000, difficulty: 'Looking For Raid', encounterId: 3470, lootListId: 1, ...over });
+
+  it('one person winning BOTH copies (drop IDs 4 and 5) is two wins, even seconds apart', () => {
+    store.sync([win({ lootListId: 4 })], [], []);
+    expect(store.sync([win({ lootListId: 5, time: 1_800_000_003 })], [], []).records).toHaveLength(2);
+  });
+
+  it('...and each of them is still merged with another officer\'s copy of the same drop', () => {
+    store.sync([win({ lootListId: 4 }), win({ lootListId: 5 })], [], []);
+    expect(store.sync([win({ lootListId: 4, time: 1_800_000_002 }), win({ lootListId: 5, time: 1_800_000_002 })], [], []).records).toHaveLength(2);
+  });
+
+  it('a record without the drop ID (chat path) still merges by winner, item and time', () => {
+    store.sync([win()], [], []);
+    const { lootListId, ...chat } = win({ time: 1_800_000_001 });
+    void lootListId;
+    expect(store.sync([chat], [], []).records).toHaveLength(1);
+  });
+});
+
 describe('chat-tail reconciliation', () => {
   it('upgrades a chat-tail placeholder in place when the addon syncs the same win hours later', () => {
     const first = store.sync([{ itemId: 268232, itemLink: '[Cincture of the Abyssal Grotto]', winner: 'Dharma', boss: null, slot: null, source: 'chat-tail', time: 1000 }], [], []);

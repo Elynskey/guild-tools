@@ -344,7 +344,7 @@ local function slotLabel(itemLink)
   return resolved
 end
 
-local function recordNeedWin(winnerName, itemLink, bossOverride, encounterIDOverride, difficultyOverride)
+local function recordNeedWin(winnerName, itemLink, bossOverride, encounterIDOverride, difficultyOverride, lootListID)
   if not GuildToolsLootDB.enabled or not winnerName or not itemLink then return end
   if not isTrackedEncounter(encounterIDOverride or currentEncounterID) then return end
   local itemId = itemIdFromLink(itemLink)
@@ -363,9 +363,13 @@ local function recordNeedWin(winnerName, itemLink, bossOverride, encounterIDOver
   -- letting a genuinely new win of the same item on a LATER night through.
   local now = time()
   local DEDUP_WINDOW_SECONDS = 6 * 60 * 60
+  local encounterId = encounterIDOverride or currentEncounterID
   for _, r in ipairs(GuildToolsLootDB.records) do
     if r.itemId == itemId and r.winner == winnerName and math.abs(r.time - now) <= DEDUP_WINDOW_SECONDS then
-      return
+      -- Two drops of the same item in one encounter have different lootListIDs: a different win, not a second sighting of
+      -- the same one. Only when BOTH sides carry the ID; without it (the chat-text path has none) the old rule stands.
+      local differentDrop = lootListID ~= nil and r.lootListId ~= nil and (r.lootListId ~= lootListID or r.encounterId ~= encounterId)
+      if not differentDrop then return end
     end
   end
 
@@ -379,7 +383,10 @@ local function recordNeedWin(winnerName, itemLink, bossOverride, encounterIDOver
     difficulty = difficultyOverride or currentDifficulty,
     -- Which encounter this came from. Lets the store tell that two officers' records (or a late backfill scan's) are the
     -- SAME win however far apart their capture times are, instead of relying on a 60-second window.
-    encounterId = encounterIDOverride or currentEncounterID,
+    encounterId = encounterId,
+    -- The game's own ID for this drop within the encounter (C_LootHistory only). With the encounter it identifies the roll
+    -- exactly, so the shared store can tell two officers' copies of ONE roll from two separate rolls, whatever the times.
+    lootListId = lootListID,
     self = isSelf(winnerName) or nil,
   })
   capturedInGeneration = encounterGeneration
@@ -399,7 +406,7 @@ end
 -- same as today. Deliberately silent (no chat announce, unlike recordNeedWin) -- this
 -- is officer-app-only, never posted anywhere raid-visible; calling out someone's bad
 -- roll live in raid chat would be a jerk move this addon shouldn't enable.
-local function recordNeedLoss(loserName, itemLink, bossOverride, encounterIDOverride, difficultyOverride)
+local function recordNeedLoss(loserName, itemLink, bossOverride, encounterIDOverride, difficultyOverride, lootListID)
   if not GuildToolsLootDB.enabled or not loserName or not itemLink then return end
   if not isTrackedEncounter(encounterIDOverride or currentEncounterID) then return end
   local itemId = itemIdFromLink(itemLink)
@@ -410,9 +417,13 @@ local function recordNeedLoss(loserName, itemLink, bossOverride, encounterIDOver
   -- same-raid-night grouping threshold.
   local now = time()
   local DEDUP_WINDOW_SECONDS = 6 * 60 * 60
+  local encounterId = encounterIDOverride or currentEncounterID
   for _, r in ipairs(GuildToolsLootDB.needLosses) do
     if r.itemId == itemId and r.name == loserName and math.abs(r.time - now) <= DEDUP_WINDOW_SECONDS then
-      return
+      -- Someone who rolled Need on BOTH copies of a drop loses twice: two rolls, two lootListIDs. Only collapse a repeat
+      -- sighting of the same roll (same ID, or no ID to tell them apart).
+      local differentDrop = lootListID ~= nil and r.lootListId ~= nil and (r.lootListId ~= lootListID or r.encounterId ~= encounterId)
+      if not differentDrop then return end
     end
   end
 
@@ -424,7 +435,8 @@ local function recordNeedLoss(loserName, itemLink, bossOverride, encounterIDOver
     slot = slotLabel(itemLink),
     time = now,
     difficulty = difficultyOverride or currentDifficulty,
-    encounterId = encounterIDOverride or currentEncounterID,
+    encounterId = encounterId,
+    lootListId = lootListID,
   })
 end
 
@@ -475,11 +487,11 @@ local function handleLootHistoryDrop(encounterID, lootListID, bossNameHint)
     if name then bossName = name end
   end
 
-  recordNeedWin(dropInfo.winner.playerName, dropInfo.itemHyperlink, bossName, encounterID)
+  recordNeedWin(dropInfo.winner.playerName, dropInfo.itemHyperlink, bossName, encounterID, nil, lootListID)
 
   for _, roll in ipairs(dropInfo.rollInfos) do
     if not roll.isWinner and (roll.state == NEED_MAIN_SPEC_STATE or roll.state == NEED_OFF_SPEC_STATE) then
-      recordNeedLoss(roll.playerName, dropInfo.itemHyperlink, bossName, encounterID)
+      recordNeedLoss(roll.playerName, dropInfo.itemHyperlink, bossName, encounterID, nil, lootListID)
     end
   end
 end

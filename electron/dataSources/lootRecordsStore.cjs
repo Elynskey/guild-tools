@@ -69,6 +69,25 @@ const recordKey = (r) => `${r.itemId}::${r.winner}::${r.time}`;
 const tradeKey = (t) => `${t.itemId}::${t.from}::${t.to}::${t.time}`;
 const needLossKey = (r) => `${r.itemId}::${r.name}::${r.time}`;
 
+// The game's own identity for one roll: the encounter plus the drop's ID within it, recorded by the addon's C_LootHistory path
+// (addon 1.7+). Two officers' copies of ONE roll share it, two rolls on two copies of an item do not, whatever their capture
+// times. true = same drop, false = different drop, null = can't say (a record without the IDs: older addon, or the chat path).
+// lootListIDs restart with every kill of an encounter, hence the difficulty and same-night guards.
+function isSameDrop(a, b) {
+  if (a.encounterId == null || b.encounterId == null || a.lootListId == null || b.lootListId == null) return null;
+  if (a.encounterId !== b.encounterId || a.lootListId !== b.lootListId) return false;
+  if (a.difficulty != null && b.difficulty != null && a.difficulty !== b.difficulty) return false;
+  return Math.abs(a.time - b.time) <= DUPLICATE_WINDOW_SECONDS;
+}
+
+/** The same lost roll (same item, same roller, same drop). Without drop IDs (older addons) it is the old exact-timestamp rule. */
+function isSameNeedLoss(a, b) {
+  if (a.itemId !== b.itemId || a.name !== b.name) return false;
+  const drop = isSameDrop(a, b);
+  if (drop !== null) return drop;
+  return a.time === b.time;
+}
+
 /**
  * Merges newly-submitted records/trades into the shared store, deduped. Returns the full
  * merged store plus which of the incoming records/trades were genuinely new (addedRecords/
@@ -108,7 +127,6 @@ const needLossKey = (r) => `${r.itemId}::${r.name}::${r.time}`;
 function sync(newRecords, newTrades, newNeedLosses, mode = 'prod') {
   const db = load(mode);
   const tradeKeys = new Set(db.trades.map(tradeKey));
-  const needLossKeys = new Set(db.needLosses.map(needLossKey));
   const removed = new Set(db.removedKeys);
   const addedRecords = [];
   const addedTrades = [];
@@ -152,16 +170,37 @@ function sync(newRecords, newTrades, newNeedLosses, mode = 'prod') {
   }
   for (const r of newNeedLosses ?? []) {
     if (removed.has(needLossKey(r))) continue;
-    const k = needLossKey(r);
-    if (!needLossKeys.has(k)) {
+    if (!db.needLosses.some((existing) => isSameNeedLoss(existing, r))) {
       db.needLosses.push(r);
-      needLossKeys.add(k);
       addedNeedLosses.push(r);
     }
   }
 
   save(db, mode);
   return { records: db.records, trades: db.trades, needLosses: db.needLosses, addedRecords, addedTrades, addedNeedLosses, verifiedRecords };
+}
+
+/**
+ * Removes lost rolls that are the same roll recorded twice by different officers (see needLossCleanup.cjs for how they are
+ * told apart from real repeats). Dry run unless `apply` is true. Applying first copies the store file to
+ * `<file>.bak-<timestamp>`, and adds each removed entry's key to removedKeys so the addon that recorded it cannot re-add it on
+ * its next sync. Returns the plan either way.
+ */
+function cleanupNeedLosses(mode = 'prod', { apply = false } = {}) {
+  const { planNeedLossCleanup } = require('./needLossCleanup.cjs');
+  const db = load(mode);
+  const plan = planNeedLossCleanup(db.needLosses, db.records);
+  if (!apply || plan.remove.length === 0) return { ...plan, applied: false, backup: null };
+  const file = storePath(mode);
+  const backup = `${file}.bak-${new Date().toISOString().replace(/[:.]/g, '-')}`;
+  fs.copyFileSync(file, backup);
+  const gone = new Set(plan.remove);
+  db.needLosses = db.needLosses.filter((l) => !gone.has(l));
+  const removedKeys = new Set(db.removedKeys);
+  for (const l of plan.remove) removedKeys.add(needLossKey(l));
+  db.removedKeys = [...removedKeys];
+  save(db, mode);
+  return { ...plan, applied: true, backup };
 }
 
 /** Stamps records as announced to Discord so auto-post never announces the same win twice. */
@@ -214,6 +253,9 @@ function findSyncDuplicate(existingRecords, candidate) {
       const selfPair = (r.selfWin && isPlaceholder(r) && candidate.self === true) || (candidate.selfWin && isPlaceholder(candidate) && r.self === true);
       if (!selfPair && r.winner.toLowerCase() !== candidate.winner.toLowerCase()) return false;
       if (extractItemName(r.itemLink)?.toLowerCase() !== candidateName) return false;
+      // Same winner and item; if both records carry the game's drop identity it decides, in both directions.
+      const drop = isSameDrop(r, candidate);
+      if (drop !== null) return drop;
       // Both records say which encounter and difficulty the win came from (addon 1.7+): the same winner + item + encounter +
       // difficulty is the same win, however far apart two officers' capture times are. A backfill scan or a mid-raid reload
       // stamps a much later time than the officer who saw the roll live, and the 60 s window alone would record that a second
@@ -386,4 +428,4 @@ function deleteNight(startTime, endTime, mode = 'prod') {
   };
 }
 
-module.exports = { load, sync, markPosted, manualAdd, update, remove, removeTrade, deleteNight };
+module.exports = { load, sync, markPosted, manualAdd, update, remove, removeTrade, deleteNight, cleanupNeedLosses };
