@@ -344,6 +344,37 @@ local function slotLabel(itemLink)
   return resolved
 end
 
+-- The boss's name for an encounter ID. The chat path knows the encounter from the "Loot" link in the message but nothing else, and
+-- currentBoss is only whatever ENCOUNTER_START last set -- empty after a /reload, or when the roll resolves for another pull. Found
+-- live in an LFR test night (2026-09-23): wins captured with encounter 3445 and no boss, though the name was in seenEncounters.
+local function bossForEncounter(encounterId)
+  if not encounterId then return nil end
+  local seen = GuildToolsLootDB.seenEncounters and GuildToolsLootDB.seenEncounters[tostring(encounterId)]
+  if seen then return seen end
+  if C_LootHistory and C_LootHistory.GetAllEncounterInfos then
+    local ok, infos = pcall(C_LootHistory.GetAllEncounterInfos)
+    if ok and type(infos) == "table" then
+      for _, info in ipairs(infos) do
+        if info.encounterID == encounterId and info.encounterName then return info.encounterName end
+      end
+    end
+  end
+  return nil
+end
+
+local function resolveBoss(bossOverride, encounterId)
+  return bossOverride or bossForEncounter(encounterId) or currentBoss
+end
+
+-- Names the boss on records saved without one, now that the encounter's name is known (runs at login, so a sync-reload fixes them).
+local function backfillBosses()
+  for _, list in ipairs({ GuildToolsLootDB.records or {}, GuildToolsLootDB.needLosses or {} }) do
+    for _, r in ipairs(list) do
+      if not r.boss and r.encounterId then r.boss = bossForEncounter(r.encounterId) end
+    end
+  end
+end
+
 local function recordNeedWin(winnerName, itemLink, bossOverride, encounterIDOverride, difficultyOverride, lootListID)
   if not GuildToolsLootDB.enabled or not winnerName or not itemLink then return end
   if not isTrackedEncounter(encounterIDOverride or currentEncounterID) then return end
@@ -377,7 +408,7 @@ local function recordNeedWin(winnerName, itemLink, bossOverride, encounterIDOver
     itemId = itemId,
     itemLink = itemLink,
     winner = winnerName,
-    boss = bossOverride or currentBoss,
+    boss = resolveBoss(bossOverride, encounterId),
     slot = slotLabel(itemLink),
     time = now,
     difficulty = difficultyOverride or currentDifficulty,
@@ -431,7 +462,7 @@ local function recordNeedLoss(loserName, itemLink, bossOverride, encounterIDOver
     itemId = itemId,
     itemLink = itemLink,
     name = loserName,
-    boss = bossOverride or currentBoss,
+    boss = resolveBoss(bossOverride, encounterId),
     slot = slotLabel(itemLink),
     time = now,
     difficulty = difficultyOverride or currentDifficulty,
@@ -744,6 +775,7 @@ frame:SetScript("OnEvent", function(_, event, ...)
   ensureDB()
   if event == "PLAYER_LOGIN" then
     recordCharacter()
+    backfillBosses()
     if GuildToolsLootDB.enabled then
       announce('logging Need wins (type /gtloot off to stop for this run).')
     else

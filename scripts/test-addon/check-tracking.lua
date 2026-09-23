@@ -136,6 +136,24 @@ issecretvalue = function(v) return v == "SECRET" end
 local okSecret = pcall(realFrame.scripts.OnEvent, realFrame, "CHAT_MSG_LOOT", "SECRET")
 issecretvalue = nil
 check("...and a protected (secret) chat message is skipped instead of raising", okSecret and #GuildToolsLootDB.records == 2)
+-- boss names come from the encounter ID (LFR test night 2026-09-23: wins had encounter 3445 and no boss)
+GuildToolsLootDB.records = {}
+GuildToolsLootDB.seenEncounters = { ["3470"] = "Nek'zali the Soulcoiler" }
+realFrame.scripts.OnEvent(realFrame, "CHAT_MSG_LOOT", RAW_OTHER)
+check("a win names its boss from the encounter in the loot link, not just whichever pull started last", GuildToolsLootDB.records[1] and GuildToolsLootDB.records[1].boss == "Nek'zali the Soulcoiler", GuildToolsLootDB.records[1] and tostring(GuildToolsLootDB.records[1].boss))
+GuildToolsLootDB.seenEncounters = {}
+GuildToolsLootDB.records = {}
+C_LootHistory = { GetAllEncounterInfos = function() return { { encounterID = 3470, encounterName = "From The Game" } } end }
+realFrame.scripts.OnEvent(realFrame, "CHAT_MSG_LOOT", RAW_OTHER)
+check("...and asks the game for the name when this addon never saw that encounter start", GuildToolsLootDB.records[1] and GuildToolsLootDB.records[1].boss == "From The Game", GuildToolsLootDB.records[1] and tostring(GuildToolsLootDB.records[1].boss))
+C_LootHistory = nil
+GuildToolsLootDB.seenEncounters = { ["3445"] = "Entombed Sentinels" }
+GuildToolsLootDB.records = { { itemId = 1, winner = "A", time = 1, encounterId = 3445 }, { itemId = 2, winner = "B", time = 2, boss = "Kept", encounterId = 3445 }, { itemId = 3, winner = "C", time = 3 } }
+GuildToolsLootDB.needLosses = { { itemId = 4, name = "D", time = 4, encounterId = 3445 } }
+realFrame.scripts.OnEvent(realFrame, "PLAYER_LOGIN")
+check("at login, records saved without a boss get it from their encounter; others are left alone", GuildToolsLootDB.records[1].boss == "Entombed Sentinels" and GuildToolsLootDB.records[2].boss == "Kept" and GuildToolsLootDB.records[3].boss == nil and GuildToolsLootDB.needLosses[1].boss == "Entombed Sentinels", tostring(GuildToolsLootDB.records[1].boss) .. "/" .. tostring(GuildToolsLootDB.needLosses[1].boss))
+GuildToolsLootDB.seenEncounters = {}
+GuildToolsLootDB.needLosses = {}
 GuildToolsLootDB.records = realRecordsSoFar
 
 -- =========================== the TEST addon tracks everything ===========================
