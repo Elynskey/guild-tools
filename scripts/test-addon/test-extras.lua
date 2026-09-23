@@ -855,6 +855,131 @@ local function flushTest()
   end)
 end
 
+-- ---------------------------------------------------------------------------------------------
+-- /gtloottest drops: is the game's own loot history (C_LootHistory) giving this addon anything? It is the only source of the
+-- per-drop ID that tells two rolls on two copies of one item apart. An LFR test night (2026-09-23) captured the wins from chat
+-- text but none from here, so this asks the game directly and saves exactly what it answered.
+-- ---------------------------------------------------------------------------------------------
+local function dropValue(v)
+  if issecretvalue and issecretvalue(v) then return "<secret>" end
+  local t = type(v)
+  if t == "table" or t == "function" or t == "userdata" then return "<" .. t .. ">" end
+  local text = tostring(v)
+  if #text > 48 then text = text:sub(1, 48) .. "..." end
+  return text
+end
+
+local function dropShape(tbl)
+  if type(tbl) ~= "table" then return dropValue(tbl) end
+  local parts = {}
+  for k, v in pairs(tbl) do parts[#parts + 1] = tostring(k) .. "=" .. dropValue(v) end
+  table.sort(parts)
+  return table.concat(parts, ", ")
+end
+
+do
+  local dropFrame = CreateFrame("Frame")
+  dropFrame:RegisterEvent("LOOT_HISTORY_UPDATE_DROP")
+  dropFrame:SetScript("OnEvent", function(_, _, encounterID, lootListID)
+    local db = GuildToolsLootTestDB
+    if not db then return end
+    db.dropEvents = db.dropEvents or { count = 0 }
+    db.dropEvents.count = db.dropEvents.count + 1
+    pcall(function()
+      local info = C_LootHistory and C_LootHistory.GetSortedInfoForDrop and C_LootHistory.GetSortedInfoForDrop(encounterID, lootListID)
+      db.dropEvents.last = {
+        at = time(), encounterID = dropValue(encounterID), lootListID = dropValue(lootListID),
+        hasInfo = info ~= nil, hasWinner = (info and info.winner ~= nil) or false,
+        rolls = (info and type(info.rollInfos) == "table") and #info.rollInfos or nil, shape = dropShape(info),
+      }
+    end)
+  end)
+end
+
+local function dropsProbe()
+  local db = GuildToolsLootTestDB
+  local LH = C_LootHistory
+  local probe = { at = time(), apis = {}, states = {}, encounters = {} }
+  for _, name in ipairs({ "GetAllEncounterInfos", "GetSortedDropsForEncounter", "GetSortedInfoForDrop" }) do
+    probe.apis[name] = (LH and LH[name] ~= nil) or false
+  end
+  local enum = Enum and Enum.EncounterLootDropRollState
+  if enum then for k, v in pairs(enum) do probe.states[k] = v end end
+
+  local ids, names = {}, {}
+  for idText, name in pairs(GuildToolsLootTestDB.seenEncounters or {}) do
+    local id = tonumber(idText)
+    if id then ids[#ids + 1] = id names[id] = name end
+  end
+  if LH and LH.GetAllEncounterInfos then
+    local ok, infos = pcall(LH.GetAllEncounterInfos)
+    probe.allInfosOk = ok
+    if ok and type(infos) == "table" then
+      probe.allInfosCount = #infos
+      for _, info in ipairs(infos) do
+        if info.encounterID and not names[info.encounterID] then
+          ids[#ids + 1] = info.encounterID names[info.encounterID] = info.encounterName or "?"
+        end
+      end
+    end
+  end
+  table.sort(ids, function(a, b) return a > b end)
+
+  for i = 1, math.min(#ids, 6) do
+    local id = ids[i]
+    local enc = { id = id, name = names[id], drops = 0, samples = {} }
+    if LH and LH.GetSortedDropsForEncounter then
+      local ok, drops = pcall(LH.GetSortedDropsForEncounter, id)
+      enc.dropsOk = ok
+      if ok and type(drops) == "table" then
+        enc.drops = #drops
+        for j = 1, math.min(#drops, 3) do
+          local sample = { drop = dropShape(drops[j]) }
+          if LH.GetSortedInfoForDrop and drops[j].lootListID then
+            local ok2, info = pcall(LH.GetSortedInfoForDrop, id, drops[j].lootListID)
+            sample.infoOk = ok2
+            if ok2 and type(info) == "table" then
+              sample.info = dropShape(info)
+              sample.winner = dropShape(info.winner)
+              sample.rolls = {}
+              for k, roll in ipairs(info.rollInfos or {}) do
+                if k <= 4 then sample.rolls[#sample.rolls + 1] = dropShape(roll) end
+              end
+            end
+          end
+          enc.samples[#enc.samples + 1] = sample
+        end
+      end
+    end
+    probe.encounters[#probe.encounters + 1] = enc
+  end
+  db.dropProbe = probe
+  return probe
+end
+
+local function showDrops()
+  local db = GuildToolsLootTestDB
+  local p = dropsProbe()
+  local ev = db.dropEvents
+  announce("game loot history: " .. (C_LootHistory and "C_LootHistory exists" or "C_LootHistory is MISSING") ..
+    "; GetAllEncounterInfos " .. (p.apis.GetAllEncounterInfos and "yes" or "NO") ..
+    ", GetSortedDropsForEncounter " .. (p.apis.GetSortedDropsForEncounter and "yes" or "NO") ..
+    ", GetSortedInfoForDrop " .. (p.apis.GetSortedInfoForDrop and "yes" or "NO") .. ".")
+  announce("roll-state enum: " .. (next(p.states) and dropShape(p.states) or "MISSING (so this addon can never tell a Need from a Greed here)"))
+  announce("live drop events since this data was created: " .. (ev and ev.count or 0) ..
+    (ev and ev.last and (" (last: encounter " .. ev.last.encounterID .. ", drop " .. ev.last.lootListID .. ", info " .. (ev.last.hasInfo and "yes" or "NO") .. ", winner " .. (ev.last.hasWinner and "yes" or "NO") .. ", rolls " .. tostring(ev.last.rolls) .. ")") or ""))
+  if #p.encounters == 0 then announce("no encounters known yet, so nothing to ask the game about.") end
+  for _, e in ipairs(p.encounters) do
+    announce(tostring(e.name) .. " (" .. e.id .. "): the game lists " .. e.drops .. " drop(s)" .. ((e.dropsOk == false) and " -- the call ERRORED" or "") .. ".")
+    local s = e.samples[1]
+    if s then
+      announce("   first drop: " .. s.drop)
+      announce("   its info: " .. (s.info and (s.info:sub(1, 150) .. "; winner " .. tostring(s.winner):sub(1, 90) .. "; " .. #s.rolls .. " roll(s) shown") or ("NONE" .. ((s.infoOk == false) and " (call errored)" or ""))))
+    end
+  end
+  announce("everything above is saved: reload, then read GuildToolsLootTestDB.dropProbe.")
+end
+
 local function testHelp()
   announce("test commands (same names as the real /gtloot, plus more):")
   announce("  /gtloottest on | off | scan | chatlog   -- as the real addon")
@@ -864,6 +989,7 @@ local function testHelp()
   announce("  /gtloottest logmark                     -- write a marker and check it lands in WoWChatLog.txt")
   announce("  /gtloottest debug                       -- where you are, how loot is handed out (personal loot?), what logging is on")
   announce("  /gtloottest lootlines [n]               -- the raw loot text the game sent this addon, and whether it would be captured")
+  announce("  /gtloottest drops                       -- ask the game's own loot history what it knows (why no drop IDs?)")
   announce("  /gtloottest checklist [text|reset]      -- the on-screen test checklist (drag it; ticks itself)")
   announce("  /gtloottest check <id>                  -- tick a manual item: app_sync, once, legacy")
   announce("  /gtloottest sync                        -- reload now so Guild Tools gets your loot (also the click-to-sync button that appears after loot)")
@@ -902,6 +1028,8 @@ SlashCmdList["GUILDTOOLSLOOTTEST"] = function(msg)
     showDebug()
   elseif arg == "lootlines" then
     showLootLines(rest)
+  elseif arg == "drops" then
+    showDrops()
   elseif arg == "help" then
     testHelp()
   else

@@ -512,11 +512,9 @@ local function handleLootHistoryDrop(encounterID, lootListID, bossNameHint)
   -- GetAllEncounterInfos) over re-deriving one -- falls back to the event's own
   -- encounterID via EJ_GetEncounterInfo, then the closure-tracked currentBoss, since
   -- loot can resolve a few seconds after ENCOUNTER_END already cleared that.
-  local bossName = bossNameHint or currentBoss
-  if not bossNameHint and EJ_GetEncounterInfo then
-    local name = EJ_GetEncounterInfo(encounterID)
-    if name then bossName = name end
-  end
+  -- (EJ_GetEncounterInfo is NOT used: it takes an Encounter Journal ID, not this dungeon-encounter ID, so it can name the wrong boss.
+  -- recordNeedWin resolves a missing name from the encounter ID itself.)
+  local bossName = bossNameHint
 
   recordNeedWin(dropInfo.winner.playerName, dropInfo.itemHyperlink, bossName, encounterID, nil, lootListID)
 

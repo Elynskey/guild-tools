@@ -114,5 +114,22 @@ drop(3471, 1, SHAWL, "Mooingshots", { "Victorix" })
 check("the same item and loser on a DIFFERENT boss is a different roll and is recorded", count(db.needLosses, function(r) return r.name == "Victorix" and r.encounterId == 3471 end) == 1)
 check("...and the win too", count(db.records, function(r) return r.winner == "Mooingshots" and r.encounterId == 3471 end) == 1)
 
+-- /gtloottest drops: asks the game's loot history what it knows and saves the answer
+C_LootHistory.GetSortedDropsForEncounter = function(id) if id == 3471 then return { { lootListID = 1, itemHyperlink = "x" } } end return {} end
+printed = {}
+local okDrops, errDrops = pcall(SlashCmdList["GUILDTOOLSLOOTTEST"], "drops")
+local probe = GuildToolsLootTestDB.dropProbe
+check("drops runs and saves what the game answered", okDrops and probe and probe.apis.GetSortedInfoForDrop == true and probe.states.NeedMainSpec == 1, tostring(errDrops))
+local enc3471
+for _, e in ipairs(probe and probe.encounters or {}) do if e.id == 3471 then enc3471 = e end end
+check("...including the drops of each encounter it knows, with the roll details", enc3471 and enc3471.drops == 1 and enc3471.samples[1].info and enc3471.samples[1].info:find("winner", 1, true) and #enc3471.samples[1].rolls >= 1, enc3471 and tostring(enc3471.samples[1].info) or "no 3471")
+check("...and prints a summary", table.concat(printed, " "):find("the game lists 1 drop", 1, true) ~= nil)
+local savedLH = C_LootHistory
+C_LootHistory = nil
+Enum = nil
+local okNone = pcall(SlashCmdList["GUILDTOOLSLOOTTEST"], "drops")
+check("with no C_LootHistory at all it says so instead of erroring", okNone and GuildToolsLootTestDB.dropProbe.apis.GetSortedInfoForDrop == false)
+C_LootHistory = savedLH
+
 print(string.format("\n%d checks, %d failed", checks, failed))
 os.exit(failed == 0 and 0 or 1)
