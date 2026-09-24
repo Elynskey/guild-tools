@@ -5,7 +5,8 @@ import { RefreshButton } from '../shared/RefreshButton';
 import { HelpTooltip } from '../../design-system/HelpTooltip';
 import { specIcon } from '../../scoring/specIcons';
 import type { Role } from '../../scoring/types';
-import type { AddonCalendar, CalendarEvent } from '../../electron';
+import type { AddonCalendar, CalendarEvent, MplusCharacter, MplusGuild } from '../../electron';
+import type { MythicPlusRun } from '../../scoring/types';
 import { useMythicPlus } from './useMythicPlus';
 import { buildComps, DEFAULT_GROUP_FILTERS, eventAvailability, filterGuildGroups, findGuildGroups, isTimingGroup, keyRoles, roleRisk, type Comp, type GroupFilters, type CompMember, type GuildGroup, type Placed, type RoleRisk } from './mplusComp';
 
@@ -82,6 +83,7 @@ function CompCard({ comp, index }: { comp: Comp; index: number }) {
           <MemberLine key={d.member.name} p={d} slot="dps" />
         ))}
       </div>
+      <UtilityRow utility={comp.utility} />
       <div style={{ borderTop: '1px solid var(--border-hairline)', paddingTop: 10, fontSize: 'var(--text-body-s)', display: 'flex', flexDirection: 'column', gap: 4 }}>
         {comp.history.length === 0 ? (
           <span style={{ color: 'var(--text-faint)' }}>No one here has keyed together recently.</span>
@@ -121,7 +123,16 @@ function RoleRiskPanel({ risk }: { risk: RoleRisk }) {
   if (flexHeld > 0) {
     findings.push({ tone: 'warning', text: `${flexHeld} of the ${risk.groups} groups only ${flexHeld === 1 ? 'exists' : 'exist'} because someone plays a role they don't usually key as. With main roles only: ${risk.mainRoleGroups}.` });
   }
-  if (risk.critical.length) {
+  for (const [label, who] of [['lust', risk.lust], ['a battle res', risk.bres]] as const) {
+    if (risk.groups > 0 && who.length < risk.groups) {
+      findings.push({ tone: 'danger', text: `Only ${who.length} ${who.length === 1 ? 'person' : 'people'} can bring ${label}${who.length ? ` (${who.join(', ')})` : ''} -- ${risk.groups - who.length} of the ${risk.groups} groups will go without.` });
+    }
+  }
+  if (risk.critical.length && risk.critical.length === risk.people) {
+    findings.push({ tone: 'warning', text: `No one to spare: exactly ${risk.groups * 5} people for ${risk.groups} groups, so anyone missing costs a group.` });
+  } else if (risk.critical.length > 8) {
+    findings.push({ tone: 'warning', text: `${risk.critical.length} people can't be spared -- if any one of them is out, you lose a group. Mostly: ${names(risk.critical.slice(0, 6))}, …` });
+  } else if (risk.critical.length) {
     findings.push({ tone: 'warning', text: `Can't do without: ${names(risk.critical)} -- if any one of them is out, you lose a group.` });
   }
 
@@ -159,7 +170,10 @@ function RoleRiskPanel({ risk }: { risk: RoleRisk }) {
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 'var(--text-body-s)' }}>
         <div style={{ color: 'var(--text-strong)' }}>
-          Enough for <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-gold)' }}>{risk.groups}</span> full group{risk.groups === 1 ? '' : 's'}.
+          Enough for <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-gold)' }}>{risk.groups}</span> full group{risk.groups === 1 ? '' : 's'}.{' '}
+          <span style={{ color: 'var(--text-muted)' }}>
+            Lust: {risk.lust.length} {risk.lust.length === 1 ? 'person' : 'people'} · Battle res: {risk.bres.length}
+          </span>
         </div>
         {findings.map((f, i) => (
           <div key={i} style={{ color: toneColor[f.tone] }}>
@@ -318,6 +332,48 @@ function GroupFilterBar({ members, filters, onChange, shown }: { members: CompMe
   );
 }
 
+interface SourceChar {
+  name: string;
+  class: string;
+  spec: string;
+  role: Role;
+  rio: number;
+  runs: MythicPlusRun[];
+  seasonKeys: number | null;
+  person?: string;
+  typed?: boolean;
+}
+
+function fromMplus(c: MplusCharacter): SourceChar {
+  return { name: c.name, class: c.class, spec: c.spec, role: c.role, rio: c.rioCurrent, runs: c.mythicPlusSeasonRuns, seasonKeys: c.mythicPlusSeasonKeys, person: c.person };
+}
+
+// Characters an officer added by name stay on this PC between visits -- a convenience, so
+// it's fine if the browser storage isn't there.
+const ADDED_KEY = 'mplusComp.added';
+function loadAdded(): MplusCharacter[] {
+  try {
+    const raw = localStorage.getItem(ADDED_KEY);
+    return raw ? (JSON.parse(raw) as MplusCharacter[]) : [];
+  } catch {
+    return [];
+  }
+}
+function saveAdded(chars: MplusCharacter[]): void {
+  try {
+    localStorage.setItem(ADDED_KEY, JSON.stringify(chars));
+  } catch {
+    // not saved; they'd just type it again
+  }
+}
+
+/** "Name", "Name-Realm" or "Name-RealmWithoutSpaces" (as the calendar writes it) -> name + realm. */
+export function parseCharacter(input: string): { name: string; realm: string | null } {
+  const [name, ...rest] = input.trim().split('-');
+  const realm = rest.join('-').trim();
+  return { name: name.trim(), realm: realm ? realm.replace(/([a-z])([A-Z])/g, '$1 $2') : null };
+}
+
 function eventKeyOf(e: CalendarEvent): string {
   return `${e.start}|${e.title}`;
 }
@@ -344,6 +400,7 @@ function EventPicker({
   onIncludeMaybe,
   selected,
   result,
+  onLookUp,
 }: {
   calendar: AddonCalendar | null;
   eventKey: string;
@@ -352,7 +409,9 @@ function EventPicker({
   onIncludeMaybe: (v: boolean) => void;
   selected: CalendarEvent | null;
   result: ReturnType<typeof eventAvailability> | null;
+  onLookUp: (names: string[]) => Promise<void>;
 }) {
+  const [lookingUp, setLookingUp] = useState(false);
   if (!calendar) {
     return (
       <div style={{ fontSize: 'var(--text-body-s)', color: 'var(--text-muted)', lineHeight: 1.6, maxWidth: 720 }}>
@@ -395,9 +454,93 @@ function EventPicker({
               </span>
             </>
           )}
-          {result.extra.length > 0 && <> · also coming, but no M+ keys this season or not on the raid roster: {result.extra.join(', ')}</>}
+          {result.extra.length > 0 && (
+            <>
+              {' · '}also coming, not in the pool yet: {result.extra.join(', ')}{' '}
+              <button
+                type="button"
+                disabled={lookingUp}
+                onClick={async () => {
+                  setLookingUp(true);
+                  const full = new Map((selected?.invites ?? []).map((i) => [i.name, i.fullName]));
+                  await onLookUp(result.extra.map((n) => full.get(n) ?? n));
+                  setLookingUp(false);
+                }}
+                style={{ background: 'none', border: 0, padding: 0, cursor: lookingUp ? 'wait' : 'pointer', color: 'var(--text-gold)', font: 'inherit' }}
+              >
+                {lookingUp ? 'looking them up…' : 'Look them up'}
+              </button>
+            </>
+          )}
         </div>
       )}
+    </div>
+  );
+}
+
+function AddCharacter({ onAdd, poolNote }: { onAdd: (input: string) => Promise<string | null>; poolNote: string }) {
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const submit = async () => {
+    if (!text.trim() || busy) return;
+    setBusy(true);
+    setMessage(null);
+    const err = await onAdd(text);
+    setBusy(false);
+    if (err) setMessage(err);
+    else {
+      setMessage(`Added ${text.trim()}.`);
+      setText('');
+    }
+  };
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10, fontSize: 'var(--text-body-s)' }}>
+      <input
+        type="text"
+        placeholder="Add someone: Name or Name-Realm"
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') void submit();
+        }}
+        style={{ ...selectStyle, minWidth: 260 }}
+      />
+      <button type="button" onClick={() => void submit()} disabled={busy || !text.trim()} className="crd-btn" style={{ ...selectStyle, cursor: busy ? 'wait' : 'pointer', color: 'var(--text-gold)' }}>
+        {busy ? 'Looking up… (a few seconds)' : 'Add'}
+      </button>
+      {message && <span style={{ color: message.startsWith('Added') ? 'var(--status-success)' : 'var(--status-warning)' }}>{message}</span>}
+      <span style={{ marginLeft: 'auto', fontSize: 'var(--text-micro)', color: 'var(--text-faint)' }}>{poolNote}</span>
+    </div>
+  );
+}
+
+function UtilityRow({ utility }: { utility: Comp['utility'] }) {
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+      {utility.utilities.map((u) => {
+        const have = u.by.length > 0;
+        const key = u.id === 'lust' || u.id === 'bres';
+        return (
+          <span
+            key={u.id}
+            title={have ? u.by.map((b) => `${b.name}: ${b.ability}`).join('\n') : `Nobody in this group brings ${u.label.toLowerCase()}`}
+            style={{
+              padding: '2px 7px',
+              borderRadius: 'var(--radius-sm)',
+              border: `1px solid ${have ? 'var(--border-hairline)' : key ? 'var(--status-danger)' : 'var(--border-hairline)'}`,
+              fontSize: 'var(--text-micro)',
+              color: have ? 'var(--text-body)' : key ? 'var(--status-danger)' : 'var(--text-faint)',
+              textDecoration: have ? 'none' : 'line-through',
+              fontWeight: key ? 600 : 400,
+            }}
+          >
+            {have ? '✓ ' : '✗ '}
+            {u.label}
+          </span>
+        );
+      })}
+      {utility.buffs.length > 0 && <span style={{ fontSize: 'var(--text-micro)', color: 'var(--text-muted)', alignSelf: 'center' }}>Buffs: {utility.buffs.join(', ')}</span>}
     </div>
   );
 }
@@ -424,20 +567,46 @@ export function MythicPlusComp() {
   }, []);
   const selectedEvent = calendar?.events.find((e) => eventKeyOf(e) === eventKey) ?? null;
 
-  // Only raiders who've actually keyed this season -- a 0-score character isn't an M+ pick.
+  // Who's in the pool: every guild member with keys this season (the proxy rebuilds that
+  // list in the background, see mplusGuild.cjs), falling back to the raid roster until the
+  // first list exists -- plus anyone an officer typed in.
+  const [guild, setGuild] = useState<MplusGuild | null>(null);
+  const [added, setAdded] = useState<MplusCharacter[]>(loadAdded);
+  useEffect(() => {
+    void window.electronAPI?.getMplusGuild?.().then(setGuild);
+  }, []);
+  useEffect(() => saveAdded(added), [added]);
+  const source: SourceChar[] = useMemo(() => {
+    const base: SourceChar[] = guild?.characters.length
+      ? guild.characters.map(fromMplus)
+      : mp.rows.map((r) => ({ name: r.name, class: r.class, spec: r.spec, role: r.role, rio: r.rioCurrent, runs: r.seasonRuns, seasonKeys: r.seasonKeys }));
+    const names = new Set(base.map((c) => c.name.toLowerCase()));
+    return [...base, ...added.filter((a) => !names.has(a.name.toLowerCase())).map((a) => ({ ...fromMplus(a), typed: true }))];
+  }, [guild, mp.rows, added]);
+
+  // Only characters who've actually keyed this season -- a 0-score character isn't an M+ pick.
   const members: CompMember[] = useMemo(
     () =>
-      mp.rows
-        .filter((r) => r.rioCurrent > 0 || r.runs.length > 0)
-        .map((r) => ({ name: r.name, class: r.class, roles: keyRoles(r.seasonRuns, { role: r.role, spec: r.spec }), rio: Math.round(r.rioCurrent), runs: r.seasonRuns })),
-    [mp.rows],
+      source
+        .filter((r) => r.rio > 0 || r.runs.length > 0)
+        .map((r) => ({ name: r.name, class: r.class, roles: keyRoles(r.runs, { role: r.role, spec: r.spec }), rio: Math.round(r.rio), runs: r.runs, person: r.person })),
+    [source],
   );
   // How much of the season we can actually see -- Raider.IO doesn't list every key (see mplusRunArchive.cjs).
   const coverage = useMemo(() => {
-    const counted = mp.rows.filter((r) => r.seasonKeys !== null);
+    const counted = source.filter((r) => r.seasonKeys !== null);
     if (!counted.length) return null;
-    return { seen: counted.reduce((s, r) => s + Math.min(r.seasonRuns.length, r.seasonKeys!), 0), total: counted.reduce((s, r) => s + r.seasonKeys!, 0) };
-  }, [mp.rows]);
+    return { seen: counted.reduce((s, r) => s + Math.min(r.runs.length, r.seasonKeys!), 0), total: counted.reduce((s, r) => s + r.seasonKeys!, 0) };
+  }, [source]);
+  const typedNames = useMemo(() => new Set(source.filter((c) => c.typed).map((c) => c.name)), [source]);
+  const addCharacter = async (input: string): Promise<string | null> => {
+    const { name, realm } = parseCharacter(input);
+    if (!name) return 'Type a character name, or Name-Realm.';
+    const found = await window.electronAPI?.lookupMplusCharacter?.(name, realm ?? undefined);
+    if (!found) return `Raider.IO doesn't know ${input.trim()}${realm ? '' : ' on the guild realm -- try Name-Realm'}.`;
+    setAdded((prev) => [...prev.filter((a) => a.key !== found.key), found]);
+    return null;
+  };
   const groups = useMemo(() => findGuildGroups(members), [members]);
   const available = useMemo(() => members.filter((m) => !away.has(m.name)), [members, away]);
   const { comps, bench } = useMemo(() => buildComps(available, groups), [available, groups]);
@@ -516,10 +685,14 @@ export function MythicPlusComp() {
               onIncludeMaybe={setIncludeMaybe}
               selected={selectedEvent}
               result={eventResult}
+              onLookUp={async (names) => {
+                for (const n of names) await addCharacter(n);
+              }}
             />
 
-            <SectionTitle help="Click a raider to leave them out, say for tonight. Groups rebuild straight away; nothing is saved. The roles shown are every role they've keyed as recently, most-played first.">Who's available</SectionTitle>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            <SectionTitle help="Every guild member with keys this season (plus anyone added by name). Click someone to leave them out, say for tonight. Groups rebuild straight away. The roles shown are every role they've keyed as this season, most-played first. Alts linked in the officers' alt list count as one person.">Who's available</SectionTitle>
+            <AddCharacter onAdd={addCharacter} poolNote={guild?.characters.length ? `${members.length} with keys this season${guild.refreshing ? ' · updating the guild list…' : ''}` : guild?.refreshing ? 'Building the guild list (a few minutes the first time) -- showing the raid roster meanwhile.' : 'Showing the raid roster.'} />
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
               {members.map((m) => {
                 const out = away.has(m.name);
                 return (
@@ -546,6 +719,19 @@ export function MythicPlusComp() {
                     <img src={specIcon(m.roles[0].spec, m.class)} alt="" style={{ width: 16, height: 16, borderRadius: 2, opacity: out ? 0.4 : 1 }} />
                     {m.name}
                     <span style={{ fontSize: 'var(--text-micro)', color: 'var(--text-faint)' }}>{rolesLabel(m)}</span>
+                    {typedNames.has(m.name) && (
+                      <span
+                        role="button"
+                        title="Remove -- added by name"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setAdded((prev) => prev.filter((a) => a.name !== m.name));
+                        }}
+                        style={{ marginLeft: 2, color: 'var(--text-gold)' }}
+                      >
+                        ×
+                      </span>
+                    )}
                   </button>
                 );
               })}

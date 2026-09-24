@@ -1,4 +1,5 @@
 import type { MythicPlusRun, Role } from '../../scoring/types';
+import { groupUtility, utilityGain, UTILITIES, type UtilityCoverage, type UtilityId } from './mplusUtility';
 
 /** A role someone has played in recent keys, the spec they played it as, and how many keys. */
 export interface KeyRole {
@@ -14,6 +15,8 @@ export interface CompMember {
   roles: KeyRole[];
   rio: number;
   runs: MythicPlusRun[];
+  /** The real person behind this character (their main's name, from the officers' alt list), when they have alts in the pool -- one person fills one slot, whichever character they bring. */
+  person?: string;
 }
 
 /** A member in a comp slot, and whether that slot isn't the role they key as most. */
@@ -54,6 +57,8 @@ export interface Comp {
   targetLevel: number | null;
   /** Every pair in the comp that has keyed together, best record first. */
   history: Array<{ a: string; b: string } & PairRecord>;
+  /** Lust, battle res, soothe, dispels, purge -- who brings each, empty when missing -- and the group buffs it has. */
+  utility: { utilities: UtilityCoverage[]; buffs: string[] };
 }
 
 /**
@@ -176,16 +181,32 @@ function roleOf(m: CompMember, role: Role): KeyRole | undefined {
   return m.roles.find((r) => r.role === role);
 }
 
+function personOf(m: CompMember): string {
+  return m.person ?? m.name;
+}
+
+/** One entry per real person: an alt-holder can fill any role any of their characters has keyed. */
+function people(pool: CompMember[]): CompMember[] {
+  const byPerson = new Map<string, CompMember>();
+  for (const m of pool) {
+    const p = byPerson.get(personOf(m));
+    if (!p) byPerson.set(personOf(m), m);
+    else byPerson.set(personOf(m), { ...p, roles: [...p.roles, ...m.roles.filter((r) => !roleOf(p, r.role))] });
+  }
+  return [...byPerson.values()];
+}
+
 /**
- * Can these raiders fill these slots, one raider per slot? With only three roles this is
+ * Can these raiders fill these slots, one person per slot? With only three roles this is
  * exact and cheap: it's possible exactly when, for every combination of roles, enough
- * raiders can play at least one of them to cover those roles' slots combined (Hall).
+ * people can play at least one of them to cover those roles' slots combined (Hall).
  */
 function canFill(pool: CompMember[], slots: Role[]): boolean {
+  const who = people(pool);
   for (let mask = 1; mask < 1 << ROLES.length; mask++) {
     const roles = ROLES.filter((_, i) => mask & (1 << i));
     const needed = slots.filter((s) => roles.includes(s)).length;
-    const able = pool.filter((m) => roles.some((r) => roleOf(m, r))).length;
+    const able = who.filter((m) => roles.some((r) => roleOf(m, r))).length;
     if (able < needed) return false;
   }
   return true;
@@ -207,26 +228,42 @@ export function buildComps(members: CompMember[], groups: GuildGroup[]): { comps
   const maxRio = Math.max(1, ...members.map((m) => m.rio));
   let pool = [...members].sort((a, b) => b.rio - a.rio);
 
+  let groupsLeftAfterThis = 0;
+  // Doubling up on something scarce (a second lust in this group) costs what a later group
+  // would lose by going without -- the greedy fill otherwise stacks lust in group 1.
+  const hoardCost = (m: CompMember, team: Placed[]) => {
+    let cost = 0;
+    for (const u of UTILITIES) {
+      if (!u.classes[m.class] || !team.some((t) => u.classes[t.member.class])) continue;
+      const others = people(pool.filter((x) => personOf(x) !== personOf(m) && u.classes[x.class])).length;
+      if (others < groupsLeftAfterThis) cost += u.weight;
+    }
+    return cost;
+  };
   const fit = (m: CompMember, role: Role, team: Placed[]) =>
     m.rio / maxRio -
     (m.roles[0].role === role ? 0 : OFF_ROLE_PENALTY) +
-    SYNERGY_WEIGHT * team.reduce((sum, t) => sum + synergy(pairs, m.name, t.member.name), 0);
+    SYNERGY_WEIGHT * team.reduce((sum, t) => sum + synergy(pairs, m.name, t.member.name), 0) +
+    utilityGain(m.class, team.map((t) => t.member.class)) -
+    hoardCost(m, team);
 
   let groupCount = 0;
   while (canFill(pool, groupSlots(groupCount + 1))) groupCount++;
 
   const comps: Comp[] = [];
   for (let g = 0; g < groupCount; g++) {
+    groupsLeftAfterThis = groupCount - g - 1;
     const team: Placed[] = [];
     SLOTS.forEach((role, i) => {
       const rest = [...SLOTS.slice(i + 1), ...groupSlots(groupCount - g - 1)];
       let best: CompMember | null = null;
       for (const c of pool) {
-        if (!roleOf(c, role) || !canFill(pool.filter((m) => m !== c), rest)) continue;
+        if (!roleOf(c, role) || !canFill(pool.filter((m) => personOf(m) !== personOf(c)), rest)) continue;
         if (!best || fit(c, role, team) > fit(best, role, team)) best = c;
       }
       // The remaining slots were fillable before this pick, so some candidate keeps them so.
-      pool = pool.filter((m) => m !== best);
+      // Placing a character takes the person: their alts leave the pool too.
+      pool = pool.filter((m) => personOf(m) !== personOf(best!));
       team.push({ member: best!, spec: roleOf(best!, role)!.spec, offRole: best!.roles[0].role !== role });
     });
 
@@ -247,6 +284,7 @@ export function buildComps(members: CompMember[], groups: GuildGroup[]): { comps
       avgRio: Math.round(team.reduce((s, t) => s + t.member.rio, 0) / team.length),
       targetLevel: median(team.map((t) => bestTimedLevel(t.member)).filter((l): l is number => l !== null)),
       history,
+      utility: groupUtility(team.map((t) => ({ name: t.member.name, class: t.member.class }))),
     });
   }
 
@@ -277,6 +315,11 @@ export interface RoleRisk {
   short: Array<{ role: Role; need: number }>;
   /** Raiders whose absence alone costs a whole group. */
   critical: CompMember[];
+  /** People who can bring lust / a battle res (with any of their characters) -- fewer than `groups` means some groups go without. */
+  lust: string[];
+  bres: string[];
+  /** How many different people are available (alts counted once). */
+  people: number;
 }
 
 function hypothetical(role: Role, i: number): CompMember {
@@ -292,6 +335,11 @@ export function roleRisk(members: CompMember[]): RoleRisk {
     flex: members.filter((m) => m.roles[0].role !== role && roleOf(m, role)),
   }));
   const mainRoleGroups = maxGroups(members.map((m) => ({ ...m, roles: [m.roles[0]] })));
+  // Lust and battle res across everyone available: how many groups could have one each.
+  const brings = (id: UtilityId) =>
+    people(members).filter((p) => members.some((m) => personOf(m) === personOf(p) && UTILITIES.find((u) => u.id === id)!.classes[m.class]));
+  const lustBy = brings('lust');
+  const bresBy = brings('bres');
 
   const short: RoleRisk['short'] = [];
   for (const role of ROLES) {
@@ -305,8 +353,8 @@ export function roleRisk(members: CompMember[]): RoleRisk {
   }
   short.sort((a, b) => a.need - b.need);
 
-  const critical = groups === 0 ? [] : members.filter((m) => maxGroups(members.filter((x) => x !== m)) < groups);
-  return { coverage, groups, mainRoleGroups, short, critical };
+  const critical = groups === 0 ? [] : people(members).filter((p) => maxGroups(members.filter((x) => personOf(x) !== personOf(p))) < groups);
+  return { coverage, groups, mainRoleGroups, short, critical, lust: lustBy.map((p) => p.name), bres: bresBy.map((p) => p.name), people: people(members).length };
 }
 
 export interface GroupFilters {

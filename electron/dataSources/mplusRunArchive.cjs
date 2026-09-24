@@ -66,9 +66,15 @@ function recordSeasonRuns(characters) {
   return result;
 }
 
+/** This character's archived season, newest first ([] if none). */
+function getArchivedRuns(key) {
+  const entry = load()[key];
+  return entry ? Object.values(entry.runs).sort((a, b) => b.completedAt.localeCompare(a.completedAt)) : [];
+}
+
 /** When this character's season was last backfilled (ms), or null. */
 function lastBackfilledAt(key) {
   return load()[key]?.backfilledAt ?? null;
 }
 
-module.exports = { recordSeasonRuns, lastBackfilledAt, seasonOf, runKey };
+module.exports = { recordSeasonRuns, getArchivedRuns, lastBackfilledAt, seasonOf, runKey };

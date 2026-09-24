@@ -16,9 +16,9 @@ function run(id: number, level: number, upgrades: number, day = 1): MythicPlusRu
 }
 
 /** `role` is their main key role; `alsoKeysAs` are roles they've played in fewer keys. */
-function member(name: string, role: Role, rio: number, runs: MythicPlusRun[] = [], alsoKeysAs: Role[] = []): CompMember {
+function member(name: string, role: Role, rio: number, runs: MythicPlusRun[] = [], alsoKeysAs: Role[] = [], cls = 'Rogue', person?: string): CompMember {
   const roles = [role, ...alsoKeysAs].map((r, i) => ({ role: r, spec: `${r}-spec`, keys: 10 - i }));
-  return { name, class: 'Mage', roles, rio, runs };
+  return { name, class: cls, roles, rio, runs, person };
 }
 
 describe('findGuildGroups', () => {
@@ -259,5 +259,48 @@ describe('eventAvailability', () => {
 
   it('counts tentative when asked to', () => {
     expect([...eventAvailability(list, invites, true).away].sort()).toEqual(['Silverhorn', 'Zakainu']);
+  });
+});
+
+describe('group utility', () => {
+  const dps = (n: string, cls: string, rio = 2500) => member(n, 'dps', rio, [], [], cls);
+
+  it('takes a lust class over a slightly higher score when the group has no lust', () => {
+    const roster = [member('T', 'tank', 3000, [], [], 'Warrior'), member('H', 'healer', 3000, [], [], 'Priest'), dps('A', 'Rogue', 2800), dps('B', 'Rogue', 2800), dps('C', 'Rogue', 2700), dps('Sham', 'Shaman', 2600)];
+    const { comps } = buildComps(roster, []);
+    expect(comps[0].dps.map((d) => d.member.name)).toContain('Sham');
+    expect(comps[0].utility.utilities.find((u) => u.id === 'lust')!.by).toEqual([{ name: 'Sham', ability: 'Bloodlust' }]);
+  });
+
+  it('spreads lust across groups instead of stacking it in one', () => {
+    const roster = [
+      member('T1', 'tank', 3000, [], [], 'Warrior'), member('T2', 'tank', 2900, [], [], 'Warrior'),
+      member('H1', 'healer', 3000, [], [], 'Priest'), member('H2', 'healer', 2900, [], [], 'Priest'),
+      dps('Mage1', 'Mage', 3000), dps('Mage2', 'Mage', 2990), dps('R1', 'Rogue'), dps('R2', 'Rogue'), dps('R3', 'Rogue'), dps('R4', 'Rogue'),
+    ];
+    const { comps } = buildComps(roster, []);
+    expect(comps.map((c) => c.utility.utilities.find((u) => u.id === 'lust')!.by.length)).toEqual([1, 1]);
+  });
+
+  it('shows what a group is missing', () => {
+    const roster = [member('T', 'tank', 1, [], [], 'Warrior'), member('H', 'healer', 1, [], [], 'Priest'), dps('A', 'Rogue'), dps('B', 'Rogue'), dps('C', 'Rogue')];
+    const u = buildComps(roster, []).comps[0].utility;
+    expect(u.utilities.find((x) => x.id === 'bres')!.by).toEqual([]);
+    expect(u.buffs.sort()).toEqual(['Battle Shout', 'Fortitude']);
+  });
+});
+
+describe('alts', () => {
+  it('never puts the same person in two groups, and counts them once for role coverage', () => {
+    const roster = [
+      member('Main', 'tank', 3000, [], [], 'Warrior', 'Main'),
+      member('Alt', 'tank', 2900, [], [], 'Paladin', 'Main'),
+      member('H1', 'healer', 1), member('H2', 'healer', 1),
+      ...['a', 'b', 'c', 'd', 'e', 'f'].map((n) => member(n, 'dps', 1)),
+    ];
+    const { comps } = buildComps(roster, []);
+    expect(comps).toHaveLength(1);
+    expect(roleRisk(roster).groups).toBe(1);
+    expect(roleRisk(roster).short).toEqual([{ role: 'tank', need: 1 }]);
   });
 });

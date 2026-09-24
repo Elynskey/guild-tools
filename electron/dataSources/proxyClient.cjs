@@ -39,6 +39,15 @@ async function fetchRoster() {
   return proxyFetchJson('/roster', { method: 'POST' });
 }
 
+// M+ Comp (test builds): guild members with keys this season, and a typed-in character (see mplusGuild.cjs).
+async function fetchMplusGuild() {
+  return proxyFetchJson('/mplus-guild', { method: 'POST' });
+}
+
+async function lookupMplusCharacter(name, realm) {
+  return proxyFetchJson('/mplus-character', { method: 'POST', body: JSON.stringify({ name, realm }) });
+}
+
 async function getCachedProfessions() {
   return proxyFetchJson('/professions/cached');
 }
@@ -271,6 +280,8 @@ async function listAnalyticsEvents(mode) {
 module.exports = {
   isAvailable,
   fetchRoster,
+  fetchMplusGuild,
+  lookupMplusCharacter,
   getCachedProfessions,
   fetchProfessions,
   getCachedRecipeCatalogue,

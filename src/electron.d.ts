@@ -319,6 +319,28 @@ export interface CalendarEvent {
   invites: CalendarInvite[] | null;
 }
 
+/** electron/dataSources/mplusGuild.cjs -- one character with their season's keys. */
+export interface MplusCharacter {
+  key: string;
+  name: string;
+  realm: string;
+  class: string;
+  spec: string;
+  role: 'tank' | 'healer' | 'dps';
+  rioCurrent: number;
+  mythicPlusSeasonKeys: number | null;
+  mythicPlusSeasonRuns: import('./scoring/types').MythicPlusRun[];
+  /** Main's name from the officers' alt list (their own name if not listed). */
+  person: string;
+}
+
+export interface MplusGuild {
+  /** When the list was last rebuilt (ms), null before the first run finishes. */
+  at: number | null;
+  refreshing: boolean;
+  characters: MplusCharacter[];
+}
+
 /** electron/dataSources/lootLog.cjs's normalizeCalendar. */
 export interface AddonCalendar {
   /** ms since the epoch. */
@@ -368,6 +390,10 @@ export interface ElectronAPI {
   getLootRawFeeds: () => Promise<LootRawFeeds | null>;
   /** The in-game calendar the test addon saved -- test builds only; null otherwise or before the addon has saved one. */
   getAddonCalendar: () => Promise<AddonCalendar | null>;
+  /** Guild members with keys this season -- test builds only. */
+  getMplusGuild: () => Promise<MplusGuild | null>;
+  /** One character by name (realm optional, defaults to the guild's) -- test builds only; null if Raider.IO doesn't know them. */
+  lookupMplusCharacter: (name: string, realm?: string) => Promise<MplusCharacter | null>;
   /** Test builds only: one synthetic win through app -> proxy -> test store -> test Discord channel, reporting each step; removes it after. */
   injectTestWin: () => Promise<{ ok: boolean; error?: string; winner?: string; stored?: boolean; posted?: boolean; steps?: string[] }>;
   /** Test builds only: empties the TEST loot store (never the real one). */

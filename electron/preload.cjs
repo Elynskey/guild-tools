@@ -11,6 +11,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getLiveLootStore: () => ipcRenderer.invoke('testTools:liveLootStore'),
   getLootRawFeeds: () => ipcRenderer.invoke('testTools:rawFeeds'),
   getAddonCalendar: () => ipcRenderer.invoke('testTools:calendar'),
+  getMplusGuild: () => ipcRenderer.invoke('testTools:mplusGuild'),
+  lookupMplusCharacter: (name, realm) => ipcRenderer.invoke('testTools:mplusCharacter', name, realm),
   injectTestWin: () => ipcRenderer.invoke('testTools:injectWin'),
   clearTestLoot: () => ipcRenderer.invoke('testTools:clearTestLoot'),
   getRoster: () => ipcRenderer.invoke('roster:fetch'),

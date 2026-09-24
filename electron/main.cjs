@@ -36,6 +36,7 @@ const { getWowPathConfig, setWowPath, installAddon, setCharacterName, getAddonVe
 const { getChatLogStatus } = require('./dataSources/lootChatTail.cjs');
 const { getCombatLogStatus, recentKills } = require('./dataSources/lootCombatLog.cjs');
 const pipelineLog = require('./dataSources/pipelineLog.cjs');
+const { getGuildKeyers, lookupCharacter } = require('./dataSources/mplusGuild.cjs');
 const { recentLootLines, recentEncounters } = require('./dataSources/rawFeeds.cjs');
 const { isLoggingOn } = require('./dataSources/chatLogState.cjs');
 const { fetchLootLog, syncAddonDataIfChanged, addManualLootRecord, updateLootRecord, removeLootRecord, removeLootTrade, deleteLootNight, syncChatTailCapture } = require('./dataSources/fetchLootLog.cjs');
@@ -121,6 +122,26 @@ ipcMain.handle('analytics:list', async (_event, which) => {
 // The loot diary is also written to a file in test builds, so a whole play session can be read afterwards (or
 // from outside the app while you play): <userData>\pipeline-events.jsonl, one JSON event per line.
 if (isTestModeBuild) pipelineLog.enablePersistence(path.join(app.getPath('userData'), 'pipeline-events.jsonl'));
+
+// M+ Comp's pool (test builds): guild members with keys this season, and any character an
+// officer types in. Through the proxy (which holds the shared archive) when there is one.
+function mplusGuildConfig() {
+  return { name: process.env.GUILD_NAME, realm: process.env.GUILD_REALM, region: process.env.GUILD_REGION || 'us' };
+}
+ipcMain.handle('testTools:mplusGuild', async () => {
+  if (!isTestModeBuild) return null;
+  if (proxyClient.isAvailable()) return proxyClient.fetchMplusGuild();
+  const guild = mplusGuildConfig();
+  return guild.name && guild.realm ? getGuildKeyers(guild) : null;
+});
+ipcMain.handle('testTools:mplusCharacter', async (_event, name, realm) => {
+  if (!isTestModeBuild) return null;
+  if (typeof name !== 'string' || !name.trim()) return null;
+  const guild = mplusGuildConfig();
+  const r = typeof realm === 'string' && realm.trim() ? realm.trim() : guild.realm;
+  if (proxyClient.isAvailable()) return proxyClient.lookupMplusCharacter(name.trim(), r);
+  return lookupCharacter(guild.region, r, name.trim());
+});
 
 // The in-game calendar the test addon saved (/gtloottest calendar, or automatically at login):
 // who's coming to which event, for M+ Comp's event picker. Test addon only, so test builds only.
