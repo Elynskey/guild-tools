@@ -150,6 +150,27 @@ check("...and a repeat of the same event changes nothing", #db.records == before
 drop(3490, 5, RING, "Zed", {})
 check("a second copy (another drop ID) of the same item by the same winner is its own record", count(db.records, function(r) return r.winner == "Zed" and r.itemId == 268300 end) == 2)
 
+-- trades: consumables (flasks, potions, runes, food) are not tracked, gear still is
+local realGetItemInfoInstant = GetItemInfoInstant
+GetItemInfoInstant = function(id)
+  if tonumber(id) == 191 then return 191, "Consumable", "Flasks", "", 0, 0, 3 end
+  return 25, "Armor", "Cloth", "INVTYPE_CLOAK", 0, 4, 1
+end
+local tradeSlots = { [1] = link(191, "Flask of the Magisters"), [2] = link(268300, "Some Ring") }
+GetTradePlayerItemLink = function(slot) return tradeSlots[slot] end
+TradeFrameRecipientNameText = { GetText = function() return "Bob-ArgentDawn" end }
+local tradesBefore = #db.trades
+frame.scripts.OnEvent(frame, "TRADE_SHOW")
+frame.scripts.OnEvent(frame, "TRADE_ACCEPT_UPDATE", true, true)
+frame.scripts.OnEvent(frame, "TRADE_CLOSED")
+check("a completed trade records the gear but not the consumable", #db.trades == tradesBefore + 1 and db.trades[#db.trades].itemId == 268300, tostring(#db.trades - tradesBefore))
+tradeSlots = { [1] = link(191, "Flask of the Magisters") }
+frame.scripts.OnEvent(frame, "TRADE_SHOW")
+frame.scripts.OnEvent(frame, "TRADE_ACCEPT_UPDATE", true, true)
+frame.scripts.OnEvent(frame, "TRADE_CLOSED")
+check("a trade of only a consumable records nothing", #db.trades == tradesBefore + 1, tostring(#db.trades - tradesBefore))
+GetItemInfoInstant = realGetItemInfoInstant
+
 -- the diagnostics hook names the first check a drop event fails
 local diagFrame
 for _, f in ipairs(frames) do if f ~= frame and f.events.LOOT_HISTORY_UPDATE_DROP then diagFrame = f end end

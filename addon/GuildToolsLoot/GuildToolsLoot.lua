@@ -249,6 +249,7 @@ end
 -- -- stable across expansions, the same values every other addon that reads them
 -- hardcodes (there's no client-exposed global that names them). Confirmed against
 -- Warcraft Wiki's item-type table, not guessed.
+local ITEM_CLASS_CONSUMABLE = 0
 local ITEM_CLASS_RECIPE = 9
 local ITEM_CLASS_MISCELLANEOUS = 15
 local ITEM_SUBCLASS_COMPANION_PET = 2
@@ -265,6 +266,14 @@ local function isExcludedFromNeedTracking(itemId)
   if itemClassID == ITEM_CLASS_MISCELLANEOUS and itemSubClassID == ITEM_SUBCLASS_COMPANION_PET then return true end
   if C_ToyBox and C_ToyBox.GetToyInfo and C_ToyBox.GetToyInfo(itemId) then return true end
   return false
+end
+
+-- Flasks, potions, runes and food change hands constantly and are not loot anyone is tracking, so trades of them are not recorded
+-- (the officers' decision, 2026-09-23: two Vantus Rune / Flask trades were showing up in Loot History).
+local function isConsumable(itemId)
+  if not itemId then return false end
+  local _, _, _, _, _, itemClassID = GetItemInfoInstant(itemId)
+  return itemClassID == ITEM_CLASS_CONSUMABLE
 end
 
 -- Blizzard's raid difficulty IDs (Enum.RaidDifficultyID, stable since Legion's 7.0
@@ -1027,13 +1036,16 @@ frame:SetScript("OnEvent", function(_, event, ...)
     if GuildToolsLootDB.enabled and tradeCompleted and tradeTargetName then
       local myName = playerRealmName()
       for _, link in pairs(tradePlayerItems) do
-        table.insert(GuildToolsLootDB.trades, {
-          itemId = itemIdFromLink(link),
-          itemLink = link,
-          from = myName,
-          to = tradeTargetName,
-          time = time(),
-        })
+        local itemId = itemIdFromLink(link)
+        if not isConsumable(itemId) then
+          table.insert(GuildToolsLootDB.trades, {
+            itemId = itemId,
+            itemLink = link,
+            from = myName,
+            to = tradeTargetName,
+            time = time(),
+          })
+        end
       end
     end
     tradeTargetName = nil
