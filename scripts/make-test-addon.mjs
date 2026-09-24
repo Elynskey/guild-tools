@@ -133,9 +133,7 @@ export async function crestTga(size = ICON_SIZE) {
 
 async function build() {
   // A fresh checkout on Windows has CRLF line endings; the replacements below match LF, so normalise first.
-  const lf = (text) => text.replace(/
-/g, '
-');
+  const lf = (text) => text.replace(/\r\n/g, '\n');
   const lua = lf(await readFile(path.join(SRC_DIR, 'GuildToolsLoot.lua'), 'utf8'));
   const toc = lf(await readFile(path.join(SRC_DIR, 'GuildToolsLoot.toc'), 'utf8'));
   const extras = lf(await readFile(EXTRAS, 'utf8'));
