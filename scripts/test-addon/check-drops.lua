@@ -124,12 +124,30 @@ local enc3471
 for _, e in ipairs(probe and probe.encounters or {}) do if e.id == 3471 then enc3471 = e end end
 check("...including the drops of each encounter it knows, with the roll details", enc3471 and enc3471.drops == 1 and enc3471.samples[1].info and enc3471.samples[1].info:find("winner", 1, true) and #enc3471.samples[1].rolls >= 1, enc3471 and tostring(enc3471.samples[1].info) or "no 3471")
 check("...and prints a summary", table.concat(printed, " "):find("the game lists 1 drop", 1, true) ~= nil)
-local savedLH = C_LootHistory
+local savedLH, savedEnum = C_LootHistory, Enum
 C_LootHistory = nil
 Enum = nil
 local okNone = pcall(SlashCmdList["GUILDTOOLSLOOTTEST"], "drops")
 check("with no C_LootHistory at all it says so instead of erroring", okNone and GuildToolsLootTestDB.dropProbe.apis.GetSortedInfoForDrop == false)
 C_LootHistory = savedLH
+Enum = savedEnum
+
+-- the diagnostics hook names the first check a drop event fails
+local diagFrame
+for _, f in ipairs(frames) do if f ~= frame and f.events.LOOT_HISTORY_UPDATE_DROP then diagFrame = f end end
+check("the drop-event diagnostics hook exists", diagFrame ~= nil)
+if diagFrame then
+  GuildToolsLootTestDB.dropEvents = nil
+  drops["3480:1"] = { winner = { playerName = "W" }, itemHyperlink = SHAWL, rollInfos = { { isWinner = true, state = 1, playerName = "W" } } }
+  drops["3480:2"] = { winner = { playerName = "W" }, itemHyperlink = SHAWL, rollInfos = { { state = 1, playerName = "W" } } }
+  drops["3480:3"] = { winner = { playerName = "W" }, itemHyperlink = SHAWL, rollInfos = { { isWinner = true, state = 3, playerName = "W" } } }
+  for i = 1, 4 do diagFrame.scripts.OnEvent(diagFrame, "LOOT_HISTORY_UPDATE_DROP", 3480, i) end
+  local r = GuildToolsLootTestDB.dropEvents.reasons
+  check("...counts a drop that would be recorded, one with no winning roll, one whose winner rolled Greed, and one with no info", GuildToolsLootTestDB.dropEvents.count == 4 and r.wouldRecord == 1 and r.noRollHasIsWinner == 1 and r["winnerNotNeed(state=3)"] == 1 and r.noInfo == 1)
+  diagFrame.scripts.OnEvent(diagFrame, "LOOT_HISTORY_UPDATE_DROP", 3480, 1)
+  local last = GuildToolsLootTestDB.dropEvents.last
+  check("...and keeps the shape of a roll for the last event", last.reason == "wouldRecord" and last.rollShapes[1] and last.rollShapes[1]:find("isWinner=true", 1, true) and last.winner:find("playerName=W", 1, true), tostring(last.rollShapes[1]))
+end
 
 print(string.format("\n%d checks, %d failed", checks, failed))
 os.exit(failed == 0 and 0 or 1)

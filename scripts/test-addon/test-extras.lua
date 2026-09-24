@@ -887,10 +887,33 @@ do
     db.dropEvents.count = db.dropEvents.count + 1
     pcall(function()
       local info = C_LootHistory and C_LootHistory.GetSortedInfoForDrop and C_LootHistory.GetSortedInfoForDrop(encounterID, lootListID)
+      -- The same checks the real capture makes, in the same order, so the first one that fails is named. An LFR night showed
+      -- these events firing with full data while nothing was recorded from them.
+      local reason
+      local winningRoll
+      if not info then reason = "noInfo"
+      elseif not info.winner then reason = "noWinner"
+      elseif type(info.rollInfos) ~= "table" then reason = "noRollInfos"
+      else
+        for _, roll in ipairs(info.rollInfos) do
+          if roll.isWinner then winningRoll = roll break end
+        end
+        local enum = Enum and Enum.EncounterLootDropRollState
+        if not winningRoll then reason = "noRollHasIsWinner"
+        elseif enum and (winningRoll.state == enum.NeedMainSpec or winningRoll.state == enum.NeedOffSpec) then reason = "wouldRecord"
+        else reason = "winnerNotNeed(state=" .. dropValue(winningRoll.state) .. ")" end
+      end
+      db.dropEvents.reasons = db.dropEvents.reasons or {}
+      db.dropEvents.reasons[reason] = (db.dropEvents.reasons[reason] or 0) + 1
+      local rolls = {}
+      if info and type(info.rollInfos) == "table" then
+        for k, roll in ipairs(info.rollInfos) do if k <= 3 then rolls[#rolls + 1] = dropShape(roll) end end
+      end
       db.dropEvents.last = {
-        at = time(), encounterID = dropValue(encounterID), lootListID = dropValue(lootListID),
+        at = time(), encounterID = dropValue(encounterID), lootListID = dropValue(lootListID), reason = reason,
         hasInfo = info ~= nil, hasWinner = (info and info.winner ~= nil) or false,
         rolls = (info and type(info.rollInfos) == "table") and #info.rollInfos or nil, shape = dropShape(info),
+        winner = info and dropShape(info.winner) or nil, rollShapes = rolls,
       }
     end)
   end)
@@ -967,7 +990,8 @@ local function showDrops()
     ", GetSortedInfoForDrop " .. (p.apis.GetSortedInfoForDrop and "yes" or "NO") .. ".")
   announce("roll-state enum: " .. (next(p.states) and dropShape(p.states) or "MISSING (so this addon can never tell a Need from a Greed here)"))
   announce("live drop events since this data was created: " .. (ev and ev.count or 0) ..
-    (ev and ev.last and (" (last: encounter " .. ev.last.encounterID .. ", drop " .. ev.last.lootListID .. ", info " .. (ev.last.hasInfo and "yes" or "NO") .. ", winner " .. (ev.last.hasWinner and "yes" or "NO") .. ", rolls " .. tostring(ev.last.rolls) .. ")") or ""))
+    (ev and ev.last and (" (last: encounter " .. ev.last.encounterID .. ", drop " .. ev.last.lootListID .. ", info " .. (ev.last.hasInfo and "yes" or "NO") .. ", winner " .. (ev.last.hasWinner and "yes" or "NO") .. ", rolls " .. tostring(ev.last.rolls) .. ", check: " .. tostring(ev.last.reason) .. ")") or ""))
+  if ev and ev.reasons then announce("why events were / were not recorded: " .. dropShape(ev.reasons)) end
   if #p.encounters == 0 then announce("no encounters known yet, so nothing to ask the game about.") end
   for _, e in ipairs(p.encounters) do
     announce(tostring(e.name) .. " (" .. e.id .. "): the game lists " .. e.drops .. " drop(s)" .. ((e.dropsOk == false) and " -- the call ERRORED" or "") .. ".")
