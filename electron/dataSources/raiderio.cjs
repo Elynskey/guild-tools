@@ -9,6 +9,7 @@
 // supply the character name list (from wowaudit's team roster — see wowaudit.cjs).
 
 const { updateSeasonHighs } = require('./snapshotStore.cjs');
+const { recordSeasonRuns } = require('./mplusRunArchive.cjs');
 
 const BASE = 'https://raider.io/api/v1';
 
@@ -61,13 +62,37 @@ function mapRun(run) {
   };
 }
 
+// Every run list a profile offers, so a key shows up if it's recent, a dungeon best or
+// alternate, among the highest, or among this/last week's highest -- one request either
+// way. Still not every key (see mplusRunArchive.cjs); run counts gives the true total.
+const SEASON_RUN_FIELDS = [
+  'mythic_plus_recent_runs',
+  'mythic_plus_best_runs',
+  'mythic_plus_alternate_runs',
+  'mythic_plus_highest_level_runs',
+  'mythic_plus_weekly_highest_level_runs',
+  'mythic_plus_previous_weekly_highest_level_runs',
+];
+
 async function fetchCharacterProfile(region, realm, name) {
-  const url =
-    `${BASE}/characters/profile?region=${region}&realm=${slugifyRealm(realm)}&name=${encodeURIComponent(name)}` +
-    `&fields=${encodeURIComponent('mythic_plus_scores_by_season:current,gear,mythic_plus_recent_runs')}`;
+  const fields = [
+    'mythic_plus_scores_by_season:current',
+    'gear',
+    'mythic_plus_recent_runs',
+    'mythic_plus_best_runs:all',
+    'mythic_plus_alternate_runs:all',
+    'mythic_plus_highest_level_runs',
+    'mythic_plus_weekly_highest_level_runs',
+    'mythic_plus_previous_weekly_highest_level_runs',
+    'mythic_plus_dungeon_run_counts',
+  ].join(',');
+  const url = `${BASE}/characters/profile?region=${region}&realm=${slugifyRealm(realm)}&name=${encodeURIComponent(name)}&fields=${encodeURIComponent(fields)}`;
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Raider.IO character fetch failed for ${name}-${realm}: ${res.status} ${res.statusText}`);
   const data = await res.json();
+  const seasonRuns = new Map();
+  for (const field of SEASON_RUN_FIELDS) for (const run of data[field] ?? []) if (run.url) seasonRuns.set(run.url, mapRun(run));
+  const counts = data.mythic_plus_dungeon_run_counts;
   return {
     key: charKey(name, realm),
     name: data.name,
@@ -78,21 +103,26 @@ async function fetchCharacterProfile(region, realm, name) {
     rioCurrent: data.mythic_plus_scores_by_season?.[0]?.scores?.all ?? 0,
     ilvlEquipped: data.gear?.item_level_equipped ?? 0,
     mythicPlusRuns: (data.mythic_plus_recent_runs ?? []).map(mapRun),
+    mythicPlusSeasonRuns: [...seasonRuns.values()],
+    // Raider.IO's own count of every key they've done this season -- how many the archive should end up holding.
+    mythicPlusSeasonKeys: Array.isArray(counts) ? counts.reduce((sum, d) => sum + (d.season_runs_total ?? 0), 0) : null,
   };
 }
 
 /**
  * @param {{ name: string, realm: string, region: string }} guild — guild.region is used for every character; guild.realm is only the default/fallback
  * @param {Array<{ name: string, realm?: string }>} characters — the raid team's roster (from wowaudit), NOT the full guild
- * @returns {Promise<Array<{ key, name, realm, class, spec, role, rioCurrent, rioHighestThisSeason, ilvlEquipped, ilvlHighestThisSeason, mythicPlusRuns }>>} keyed by charKey(name, realm) via the `key` field -- see the comment on charKey for why bare name isn't safe to join on
+ * @returns {Promise<Array<{ key, name, realm, class, spec, role, rioCurrent, rioHighestThisSeason, ilvlEquipped, ilvlHighestThisSeason, mythicPlusRuns, mythicPlusSeasonRuns, mythicPlusSeasonKeys }>>} keyed by charKey(name, realm) via the `key` field -- see the comment on charKey for why bare name isn't safe to join on
  */
 async function fetchRaiderIO(guild, characters) {
   const withScores = await Promise.all(characters.map((c) => fetchCharacterProfile(guild.region, c.realm || guild.realm, c.name)));
 
   const highs = updateSeasonHighs(withScores);
+  const archived = recordSeasonRuns(withScores.map((m) => ({ key: m.key, runs: m.mythicPlusSeasonRuns })));
 
   return withScores.map((m) => ({
     ...m,
+    mythicPlusSeasonRuns: archived[m.key] ?? m.mythicPlusSeasonRuns,
     rioHighestThisSeason: highs[m.key]?.rioHighestThisSeason ?? m.rioCurrent,
     ilvlHighestThisSeason: highs[m.key]?.ilvlHighestThisSeason ?? m.ilvlEquipped,
   }));

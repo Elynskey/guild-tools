@@ -10,6 +10,9 @@ export interface MythicPlusRow {
   portraitUrl: string | null;
   rioCurrent: number;
   runs: MythicPlusRun[];
+  /** Falls back to the last 10 when the roster source doesn't send a season's worth. */
+  seasonRuns: MythicPlusRun[];
+  seasonKeys: number | null;
 }
 
 function toRow(r: Raider): MythicPlusRow {
@@ -21,6 +24,8 @@ function toRow(r: Raider): MythicPlusRow {
     portraitUrl: r.portraitUrl,
     rioCurrent: r.rioCurrent,
     runs: r.mythicPlusRuns,
+    seasonRuns: r.mythicPlusSeasonRuns ?? r.mythicPlusRuns,
+    seasonKeys: r.mythicPlusSeasonKeys ?? null,
   };
 }
 

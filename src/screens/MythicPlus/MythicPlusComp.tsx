@@ -154,9 +154,15 @@ export function MythicPlusComp() {
     () =>
       mp.rows
         .filter((r) => r.rioCurrent > 0 || r.runs.length > 0)
-        .map((r) => ({ name: r.name, class: r.class, roles: keyRoles(r.runs, { role: r.role, spec: r.spec }), rio: Math.round(r.rioCurrent), runs: r.runs })),
+        .map((r) => ({ name: r.name, class: r.class, roles: keyRoles(r.seasonRuns, { role: r.role, spec: r.spec }), rio: Math.round(r.rioCurrent), runs: r.seasonRuns })),
     [mp.rows],
   );
+  // How much of the season we can actually see -- Raider.IO doesn't list every key (see mplusRunArchive.cjs).
+  const coverage = useMemo(() => {
+    const counted = mp.rows.filter((r) => r.seasonKeys !== null);
+    if (!counted.length) return null;
+    return { seen: counted.reduce((s, r) => s + Math.min(r.seasonRuns.length, r.seasonKeys!), 0), total: counted.reduce((s, r) => s + r.seasonKeys!, 0) };
+  }, [mp.rows]);
   const groups = useMemo(() => findGuildGroups(members), [members]);
   const { comps, bench } = useMemo(() => buildComps(members.filter((m) => !away.has(m.name)), groups), [members, groups, away]);
   const timing = groups.filter(isTimingGroup);
@@ -190,8 +196,21 @@ export function MythicPlusComp() {
 
       <div style={{ maxWidth: 1160, margin: '0 auto', padding: 32 }}>
         <p style={{ margin: 0, fontSize: 'var(--text-body-s)', color: 'var(--text-muted)', maxWidth: 720, lineHeight: 1.6 }}>
-          Groups are one tank, one healer and three DPS, strongest first. Each pick weighs the raider's Raider.IO score against how keys went when they ran with the others. Raiders can fill any role they've played in their recent keys (which may not be their raid role), with their most-played role preferred. "Together" only counts the last 10 keys each raider ran.
+          Groups are one tank, one healer and three DPS, strongest first. Each pick weighs the raider's Raider.IO score against how keys went when they ran with the others. Raiders can fill any role they've played in keys this season (which may not be their raid role), with their most-played role preferred.
         </p>
+        {!mp.loading && (
+          <p style={{ margin: '8px 0 0', fontSize: 'var(--text-body-s)', color: 'var(--text-muted)', maxWidth: 720, lineHeight: 1.6 }}>
+            {coverage ? (
+              <>
+                Seeing <span style={{ color: 'var(--text-strong)', fontFamily: 'var(--font-mono)' }}>{coverage.seen}</span> of{' '}
+                <span style={{ color: 'var(--text-strong)', fontFamily: 'var(--font-mono)' }}>{coverage.total}</span> keys the roster has run this season ({Math.round((100 * coverage.seen) / Math.max(1, coverage.total))}%).
+              </>
+            ) : (
+              'Only each raider’s last 10 keys are available right now.'
+            )}{' '}
+            <HelpTooltip text="Raider.IO doesn't list every key: only recent keys, dungeon bests, and the highest keys overall and this week and last week. Guild Tools keeps every key it sees, so this fills in as the season goes on." />
+          </p>
+        )}
 
         {mp.loading ? (
           <div style={{ padding: 48, textAlign: 'center', color: 'var(--text-muted)' }}>Loading…</div>
@@ -232,7 +251,7 @@ export function MythicPlusComp() {
               })}
             </div>
 
-            <SectionTitle help="Built from the available raiders. Under each group: every pair in it who has run keys together, and how many of those keys they timed.">Suggested groups</SectionTitle>
+            <SectionTitle help="Built from the available raiders. Under each group: every pair in it who has run keys together this season, and how many of those keys they timed.">Suggested groups</SectionTitle>
             {comps.length === 0 ? (
               <div style={{ padding: 24, border: '1px dashed var(--border-hairline)', borderRadius: 5, color: 'var(--text-muted)', fontSize: 'var(--text-body-s)' }}>
                 Not enough available raiders for a full group -- each one needs a tank, a healer and three DPS.

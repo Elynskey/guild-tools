@@ -53,6 +53,10 @@ export interface Raider {
   ilvlHighestThisSeason: number;
   /** Newest first, capped at 10 -- see MythicPlusRun. */
   mythicPlusRuns: MythicPlusRun[];
+  /** Every key this season we've seen, newest first -- all of Raider.IO's run lists plus the archive (electron/dataSources/mplusRunArchive.cjs). Not guaranteed complete; compare mythicPlusSeasonKeys. Absent from a proxy that predates it. */
+  mythicPlusSeasonRuns?: MythicPlusRun[];
+  /** Raider.IO's count of every key they've done this season. Null/absent when unknown. */
+  mythicPlusSeasonKeys?: number | null;
   /** DPS: % of the guild's minimum DPS while alive. Healers/tanks: HPS/survivability percentile 0-100, pooled across the season so far (see warcraftlogs.cjs). */
   perf: number;
   /** Raw metric behind perf -- dps: raw damage/s from the same report perf uses; healer: season-average healing/s; tank: season-average damage taken/s (lower is better -- less damage taken is more survivable). Null when unavailable (sample mode falls back to a synthesized value; a real fetch can still be null for a brand-new raider with too little logged history). */
