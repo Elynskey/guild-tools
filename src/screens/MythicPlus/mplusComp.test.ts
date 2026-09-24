@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { MythicPlusRun, Role } from '../../scoring/types';
-import { buildComps, findGuildGroups, isTimingGroup, keyRoles, pairRecords, type CompMember } from './mplusComp';
+import { buildComps, findGuildGroups, isTimingGroup, keyRoles, pairRecords, roleRisk, type CompMember } from './mplusComp';
 
 function run(id: number, level: number, upgrades: number, day = 1): MythicPlusRun {
   return {
+    id: `key-${id}`,
     dungeon: 'Murder Row',
     level,
     upgrades,
@@ -60,9 +61,21 @@ describe('findGuildGroups', () => {
     expect(pairRecords(groups).get('A|B')).toEqual({ runs: 2, timed: 1 });
   });
 
-  it('skips runs with no URL, which cannot be matched', () => {
-    const noUrl = { ...run(1, 10, 1), url: '' };
-    expect(findGuildGroups([member('A', 'dps', 1, [noUrl]), member('B', 'dps', 1, [noUrl])])).toEqual([]);
+  it('skips runs with no id (sample data), which cannot be matched', () => {
+    const noId = { ...run(1, 10, 1), id: undefined };
+    expect(findGuildGroups([member('A', 'dps', 1, [noId]), member('B', 'dps', 1, [noId])])).toEqual([]);
+  });
+
+  it('matches a backfilled key (no URL) with the linked copy a guildie has, and keeps the link', () => {
+    const linked = run(1, 12, 1);
+    const backfilled = { ...linked, url: '', role: null, spec: null };
+    const groups = findGuildGroups([member('A', 'dps', 1, [backfilled]), member('B', 'tank', 1, [{ ...linked, role: 'tank' as const, spec: 'Blood' }])]);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].runs[0].url).toBe(linked.url);
+    expect(groups[0].runs[0].lineup).toEqual([
+      { name: 'B', role: 'tank', spec: 'Blood' },
+      { name: 'A', role: null, spec: null },
+    ]);
   });
 });
 
@@ -174,5 +187,37 @@ describe('buildComps with raiders who key more than one role', () => {
     const { comps } = buildComps(roster, []);
     expect(comps).toHaveLength(1);
     expect(comps[0].healer.member.name).toBe('StarDps');
+  });
+});
+
+describe('roleRisk', () => {
+  const dps = (n: string) => member(n, 'dps', 1);
+
+  it('names the role that caps the group count and how many more it would take', () => {
+    const roster = [member('T', 'tank', 1), member('H1', 'healer', 1), member('H2', 'healer', 1), ...['a', 'b', 'c', 'd', 'e', 'f'].map(dps)];
+    const risk = roleRisk(roster);
+    expect(risk.groups).toBe(1);
+    expect(risk.short).toEqual([{ role: 'tank', need: 1 }]);
+    expect(risk.critical.map((m) => m.name)).toEqual(['T']);
+  });
+
+  it('shows how many groups depend on people playing an off-role', () => {
+    const roster = [
+      member('T', 'tank', 1),
+      member('Flex', 'dps', 1, [], ['tank']),
+      member('H1', 'healer', 1),
+      member('H2', 'healer', 1),
+      ...['a', 'b', 'c', 'd', 'e', 'f'].map(dps),
+    ];
+    const risk = roleRisk(roster);
+    expect(risk.groups).toBe(2);
+    expect(risk.mainRoleGroups).toBe(1);
+    expect(risk.coverage.find((c) => c.role === 'tank')!.flex.map((m) => m.name)).toEqual(['Flex']);
+    expect(risk.critical.map((m) => m.name)).toEqual(expect.arrayContaining(['T', 'Flex', 'H1', 'H2']));
+  });
+
+  it('needs several DPS for another group when DPS is what is short', () => {
+    const roster = [member('T1', 'tank', 1), member('T2', 'tank', 1), member('H1', 'healer', 1), member('H2', 'healer', 1), ...['a', 'b', 'c', 'd'].map(dps)];
+    expect(roleRisk(roster).short).toEqual([{ role: 'dps', need: 2 }]);
   });
 });

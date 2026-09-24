@@ -18,6 +18,8 @@ export interface DeathCause {
 
 /** One completed Mythic+ run, from Raider.IO's mythic_plus_recent_runs (confirmed live -- newest first, capped at 10). */
 export interface MythicPlusRun {
+  /** Dungeon|completedAt|level -- the same key has the same id for everyone in it, whichever Raider.IO list (or backfill) it came from. Absent in sample data. */
+  id?: string;
   dungeon: string;
   level: number;
   /** ISO timestamp. */
@@ -26,7 +28,7 @@ export interface MythicPlusRun {
   /** 0-3 -- how many keystone upgrade chests this run earned (timed how far under par). */
   upgrades: number;
   iconUrl: string;
-  /** Raider.IO's own page for this specific run. */
+  /** Raider.IO's own page for this specific run. Empty for a backfilled key (see electron/dataSources/mplusBackfill.cjs). */
   url: string;
   /** Spec/role the character played in this key -- can differ from both their raid role and their current spec. Null in sample data. */
   spec?: string | null;

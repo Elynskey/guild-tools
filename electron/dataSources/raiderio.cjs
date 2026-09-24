@@ -9,7 +9,7 @@
 // supply the character name list (from wowaudit's team roster — see wowaudit.cjs).
 
 const { updateSeasonHighs } = require('./snapshotStore.cjs');
-const { recordSeasonRuns } = require('./mplusRunArchive.cjs');
+const { recordSeasonRuns, runKey } = require('./mplusRunArchive.cjs');
 
 const BASE = 'https://raider.io/api/v1';
 
@@ -48,7 +48,7 @@ const ROLE_MAP = { TANK: 'tank', HEALING: 'healer', DPS: 'dps' };
 // reading Elemental while 7 of their last 10 keys were Restoration) -- the M+ Comp
 // screen uses these, not the raid role.
 function mapRun(run) {
-  return {
+  const mapped = {
     dungeon: run.dungeon,
     level: run.mythic_level,
     completedAt: run.completed_at,
@@ -60,6 +60,7 @@ function mapRun(run) {
     // Per-run role is already lowercase ('tank'|'healer'|'dps'), unlike active_spec_role.
     role: ['tank', 'healer', 'dps'].includes(run.role) ? run.role : null,
   };
+  return { id: runKey(mapped), ...mapped };
 }
 
 // Every run list a profile offers, so a key shows up if it's recent, a dungeon best or
@@ -93,6 +94,17 @@ async function fetchCharacterProfile(region, realm, name) {
   const seasonRuns = new Map();
   for (const field of SEASON_RUN_FIELDS) for (const run of data[field] ?? []) if (run.url) seasonRuns.set(run.url, mapRun(run));
   const counts = data.mythic_plus_dungeon_run_counts;
+  // One real key per dungeon they've run -- run-review (mplusBackfill.cjs) needs one to
+  // ask about, and it carries the dungeon's par time for working out chests.
+  const dungeonRefs = (data.mythic_plus_best_runs ?? []).map((r) => ({
+    zoneId: r.zone_id,
+    dungeon: r.dungeon,
+    level: r.mythic_level,
+    clearTimeMs: r.clear_time_ms,
+    completedAt: r.completed_at,
+    parTimeMs: r.par_time_ms,
+    iconUrl: r.icon_url,
+  }));
   return {
     key: charKey(name, realm),
     name: data.name,
@@ -105,6 +117,7 @@ async function fetchCharacterProfile(region, realm, name) {
     mythicPlusRuns: (data.mythic_plus_recent_runs ?? []).map(mapRun),
     mythicPlusSeasonRuns: [...seasonRuns.values()],
     // Raider.IO's own count of every key they've done this season -- how many the archive should end up holding.
+    dungeonRefs,
     mythicPlusSeasonKeys: Array.isArray(counts) ? counts.reduce((sum, d) => sum + (d.season_runs_total ?? 0), 0) : null,
   };
 }

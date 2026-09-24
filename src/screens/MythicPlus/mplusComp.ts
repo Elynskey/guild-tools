@@ -81,24 +81,25 @@ export function isTimingGroup(g: GuildGroup): boolean {
 }
 
 /**
- * Raider.IO gives every key its own URL (it carries the run ID), so two raiders whose
- * recent runs share a URL were in that key together. Only covers each raider's last 10
- * runs -- that's all Raider.IO's recent-runs field returns. Runs without a URL (sample
- * data) can't be matched and are skipped.
+ * Two raiders whose runs share an id (dungeon + completion time + level -- see
+ * mplusRunArchive.cjs) were in that key together. Covers the season as far as the
+ * archive does. Runs without an id (sample data) can't be matched and are skipped.
  */
 export function findGuildGroups(members: CompMember[]): GuildGroup[] {
-  const byUrl = new Map<string, { run: MythicPlusRun; who: GroupRun['lineup'] }>();
+  const byId = new Map<string, { run: MythicPlusRun; who: GroupRun['lineup'] }>();
   for (const m of members) {
     for (const run of m.runs) {
-      if (!run.url) continue;
-      const entry = byUrl.get(run.url) ?? { run, who: [] };
+      if (!run.id) continue;
+      const entry = byId.get(run.id) ?? { run, who: [] };
+      // Prefer a copy with a Raider.IO link for the group's own record of the key.
+      if (!entry.run.url && run.url) entry.run = run;
       entry.who.push({ name: m.name, role: run.role ?? null, spec: run.spec ?? null });
-      byUrl.set(run.url, entry);
+      byId.set(run.id, entry);
     }
   }
 
   const groups = new Map<string, GuildGroup>();
-  for (const { run, who } of byUrl.values()) {
+  for (const { run, who } of byId.values()) {
     if (who.length < 2) continue;
     const names = who.map((w) => w.name).sort();
     const key = names.join('|');
@@ -250,4 +251,60 @@ export function buildComps(members: CompMember[], groups: GuildGroup[]): { comps
   }
 
   return { comps, bench: pool };
+}
+
+/** How many full groups (tank, healer, three DPS) these raiders can make. */
+export function maxGroups(pool: CompMember[]): number {
+  let n = 0;
+  while (canFill(pool, groupSlots(n + 1))) n++;
+  return n;
+}
+
+export interface RoleCoverage {
+  role: Role;
+  /** Key this role more than any other. */
+  main: CompMember[];
+  /** Have keyed this role, but it isn't their most-played one. */
+  flex: CompMember[];
+}
+
+export interface RoleRisk {
+  coverage: RoleCoverage[];
+  groups: number;
+  /** Groups if nobody plays anything but their main role -- the gap to `groups` is what flex players are holding up. */
+  mainRoleGroups: number;
+  /** Roles that stop there being one more group, and how many more players of that role it would take (null: more of this role alone wouldn't do it). */
+  short: Array<{ role: Role; need: number }>;
+  /** Raiders whose absence alone costs a whole group. */
+  critical: CompMember[];
+}
+
+function hypothetical(role: Role, i: number): CompMember {
+  return { name: `__extra-${role}-${i}`, class: '', roles: [{ role, spec: '', keys: 0 }], rio: 0, runs: [] };
+}
+
+/** What the roster is short on for Mythic+ groups, and who it can't do without. */
+export function roleRisk(members: CompMember[]): RoleRisk {
+  const groups = maxGroups(members);
+  const coverage = ROLES.map((role) => ({
+    role,
+    main: members.filter((m) => m.roles[0].role === role),
+    flex: members.filter((m) => m.roles[0].role !== role && roleOf(m, role)),
+  }));
+  const mainRoleGroups = maxGroups(members.map((m) => ({ ...m, roles: [m.roles[0]] })));
+
+  const short: RoleRisk['short'] = [];
+  for (const role of ROLES) {
+    // One more group needs at most 3 more of any role.
+    let need: number | null = null;
+    for (let k = 1; k <= 3 && need === null; k++) {
+      const extra = Array.from({ length: k }, (_, i) => hypothetical(role, i));
+      if (maxGroups([...members, ...extra]) > groups) need = k;
+    }
+    if (need !== null) short.push({ role, need });
+  }
+  short.sort((a, b) => a.need - b.need);
+
+  const critical = groups === 0 ? [] : members.filter((m) => maxGroups(members.filter((x) => x !== m)) < groups);
+  return { coverage, groups, mainRoleGroups, short, critical };
 }

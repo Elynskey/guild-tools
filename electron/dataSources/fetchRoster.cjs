@@ -1,4 +1,5 @@
 const { fetchRaiderIO } = require('./raiderio.cjs');
+const { startSeasonBackfill } = require('./mplusBackfill.cjs');
 const { fetchWarcraftLogs } = require('./warcraftlogs.cjs');
 const { fetchWowauditRoster } = require('./wowaudit.cjs');
 const { fetchGearCompletion } = require('./bnet.cjs');
@@ -92,6 +93,10 @@ async function fetchRoster() {
       fetchCharacterPortraits(guild, characters),
       fetchWarcraftLogs(guild, process.env.TIER_ZONE_NAME, roleByName),
     ]);
+
+    // Fills in season keys Raider.IO's profile no longer lists; runs in the background,
+    // the next fetch shows what it found (see mplusBackfill.cjs).
+    startSeasonBackfill(guild.region, rio);
 
     const raiders = mergeSources({ wowauditRoster, rio, gearCompletion, portraits, wcl: wcl.performance });
     const realmMismatches = findRealmMismatches(wowauditRoster, wcl.observedRealms);

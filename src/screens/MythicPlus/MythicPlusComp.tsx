@@ -6,7 +6,7 @@ import { HelpTooltip } from '../../design-system/HelpTooltip';
 import { specIcon } from '../../scoring/specIcons';
 import type { Role } from '../../scoring/types';
 import { useMythicPlus } from './useMythicPlus';
-import { buildComps, findGuildGroups, isTimingGroup, keyRoles, type Comp, type CompMember, type GuildGroup, type Placed } from './mplusComp';
+import { buildComps, findGuildGroups, isTimingGroup, keyRoles, roleRisk, type Comp, type CompMember, type GuildGroup, type Placed, type RoleRisk } from './mplusComp';
 
 const ROLE_LABEL: Record<Role, string> = { tank: 'Tank', healer: 'Healer', dps: 'DPS' };
 
@@ -48,7 +48,7 @@ function MemberLine({ p, slot }: { p: Placed; slot: Role }) {
         <div style={{ fontSize: 'var(--text-micro)', color: 'var(--text-muted)' }}>
           {ROLE_LABEL[slot]} · {p.spec} {m.class}
           {p.offRole && (
-            <span style={{ color: 'var(--status-warning)' }} title={`Has played ${ROLE_LABEL[slot]} in ${m.roles.find((r) => r.role === slot)?.keys ?? 0} of their recent keys`}>
+            <span style={{ color: 'var(--status-warning)' }} title={`Has played ${ROLE_LABEL[slot]} in ${m.roles.find((r) => r.role === slot)?.keys ?? 0} of their keys this season`}>
               {' '}· usually {ROLE_LABEL[m.roles[0].role]}
             </span>
           )}
@@ -101,6 +101,75 @@ function CompCard({ comp, index }: { comp: Comp; index: number }) {
   );
 }
 
+const PLURAL: Record<Role, string> = { tank: 'tanks', healer: 'healers', dps: 'DPS' };
+
+function names(ms: CompMember[]): string {
+  return ms.map((m) => m.name).join(', ');
+}
+
+function RoleRiskPanel({ risk }: { risk: RoleRisk }) {
+  const flexHeld = risk.groups - risk.mainRoleGroups;
+  const findings: Array<{ tone: 'danger' | 'warning' | 'muted'; text: string }> = [];
+  if (risk.groups === 0) findings.push({ tone: 'danger', text: 'Not enough available raiders for a single full group.' });
+  for (const s of risk.short) {
+    findings.push({
+      tone: s === risk.short[0] ? 'danger' : 'warning',
+      text: `Short on ${PLURAL[s.role]}: ${s.need} more ${s.need === 1 ? (s.role === 'dps' ? 'DPS' : s.role) : PLURAL[s.role]} would make group ${risk.groups + 1}.`,
+    });
+  }
+  if (flexHeld > 0) {
+    findings.push({ tone: 'warning', text: `${flexHeld} of the ${risk.groups} groups only exist because someone plays a role they don't usually key as. With main roles only: ${risk.mainRoleGroups}.` });
+  }
+  if (risk.critical.length) {
+    findings.push({ tone: 'warning', text: `Can't do without: ${names(risk.critical)} -- if any one of them is out, you lose a group.` });
+  }
+
+  const toneColor = { danger: 'var(--status-danger)', warning: 'var(--status-warning)', muted: 'var(--text-muted)' };
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 16 }}>
+        {risk.coverage.map((c) => {
+          const isShort = risk.short[0]?.role === c.role;
+          return (
+            <div key={c.role} className="crd-card" style={{ padding: 16, border: isShort ? '1px solid var(--status-danger)' : undefined }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                <div style={{ fontFamily: 'var(--font-display)', fontSize: 'var(--text-title-m)', fontWeight: 600, color: 'var(--text-strong)' }}>{ROLE_LABEL[c.role]}</div>
+                <div style={{ marginLeft: 'auto', fontSize: 'var(--text-micro)', color: 'var(--text-muted)' }}>
+                  <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-strong)' }}>{c.main.length}</span> main
+                  {c.flex.length > 0 && (
+                    <>
+                      {' + '}
+                      <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-strong)' }}>{c.flex.length}</span> flex
+                    </>
+                  )}
+                  {' · '}
+                  {c.role === 'dps' ? 3 : 1} per group
+                </div>
+              </div>
+              <div style={{ marginTop: 8, fontSize: 'var(--text-body-s)', lineHeight: 1.6, color: 'var(--text-body)' }}>{c.main.length ? names(c.main) : <span style={{ color: 'var(--text-faint)' }}>Nobody</span>}</div>
+              {c.flex.length > 0 && (
+                <div style={{ marginTop: 4, fontSize: 'var(--text-micro)', lineHeight: 1.6, color: 'var(--text-muted)' }}>
+                  Flex: {c.flex.map((m) => `${m.name} (${m.roles.find((r) => r.role === c.role)?.keys ?? 0} of ${m.roles.reduce((s, r) => s + r.keys, 0)} keys)`).join(', ')}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 'var(--text-body-s)' }}>
+        <div style={{ color: 'var(--text-strong)' }}>
+          Enough for <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-gold)' }}>{risk.groups}</span> full group{risk.groups === 1 ? '' : 's'}.
+        </div>
+        {findings.map((f, i) => (
+          <div key={i} style={{ color: toneColor[f.tone] }}>
+            {f.text}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function GroupRow({ g }: { g: GuildGroup }) {
   const [open, setOpen] = useState(false);
   return (
@@ -120,7 +189,7 @@ function GroupRow({ g }: { g: GuildGroup }) {
       {open && (
         <div style={{ padding: '8px 18px 12px 36px', background: 'var(--surface-raised)', boxShadow: 'var(--inset-well)', display: 'flex', flexDirection: 'column', gap: 4, fontSize: 'var(--text-body-s)' }}>
           {g.runs.map((r) => (
-            <a key={r.url} href={r.url} target="_blank" rel="noreferrer" style={{ display: 'flex', gap: 10, borderBottom: 'none', textDecoration: 'none' }}>
+            <a key={r.id} href={r.url || undefined} target="_blank" rel="noreferrer" title={r.url ? 'Open on Raider.IO' : 'From the dungeon history on Raider.IO -- no run page for this key'} style={{ display: 'flex', gap: 10, borderBottom: 'none', textDecoration: 'none', cursor: r.url ? 'pointer' : 'default' }}>
               <span style={{ color: 'var(--text-strong)' }}>{r.dungeon}</span>
               <span style={{ fontFamily: 'var(--font-mono)' }}>+{r.level}</span>
               <span style={{ color: r.upgrades > 0 ? 'var(--status-success)' : 'var(--text-faint)' }}>{r.upgrades > 0 ? `timed (+${r.upgrades})` : 'depleted'}</span>
@@ -164,7 +233,9 @@ export function MythicPlusComp() {
     return { seen: counted.reduce((s, r) => s + Math.min(r.seasonRuns.length, r.seasonKeys!), 0), total: counted.reduce((s, r) => s + r.seasonKeys!, 0) };
   }, [mp.rows]);
   const groups = useMemo(() => findGuildGroups(members), [members]);
-  const { comps, bench } = useMemo(() => buildComps(members.filter((m) => !away.has(m.name)), groups), [members, groups, away]);
+  const available = useMemo(() => members.filter((m) => !away.has(m.name)), [members, away]);
+  const { comps, bench } = useMemo(() => buildComps(available, groups), [available, groups]);
+  const risk = useMemo(() => roleRisk(available), [available]);
   const timing = groups.filter(isTimingGroup);
   const notTiming = groups.filter((g) => !isTimingGroup(g));
 
@@ -250,6 +321,9 @@ export function MythicPlusComp() {
                 );
               })}
             </div>
+
+            <SectionTitle help="From the available raiders: who can fill each role in a key, what stops there being another group, and who you can't do without. Flex means they've played that role in keys this season, just not most often.">Role coverage</SectionTitle>
+            <RoleRiskPanel risk={risk} />
 
             <SectionTitle help="Built from the available raiders. Under each group: every pair in it who has run keys together this season, and how many of those keys they timed.">Suggested groups</SectionTitle>
             {comps.length === 0 ? (
