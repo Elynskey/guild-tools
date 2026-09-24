@@ -120,7 +120,7 @@ local function selfTest()
     if testChecklistSet then testChecklistSet("selftest", "pass") end
   else
     local why = {}
-    if not wasEnabled then why[#why + 1] = "logging is OFF (/gtloottest on)" end
+    if not wasEnabled then why[#why + 1] = "logging is OFF (open /gtloottest and press Start logging)" end
     if not testTrackAll() then why[#why + 1] = "tracking is STRICT and this isn't this tier's Normal/Heroic raid (/gtloottest track all)" end
     if #why == 0 then why[#why + 1] = "the win was filtered out (see the message pattern / item exclusions in the addon)" end
     announce("SELF-TEST FAILED: nothing was captured. Likely: " .. table.concat(why, "; ") .. ".")
@@ -1182,7 +1182,7 @@ end
 
 local function testHelp()
   announce("test commands (same names as the real /gtloot, plus more):")
-  announce("  /gtloottest on | off | scan | chatlog   -- as the real addon")
+  announce("  /gtloottest                             -- the window with buttons: stop or start logging, scan, restart chat logging")
   announce("  /gtloottest track [all|strict]          -- tracking is ALL content by default")
   announce("  /gtloottest last [n]                    -- what was captured, and where (zone / dungeon / raid / difficulty)")
   announce("  /gtloottest selftest                    -- fake Need win through the real capture code: PASS/FAIL")

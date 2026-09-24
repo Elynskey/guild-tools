@@ -62,6 +62,8 @@ export function transformLua(lua) {
   let out = lua
     .replaceAll('GuildToolsLootDB', 'GuildToolsLootTestDB')
     .replaceAll('GUILDTOOLSLOOT', 'GUILDTOOLSLOOTTEST')
+    .replaceAll('GuildToolsLootPanel', 'GuildToolsLootTestPanel')
+    .replaceAll('AddOns\\\\GuildToolsLoot\\\\', 'AddOns\\\\GuildToolsLootTest\\\\')
     .replace(/\/gtloot(?!test)/g, '/gtloottest')
     .replace(/Guild Tools Loot(?! TEST)/g, 'Guild Tools Loot TEST')
     // chat lines in a different colour than the real addon's gold
@@ -92,8 +94,10 @@ export function transformToc(toc) {
     .replace(/^## SavedVariables:.*$/m, '## SavedVariables: GuildToolsLootTestDB')
     .replace('GuildToolsLoot.lua', 'GuildToolsLootTest.lua')
     .split('\n');
-  const at = lines.findIndex((l) => l.startsWith('## SavedVariables'));
-  lines.splice(at + 1, 0, '## IconTexture: Interface\\AddOns\\GuildToolsLootTest\\crd-logo');
+  const iconLine = '## IconTexture: Interface\\AddOns\\GuildToolsLootTest\\crd-logo';
+  const existing = lines.findIndex((l) => l.startsWith('## IconTexture'));
+  if (existing >= 0) lines[existing] = iconLine;
+  else lines.splice(lines.findIndex((l) => l.startsWith('## SavedVariables')) + 1, 0, iconLine);
   return lines.join('\n');
 }
 

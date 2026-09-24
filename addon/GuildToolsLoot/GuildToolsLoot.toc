@@ -4,5 +4,6 @@
 ## Author: Casual Raid Days
 ## Version: 1.7
 ## SavedVariables: GuildToolsLootDB
+## IconTexture: Interface\AddOns\GuildToolsLoot\crd-logo
 
 GuildToolsLoot.lua

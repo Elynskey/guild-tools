@@ -27,5 +27,4 @@ export const ADDON_COMMANDS: AddonCommand[] = [
   { command: 'logmark', does: 'Sends a marker with SendAddonMessageLogged. In the first real test it did NOT appear in WoWChatLog.txt, so treat it as an experiment, not a way to prove logging.', when: 'Rarely.' },
   { command: 'track', does: 'Sets what is tracked: "all" (every kind of content, the default here) or "strict" (the real addon\'s rules).', when: 'Comparing what the real addon would have recorded.' },
   { command: 'check', does: 'Ticks a manual checklist item by name: app_sync, once or legacy.', when: 'If you would rather type than click.' },
-  { command: 'on', does: 'Turns recording on (same as the real addon; also off, scan, chatlog).', when: 'If recording got switched off.' },
 ];

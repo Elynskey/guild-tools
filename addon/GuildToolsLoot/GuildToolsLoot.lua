@@ -6,9 +6,10 @@
 -- can't be tested against a live game client from where it was written. The Electron
 -- side does the (testable) work of reading these tables back out.
 --
--- On by default (most raid nights are current-tier progression) -- /gtloot off turns
--- logging off for old-content farms, alt runs, or anything else that shouldn't feed
--- the loot history; /gtloot on turns it back on; /gtloot alone reports current state.
+-- On by default (most raid nights are current-tier progression). /gtloot opens a small
+-- window with buttons: stop or start logging (for old-content farms, alt runs, or anything
+-- else that shouldn't feed the loot history), scan Loot History for missed wins, restart
+-- chat logging, and the current state.
 -- Announces its current state once at login too, so it's never silently off without
 -- you knowing.
 --
@@ -603,7 +604,7 @@ StaticPopupDialogs["GUILDTOOLSLOOT_CONFIRM"] = {
   end,
   OnAccept = function()
     GuildToolsLootDB.enabled = true
-    announce("logging Need wins for this raid. /gtloot off any time to stop.")
+    announce("logging Need wins for this raid. Open /gtloot to stop any time.")
     ensureChatLogging(true)
   end,
   -- Deliberately no OnCancel that touches `enabled`. Blizzard's StaticPopup calls
@@ -613,7 +614,7 @@ StaticPopupDialogs["GUILDTOOLSLOOT_CONFIRM"] = {
   -- -- confirmed against Blizzard's own StaticPopup docs, not assumed. A stray Escape
   -- press or an unrelated popup taking priority must never silently kill a whole
   -- raid's logging with zero real user action. Turning logging OFF is only ever
-  -- explicit now, via /gtloot off -- this popup can only ever turn it ON.
+  -- explicit now, via the /gtloot window's Stop button -- this popup can only ever turn it ON.
   timeout = 0,
   whileDead = true,
   hideOnEscape = true,
@@ -623,9 +624,8 @@ StaticPopupDialogs["GUILDTOOLSLOOT_CONFIRM"] = {
 -- A real popup instead of a chat line -- confirmed live twice now (2026-09-11,
 -- 2026-09-12) that whether /chatlog is actually on is exactly the thing officers get
 -- wrong without noticing, and a chat message scrolls away/gets missed in raid spam.
--- /gtloot with no argument (the "just checking" case) shows this instead of only
--- printing to chat; /gtloot on|off|scan stay chat-only since those are already
--- confirming an action the player just took, not something they need to go verify.
+-- The /gtloot window shows this instead of only printing to chat; the button actions
+-- stay chat-only since those are already confirming something the player just did.
 -- Samples C_ChatInfo.IsLoggingChat() twice, ~0.5s apart, before this on-demand check
 -- reports -- cheap insurance against the one-off transient false read confirmed live
 -- 2026-09-12 (an officer had chat logging genuinely on and this read it as off). Not a
@@ -650,7 +650,7 @@ local function sampleChatLogging(callback)
   end)
 end
 
--- Turns chat logging on when logging is being switched on (/gtloot on, answering Yes
+-- Turns chat logging on when logging is being switched on (Start logging in the /gtloot window, answering Yes
 -- to the raid-entry popup, or automatically a few seconds after login -- chat logging
 -- resets on every logout to the character screen), so an officer doesn't have to
 -- remember /chatlog separately. Only ever acts while chat logging reads OFF: the /chatlog slash handler
@@ -685,7 +685,7 @@ ensureChatLogging = function(explicit)
   end)
 end
 
--- /gtloot chatlog: an explicit "restart chat logging" for when the game reads ON but
+-- The /gtloot window's Restart chat logging button: an explicit restart for when the game reads ON but
 -- Guild Tools says nothing is being written (seen live 2026-09-19: several officers had
 -- it ON in game while their apps reported no writes). Cycles it off, then on, which is what
 -- typing /chatlog twice does, and only ever runs because an officer asked for it. Uses the
@@ -720,47 +720,159 @@ local function restartChatLogging()
   end)
 end
 
--- chatLoggingResult is true/false/nil, already resolved by sampleChatLogging above --
--- kept as a plain parameter (not re-sampled in here) so this stays synchronous and
--- StaticPopup_Show can be called directly from the sampleChatLogging callback.
-local function buildStatusText(chatLoggingResult)
-  local logging = GuildToolsLootDB.enabled and "|cff5f9e4aLogging Need wins|r" or "|cffa83232NOT logging|r (old content/alt run?)"
+-- =========================== the /gtloot window ===========================
+-- /gtloot opens a small window with buttons, so there are no sub-commands to remember. It is built on first use; a client that
+-- cannot draw it gets the same facts in chat.
+-- chatLoggingResult is true/false/nil, already resolved by sampleChatLogging above -- kept as a plain parameter (not re-sampled
+-- in here) so this stays synchronous.
+local function statusTexts(chatLoggingResult)
+  local logging = GuildToolsLootDB.enabled and "|cff5f9e4aLogging Need wins|r" or "|cffa83232NOT logging Need wins|r (old content or an alt run?)"
   local chatLogging
   if chatLoggingResult == nil then
     chatLogging = "Chat logging status unavailable on this client"
   elseif chatLoggingResult == true then
     chatLogging = "|cff5f9e4aChat logging is ON|r -- live updates will reach Guild Tools"
   elseif chatLoggingSeenOnThisSession then
-    chatLogging = "|cffc0902fReads OFF right now, but was ON earlier this session|r -- possibly a stale read. Trust Interface Options if it disagrees."
+    chatLogging = "|cffc0902fChat logging reads OFF right now, but was ON earlier this session|r -- possibly a stale read. Trust Interface Options if it disagrees, or press Restart chat logging."
   else
-    chatLogging = "|cffa83232Chat logging is OFF|r -- type /chatlog (works right away, no logout needed). It resets whenever you log out to the character screen."
+    chatLogging = "|cffa83232Chat logging is OFF|r -- press Restart chat logging (or type /chatlog). It resets whenever you log out to the character screen."
   end
-  -- The check time is there so a Refresh visibly did something even when nothing changed.
-  return logging .. "\n" .. chatLogging .. "\n\n/gtloot on|off to change -- /gtloot scan to pull in anything missed\n/gtloot chatlog if Guild Tools says nothing is being written\n|cff8a8a8aChecked " .. date("%H:%M:%S") .. "|r"
+  return logging, chatLogging
 end
 
-local function showStatusPopup()
+local gtPanel
+
+local function refreshPanel()
+  if not gtPanel then return end
+  -- Samples chat logging (twice when it reads off), so the check time also shows that a Refresh did something.
   sampleChatLogging(function(result)
-    StaticPopup_Show("GUILDTOOLSLOOT_STATUS", buildStatusText(result))
+    local logging, chatLogging = statusTexts(result)
+    gtPanel.loggingText:SetText(logging)
+    gtPanel.chatText:SetText(chatLogging)
+    gtPanel.checkedText:SetText("Checked " .. date("%H:%M:%S") .. ". Wins reach Guild Tools when you /reload or log out.")
+    gtPanel.buttons.toggle:SetText(GuildToolsLootDB.enabled and "Stop logging Need wins" or "Start logging Need wins")
   end)
 end
 
--- Refresh re-runs the whole check (logging on/off, chat logging, both samples) and
--- shows the popup again. StaticPopup hides itself as soon as OnAccept returns, so the
--- re-show is deferred a beat -- calling StaticPopup_Show from inside OnAccept would
--- get hidden again immediately by that same close. No OnCancel on purpose: Escape and
--- the Close button just dismiss, same rule as the raid-entry popup above.
-StaticPopupDialogs["GUILDTOOLSLOOT_STATUS"] = {
-  text = "%s",
-  button1 = "Refresh",
-  button2 = "Close",
-  OnAccept = function()
-    C_Timer.After(0.1, showStatusPopup)
-  end,
-  timeout = 0,
-  whileDead = true,
-  hideOnEscape = true,
-}
+local function toggleLogging()
+  if GuildToolsLootDB.enabled then
+    GuildToolsLootDB.enabled = false
+    announce("NOT logging -- use this for old-content or off-progression runs. Open /gtloot and press Start logging to resume.")
+  else
+    GuildToolsLootDB.enabled = true
+    announce("logging Need wins.")
+    ensureChatLogging(true)
+  end
+  refreshPanel()
+end
+
+local function runScan()
+  if not GuildToolsLootDB.enabled then
+    announce("NOT logging right now -- press Start logging first, then Scan.")
+    return
+  end
+  -- Confirms the button actually did something before the (synchronous, near-instant) scan runs -- if this never shows, the
+  -- click never fired; if this shows but the result line never follows, scanLootHistory() itself errored out (Lua errors are
+  -- silent by default, so without this line there was no way to tell "didn't run" from "ran and crashed").
+  announce("Scanning now…")
+  local added = scanLootHistory()
+  -- The reload nudge only applies when there is something new: SavedVariables only flush to disk on /reload or logout, and
+  -- that is the only way Guild Tools (the app) can pick up a scan's results.
+  announce(added > 0 and (added .. " new Need win" .. (added == 1 and "" or "s") .. " pulled in from Loot History. /reload whenever's convenient to confirm the boss/slot in Guild Tools.") or "Loot History checked -- nothing new to add.")
+end
+
+local function restartChatLoggingFromPanel()
+  restartChatLogging()
+  C_Timer.After(1.6, refreshPanel)
+end
+
+local function makePanelButton(parent, label, y, onClick)
+  local b = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
+  b:SetSize(300, 28)
+  b:SetPoint("TOP", parent, "TOP", 0, y)
+  b:SetText(label)
+  b:SetScript("OnClick", onClick)
+  return b
+end
+
+local function buildPanel()
+  local f = CreateFrame("Frame", "GuildToolsLootPanel", UIParent, "BackdropTemplate")
+  f:SetSize(340, 292)
+  f:SetPoint("CENTER", UIParent, "CENTER", 0, 80)
+  f:SetFrameStrata("DIALOG")
+  f:SetClampedToScreen(true)
+  f:SetMovable(true)
+  f:EnableMouse(true)
+  f:RegisterForDrag("LeftButton")
+  f:SetScript("OnDragStart", function(self) self:StartMoving() end)
+  f:SetScript("OnDragStop", function(self) self:StopMovingOrSizing() end)
+  if f.SetBackdrop then
+    f:SetBackdrop({
+      bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
+      edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+      tile = true, tileSize = 32, edgeSize = 24,
+      insets = { left = 6, right = 6, top = 6, bottom = 6 },
+    })
+  end
+
+  f.icon = f:CreateTexture(nil, "ARTWORK")
+  f.icon:SetTexture("Interface\\AddOns\\GuildToolsLoot\\crd-logo")
+  f.icon:SetSize(38, 38)
+  f.icon:SetPoint("TOPLEFT", f, "TOPLEFT", 16, -14)
+
+  f.title = f:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+  f.title:SetPoint("TOPLEFT", f.icon, "TOPRIGHT", 8, -2)
+  f.title:SetText("Guild Tools Loot")
+  f.sub = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+  f.sub:SetPoint("TOPLEFT", f.title, "BOTTOMLEFT", 0, -2)
+  f.sub:SetText("Casual Raid Days")
+
+  f.close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
+  f.close:SetPoint("TOPRIGHT", f, "TOPRIGHT", -4, -4)
+
+  f.loggingText = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+  f.loggingText:SetPoint("TOPLEFT", f, "TOPLEFT", 20, -66)
+  f.loggingText:SetWidth(300)
+  f.loggingText:SetJustifyH("LEFT")
+  f.chatText = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+  f.chatText:SetPoint("TOPLEFT", f.loggingText, "BOTTOMLEFT", 0, -6)
+  f.chatText:SetWidth(300)
+  f.chatText:SetHeight(48)
+  f.chatText:SetJustifyH("LEFT")
+  f.chatText:SetJustifyV("TOP")
+
+  f.buttons = {
+    toggle = makePanelButton(f, "Stop logging Need wins", -150, toggleLogging),
+    scan = makePanelButton(f, "Scan Loot History for missed wins", -184, runScan),
+    chatlog = makePanelButton(f, "Restart chat logging", -218, restartChatLoggingFromPanel),
+  }
+
+  f.checkedText = f:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+  f.checkedText:SetPoint("BOTTOM", f, "BOTTOM", 0, 14)
+  f.checkedText:SetWidth(300)
+
+  f:SetScript("OnShow", refreshPanel)
+  if UISpecialFrames then table.insert(UISpecialFrames, "GuildToolsLootPanel") end
+  f:Hide()
+  return f
+end
+
+local function togglePanel()
+  if not gtPanel then
+    local ok, built = pcall(buildPanel)
+    if not ok then
+      sampleChatLogging(function(result)
+        local logging, chatLogging = statusTexts(result)
+        announce(logging)
+        announce(chatLogging)
+        announce("This client could not draw the /gtloot window.")
+      end)
+      return
+    end
+    gtPanel = built
+  end
+  if gtPanel:IsShown() then gtPanel:Hide() else gtPanel:Show() end
+end
 
 local frame = CreateFrame("Frame")
 frame:RegisterEvent("PLAYER_LOGIN")
@@ -785,9 +897,9 @@ frame:SetScript("OnEvent", function(_, event, ...)
     recordCharacter()
     backfillBosses()
     if GuildToolsLootDB.enabled then
-      announce('logging Need wins (type /gtloot off to stop for this run).')
+      announce('logging Need wins (open /gtloot to stop for this run).')
     else
-      announce('NOT logging (type /gtloot on to resume).')
+      announce('NOT logging (open /gtloot and press Start logging to resume).')
     end
     -- Chat logging switches itself off every time a character logs out to the character
     -- screen (confirmed live 2026-09-19), so it has to be turned back on each session --
@@ -931,36 +1043,8 @@ frame:SetScript("OnEvent", function(_, event, ...)
 end)
 
 SLASH_GUILDTOOLSLOOT1 = "/gtloot"
-SlashCmdList["GUILDTOOLSLOOT"] = function(msg)
+-- One command, no arguments: everything it used to do (on, off, scan, chatlog) is a button in the window.
+SlashCmdList["GUILDTOOLSLOOT"] = function()
   ensureDB()
-  local arg = (msg or ""):lower():match("^%s*(%S*)")
-  if arg == "on" then
-    GuildToolsLootDB.enabled = true
-    announce("logging Need wins.")
-    ensureChatLogging(true)
-  elseif arg == "chatlog" then
-    restartChatLogging()
-  elseif arg == "off" then
-    GuildToolsLootDB.enabled = false
-    announce("NOT logging -- use this for old-content or off-progression runs. /gtloot on to resume.")
-  elseif arg == "scan" then
-    if not GuildToolsLootDB.enabled then
-      announce("NOT logging right now -- /gtloot on first, then /gtloot scan.")
-    else
-      -- Confirms the command actually dispatched before the (synchronous, near-instant)
-      -- scan runs -- if this never shows, the command itself never fired; if this shows
-      -- but the result line never follows, scanLootHistory() itself errored out (a real
-      -- gap found live 2026-08-28 -- Lua errors are silent by default, so without this
-      -- line there was no way to tell "didn't run" from "ran and crashed").
-      announce("Scanning now…")
-      local added = scanLootHistory()
-      -- The reload nudge only applies when there's actually something new: SavedVariables
-      -- only flush to disk on /reload or logout, and that's the only way Guild Tools (the
-      -- app) can pick up a scan's results -- confirmed live 2026-08-29 as the cause of
-      -- "scanned, but the app never updated" (officer never reloaded after scanning).
-      announce(added > 0 and (added .. " new Need win" .. (added == 1 and "" or "s") .. " pulled in from Loot History. /reload whenever's convenient to confirm the boss/slot in Guild Tools.") or "Loot History checked -- nothing new to add.")
-    end
-  else
-    showStatusPopup()
-  end
+  togglePanel()
 end

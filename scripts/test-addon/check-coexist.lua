@@ -50,7 +50,7 @@ check("both slash handlers exist, under different keys", SlashCmdList["GUILDTOOL
 check("real command is still /gtloot", SLASH_GUILDTOOLSLOOT1 == "/gtloot")
 check("test command is /gtloottest", SLASH_GUILDTOOLSLOOTTEST1 == "/gtloottest")
 check("separate saved-variable tables", GuildToolsLootDB ~= nil and GuildToolsLootTestDB ~= nil and GuildToolsLootDB ~= GuildToolsLootTestDB)
-check("separate popup dialogs (real and test)", StaticPopupDialogs["GUILDTOOLSLOOT_CONFIRM"] ~= nil and StaticPopupDialogs["GUILDTOOLSLOOTTEST_CONFIRM"] ~= nil and StaticPopupDialogs["GUILDTOOLSLOOT_STATUS"] ~= StaticPopupDialogs["GUILDTOOLSLOOTTEST_STATUS"])
+check("separate popup dialogs (real and test)", StaticPopupDialogs["GUILDTOOLSLOOT_CONFIRM"] ~= nil and StaticPopupDialogs["GUILDTOOLSLOOTTEST_CONFIRM"] ~= nil and StaticPopupDialogs["GUILDTOOLSLOOT_CONFIRM"] ~= StaticPopupDialogs["GUILDTOOLSLOOTTEST_CONFIRM"])
 
 local function say(cmd, msg)
   printed = {}
@@ -58,16 +58,10 @@ local function say(cmd, msg)
   return table.concat(printed, " || ")
 end
 
--- the copied commands, under the test name
+-- the old sub-commands are gone (the window's buttons do those jobs; see check-panel.lua)
 local out = say("GUILDTOOLSLOOTTEST", "off")
-check("/gtloottest off works and is labelled TEST", out:find("TEST") and GuildToolsLootTestDB.enabled == false, out)
+check("/gtloottest off no longer switches logging off", GuildToolsLootTestDB.enabled ~= false, out)
 check("...and did NOT touch the real addon's setting", GuildToolsLootDB.enabled ~= false)
-out = say("GUILDTOOLSLOOTTEST", "on")
-check("/gtloottest on works", GuildToolsLootTestDB.enabled == true, out)
-state = false
-out = say("GUILDTOOLSLOOTTEST", "chatlog")
-check("/gtloottest chatlog ends with chat logging ON", state == true, out)
-check("messages tell you to use /gtloottest, not /gtloot", not out:find("/gtloot[^t]"), out)
 
 -- the experiment
 logged = {}
@@ -90,7 +84,7 @@ check("logmark survives an erroring API and reports the error", out:find("error"
 C_ChatInfo.SendAddonMessageLogged = saved
 
 out = say("GUILDTOOLSLOOTTEST", "help")
-check("/gtloottest help lists the test commands", out:find("logmark") and out:find("chatlog"), out)
+check("/gtloottest help lists the test commands and the window", out:find("logmark") and out:find("window with buttons"), out)
 
 -- the real addon is untouched by all of the above
 out = say("GUILDTOOLSLOOT", "logmark")

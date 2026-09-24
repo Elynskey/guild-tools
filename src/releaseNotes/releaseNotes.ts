@@ -23,6 +23,34 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '1.1.6',
+    date: '2026-09-23',
+    title: 'Loot that is logged once, with its boss, and shows up faster',
+    highlights: [
+      {
+        heading: 'No more doubled wins or double Discord posts',
+        body: 'Each win is now stamped with the time it really happened, and wins that only appear in an old chat log are ignored instead of being counted as new loot. A busy night no longer records or posts the same win twice.',
+      },
+      {
+        heading: '/gtloot is now a window with buttons',
+        body: 'Type /gtloot in game to open it: stop or start logging, scan Loot History for missed wins and restart chat logging are buttons, and it shows whether logging and chat logging are on. The old /gtloot on, off, scan and chatlog commands are gone. The addon now shows our crest too.',
+      },
+      {
+        heading: 'Every win and lost roll knows its boss and its drop',
+        body: 'The addon now records which boss and which drop each win and lost roll came from. Two officers logging the same raid merge into one list, and someone who rolled Need on two copies of an item is counted twice, as they should be.',
+      },
+      {
+        heading: 'Loot shows up within seconds of your reload',
+        body: 'Guild Tools now picks up your addon\'s loot as soon as the game saves it (on /reload or logout), without pressing anything.',
+      },
+      {
+        heading: 'Chat logging status is honest',
+        body: 'WoW only writes the chat log when you log out, so a quiet log used to look like "not logging". Loot History now says "on, buffered" when the game reports logging is on.',
+      },
+    ],
+    headsUp: 'On Loot History, press "Update addon now", then restart WoW once so the crest loads (or /reload if you can wait for the crest). Type /gtloot to see the new window.',
+  },
+  {
     version: '1.1.5',
     date: '2026-09-20',
     title: 'Officers break the Guildie tie, and auto-post moves to Settings',

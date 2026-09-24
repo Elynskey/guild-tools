@@ -258,7 +258,7 @@ function VerifyRow({ lh }: { lh: ReturnType<typeof useLootHistory> }) {
       )}
       {v.phase === 'done' && failedNames.length > 0 && (
         <div style={{ fontSize: 'var(--text-micro)', color: 'var(--status-warning)', lineHeight: 1.5 }}>
-          Chat logging is not confirmed on for: <b>{failedNames.join(', ')}</b>. In game, type <b>/chatlog</b> (or <b>/gtloot chatlog</b>), and make sure the addon is version 1.7 or newer so the game can report its state. Officers who aren't in this raid group can show here too.
+          Chat logging is not confirmed on for: <b>{failedNames.join(', ')}</b>. In game, open <b>/gtloot</b> and press <b>Restart chat logging</b> (or type <b>/chatlog</b>), and make sure the addon is version 1.7 or newer so the game can report its state. Officers who aren't in this raid group can show here too.
         </div>
       )}
     </div>
@@ -398,19 +398,10 @@ export function LootHistory() {
           >
             <div className="crd-eyebrow">In-game commands</div>
             <div>
-              <code>/gtloot</code> -- check status in-game (pops up a dialog: logging on/off, chat logging on/off)
+              <code>/gtloot</code> -- opens a small window with buttons: stop or start logging for this run (old content, alts, off-progression), scan Loot History for wins the addon missed live, and restart chat logging if it reads OFF. It also shows whether logging and chat logging are on. A quiet chat log file is normal: WoW writes it only when you log out.
             </div>
             <div>
-              <code>/gtloot on</code> / <code>/gtloot off</code> -- toggle logging for this run (old content, alts, off-progression)
-            </div>
-            <div>
-              <code>/gtloot scan</code> -- pull in any wins Loot History caught but the addon missed live
-            </div>
-            <div>
-              <code>/gtloot chatlog</code> -- restart chat logging (off, then on) if it reads OFF. A quiet chat log file is normal: WoW writes it only when you log out.
-            </div>
-            <div>
-              <code>/chatlog</code> -- turns on live updates to this app. Works right away (no logout), but it switches itself off every time you log out to the character screen, so the addon now turns it back on at login and on <code>/gtloot on</code>. The Refresh button on the <code>/gtloot</code> popup re-checks it.
+              <code>/chatlog</code> -- turns on live updates to this app. Works right away (no logout), but it switches itself off every time you log out to the character screen, so the addon now turns it back on at login and when you press Start logging. The <code>/gtloot</code> window re-checks it each time you open it.
             </div>
           </div>
         )}
