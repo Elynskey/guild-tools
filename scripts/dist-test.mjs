@@ -44,6 +44,9 @@ run('npx', [
   'electron-builder',
   '--win',
   '-c.productName="Guild Tools (Test)"',
+  // A different appId, or Windows treats this as the SAME program as the real app and installs over it (found 2026-09-23: the Test
+  // installer replaced the real app's folder, shortcut and uninstall entry). The new appId gives it its own folder and uninstaller.
+  '-c.appId=com.casualraiddays.guild-tools.test',
   '-c.nsis.artifactName=Guild-Tools-TEST-Setup-${version}.${ext}',
   // The generated test addon rides along as a real folder next to the app (not inside the asar) -- test builds only.
   '-c.extraResources.from=addon-test/GuildToolsLootTest',
