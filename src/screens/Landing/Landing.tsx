@@ -70,6 +70,13 @@ const CARDS: NavCardDef[] = [
     testOnly: true,
   },
   {
+    to: '/test-tools/mplus-comp',
+    icon: 'key-round',
+    title: 'M+ Comp',
+    description: "Suggested Mythic+ groups from who's available, plus which guild groups are timing keys together and which aren't.",
+    testOnly: true,
+  },
+  {
     to: '/test-tools/loot-monitor',
     icon: 'radar',
     title: 'Loot Logger Monitor',

@@ -41,9 +41,11 @@ const ROLE_MAP = { TANK: 'tank', HEALING: 'healer', DPS: 'dps' };
 // for anyone not actually on it (confirmed live — e.g. a member found on "Argent Dawn").
 // Real shape confirmed live against this guild's own roster: an array of run objects,
 // newest first, capped at the 10 most recent -- {dungeon, short_name, mythic_level,
-// completed_at, score, num_keystone_upgrades, icon_url, url, ...}. Trimmed down to just
-// what the app actually shows; the full payload also carries affixes/background_image_
-// url/spec/role per run, none of which this feature needs.
+// completed_at, score, num_keystone_upgrades, icon_url, url, spec, role, ...}. Trimmed
+// down to just what the app actually shows. spec/role are what the character played IN
+// that key (confirmed live: a raid tank keying as Havoc, a raid healer's active spec
+// reading Elemental while 7 of their last 10 keys were Restoration) -- the M+ Comp
+// screen uses these, not the raid role.
 function mapRun(run) {
   return {
     dungeon: run.dungeon,
@@ -53,6 +55,9 @@ function mapRun(run) {
     upgrades: run.num_keystone_upgrades,
     iconUrl: run.icon_url,
     url: run.url,
+    spec: run.spec?.name ?? null,
+    // Per-run role is already lowercase ('tank'|'healer'|'dps'), unlike active_spec_role.
+    role: ['tank', 'healer', 'dps'].includes(run.role) ? run.role : null,
   };
 }
 

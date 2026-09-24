@@ -7,6 +7,7 @@ import { PullFeedback } from './screens/PullFeedback/PullFeedback';
 import { LootHistory } from './screens/LootHistory/LootHistory';
 import { SeasonLootReport } from './screens/SeasonLootReport/SeasonLootReport';
 import { MythicPlus } from './screens/MythicPlus/MythicPlus';
+import { MythicPlusComp } from './screens/MythicPlus/MythicPlusComp';
 import { Settings } from './screens/Settings/Settings';
 import { RaidSignups } from './screens/RaidSignups/RaidSignups';
 import { GuildieOfTheMonth } from './screens/GuildieOfTheMonth/GuildieOfTheMonth';
@@ -63,6 +64,7 @@ export function App() {
         <Route path="/raid-signups" element={<RaidSignups />} />
         <Route path="/gotm" element={<GuildieOfTheMonth />} />
         <Route path="/analytics" element={<TestOnly><Analytics /></TestOnly>} />
+        <Route path="/test-tools/mplus-comp" element={<TestOnly><MythicPlusComp /></TestOnly>} />
         <Route path="/test-tools/loot-monitor" element={<TestOnly><LootMonitor /></TestOnly>} />
       </Routes>
     </HashRouter>

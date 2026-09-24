@@ -28,6 +28,9 @@ export interface MythicPlusRun {
   iconUrl: string;
   /** Raider.IO's own page for this specific run. */
   url: string;
+  /** Spec/role the character played in this key -- can differ from both their raid role and their current spec. Null in sample data. */
+  spec?: string | null;
+  role?: Role | null;
 }
 
 /** Which pool a healer/tank's season perf percentile was actually compared against. `scope: 'class'` means a same-spec+class peer pool (e.g. "Restoration Shaman") -- only used when there are 2+ distinct raiders of that spec+class this season, since a same-spec comparison with nobody else in it is meaningless. Falls back to `scope: 'role'` (the whole healer/tank pool, any class) otherwise. Null for DPS (a flat threshold, not a ranking) or when there's no season data yet. */

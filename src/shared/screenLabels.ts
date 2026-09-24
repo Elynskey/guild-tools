@@ -17,6 +17,7 @@ export const SCREEN_LABELS: Record<string, string> = {
   '/raid-signups': 'Raid Signups',
   '/gotm': 'Guildie of the Month',
   '/analytics': 'Analytics',
+  '/test-tools/mplus-comp': 'M+ Comp',
 };
 
 export function screenLabelFor(pathname: string): string {

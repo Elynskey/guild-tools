@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { getRoster } from '../../data/rosterSource';
-import type { MythicPlusRun, Raider } from '../../scoring/types';
+import type { MythicPlusRun, Raider, Role } from '../../scoring/types';
 
 export interface MythicPlusRow {
   name: string;
   class: string;
   spec: string;
+  role: Role;
   portraitUrl: string | null;
   rioCurrent: number;
   runs: MythicPlusRun[];
@@ -16,6 +17,7 @@ function toRow(r: Raider): MythicPlusRow {
     name: r.name,
     class: r.class,
     spec: r.spec,
+    role: r.role,
     portraitUrl: r.portraitUrl,
     rioCurrent: r.rioCurrent,
     runs: r.mythicPlusRuns,
