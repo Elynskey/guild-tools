@@ -1007,15 +1007,20 @@ end
 
 -- Calendar: who's coming to what, so Guild Tools can build M+ groups from an event's sign-ups.
 -- The game only hands out an event's invite list once the event is opened (C_Calendar.OpenEvent),
--- and answers later (CALENDAR_OPEN_EVENT), so upcoming events are opened one at a time, each with
--- a timeout in case the game never answers. Saved to GuildToolsLootTestDB.calendar; the app reads
--- it after a /reload or logout, like everything else here.
+-- and answers later (CALENDAR_OPEN_EVENT) -- sometimes several seconds later (first live run,
+-- 2026-09-23: 6 of 13 events missed a 3 s timeout). So events are opened one at a time with a pause
+-- between, each answer is matched to its event by title AND time (two "Z's Keys" a week apart), an
+-- answer that arrives after its timeout still fills its event in, and anything still missing is
+-- opened once more at the end. Saved to GuildToolsLootTestDB.calendar; the app reads it after a
+-- /reload or logout, like everything else here.
 local CALENDAR_DAYS = 14
-local CALENDAR_TIMEOUT = 3
+local CALENDAR_TIMEOUT = 8
+local CALENDAR_GAP = 0.5
 local CALENDAR_SKIP = { HOLIDAY = true, SYSTEM = true, RAID_LOCKOUT = true, RAID_RESET = true }
 -- Enum.CalendarStatus, by number, so the saved file reads plainly.
 local CALENDAR_STATUS = { [0] = "invited", [1] = "available", [2] = "declined", [3] = "confirmed", [4] = "out", [5] = "standby", [6] = "signedup", [7] = "not_signedup", [8] = "tentative" }
 local CALENDAR_COMING = { available = true, confirmed = true, signedup = true, tentative = true, standby = true }
+local CALENDAR_MISSED = "the game didn't open this event in time"
 
 local calendarScan = nil
 local calendarFrame = CreateFrame("Frame")
@@ -1042,34 +1047,53 @@ local function finishCalendarScan()
   calendarFrame:UnregisterEvent("CALENDAR_OPEN_EVENT")
   GuildToolsLootTestDB.calendar = { scannedAt = time(), days = CALENDAR_DAYS, events = scan.events }
   if not scan.verbose then return end
+  local missed = 0
   announce("calendar: " .. #scan.events .. " event(s) in the next " .. CALENDAR_DAYS .. " days.")
   for _, e in ipairs(scan.events) do
     local coming = 0
     for _, inv in ipairs(e.invites or {}) do
       if CALENDAR_COMING[inv.status] then coming = coming + 1 end
     end
+    if not e.invites then missed = missed + 1 end
     announce("  " .. e.start .. "  " .. tostring(e.title) .. "  -- " .. (e.invites and (coming .. " coming of " .. #e.invites .. " invited") or (e.note or "no invite list")))
   end
+  if missed > 0 then announce(missed .. " event(s) had no sign-up list from the game even after a retry -- run /gtloottest calendar again to try those once more.") end
   announce("saved. /reload (or /gtloottest sync) so Guild Tools sees it.")
 end
 
 local openNextCalendarEvent
 local startCalendarScan
 
-local function recordCalendarEvent(scan, pending, invites, note)
+-- Files an event's sign-ups (or why there are none). An event is added to the saved list once;
+-- a late answer or a retry just fills in the list on the same entry.
+local function fileCalendarEvent(scan, pending, invites, note)
   pending.event.invites = invites
   pending.event.note = note
-  scan.events[#scan.events + 1] = pending.event
-  scan.waiting = nil
-  openNextCalendarEvent()
+  pending.missed = (invites == nil)
+  if not pending.filed then
+    pending.filed = true
+    scan.events[#scan.events + 1] = pending.event
+  end
 end
 
 openNextCalendarEvent = function()
   local scan = calendarScan
   if not scan then return end
   scan.index = scan.index + 1
-  local pending = scan.pending[scan.index]
+  local pending = scan.queue[scan.index]
   if not pending then
+    -- One more go at anything the game didn't answer in time.
+    if not scan.retried then
+      scan.retried = true
+      scan.queue, scan.index = {}, 0
+      for _, p in ipairs(scan.pending) do
+        if p.missed then scan.queue[#scan.queue + 1] = p end
+      end
+      if #scan.queue > 0 then
+        openNextCalendarEvent()
+        return
+      end
+    end
     finishCalendarScan()
     return
   end
@@ -1077,7 +1101,9 @@ openNextCalendarEvent = function()
   C_Calendar.OpenEvent(pending.offset, pending.day, pending.i)
   C_Timer.After(CALENDAR_TIMEOUT, function()
     if calendarScan == scan and scan.waiting == pending then
-      recordCalendarEvent(scan, pending, nil, "the game didn't open this event in time")
+      scan.waiting = nil
+      fileCalendarEvent(scan, pending, nil, CALENDAR_MISSED)
+      openNextCalendarEvent()
     end
   end)
 end
@@ -1090,14 +1116,25 @@ calendarFrame:SetScript("OnEvent", function(_, event)
     return
   end
   local scan = calendarScan
-  local pending = scan and scan.waiting
-  if event ~= "CALENDAR_OPEN_EVENT" or not pending then return end
-  -- Ignore an event the player opened themselves in the calendar window meanwhile.
+  if event ~= "CALENDAR_OPEN_EVENT" or not scan then return end
+  -- Which of our events is this? Title and time when the game says; otherwise the one we asked for.
   local info = C_Calendar.GetEventInfo and C_Calendar.GetEventInfo()
-  if info and info.title and pending.event.title and info.title ~= pending.event.title then return end
+  local target
+  if info and info.title and info.time then
+    target = scan.byKey[info.title .. "|" .. calendarStamp(info.time)]
+  elseif info and info.title then
+    target = (scan.waiting and scan.waiting.event.title == info.title) and scan.waiting or nil
+  else
+    target = scan.waiting
+  end
+  if not target then return end -- an event the player opened themselves meanwhile
   local invites = readCalendarInvites()
   if C_Calendar.CloseEvent then C_Calendar.CloseEvent() end
-  recordCalendarEvent(scan, pending, invites, nil)
+  fileCalendarEvent(scan, target, invites, nil)
+  if target == scan.waiting then
+    scan.waiting = nil
+    C_Timer.After(CALENDAR_GAP, openNextCalendarEvent)
+  end
 end)
 calendarFrame:RegisterEvent("PLAYER_LOGIN")
 
@@ -1113,14 +1150,17 @@ startCalendarScan = function(verbose)
   local now = C_DateAndTime.GetCurrentCalendarTime()
   -- Day lookups are relative to the month the calendar is showing; make that this month.
   if C_Calendar.SetAbsMonth then C_Calendar.SetAbsMonth(now.month, now.year) end
-  local pending = {}
+  local pending, byKey = {}, {}
   local offset, day = 0, now.monthDay
   local monthDays = C_Calendar.GetMonthInfo(0).numDays
   for _ = 1, CALENDAR_DAYS do
     for i = 1, C_Calendar.GetNumDayEvents(offset, day) do
       local e = C_Calendar.GetDayEvent(offset, day, i)
       if e and e.title and not CALENDAR_SKIP[e.calendarType] then
-        pending[#pending + 1] = { offset = offset, day = day, i = i, event = { title = e.title, calendarType = e.calendarType, start = calendarStamp(e.startTime) } }
+        local start = calendarStamp(e.startTime)
+        local p = { offset = offset, day = day, i = i, event = { title = e.title, calendarType = e.calendarType, start = start } }
+        pending[#pending + 1] = p
+        byKey[e.title .. "|" .. start] = p
       end
     end
     day = day + 1
@@ -1129,9 +1169,9 @@ startCalendarScan = function(verbose)
       monthDays = C_Calendar.GetMonthInfo(offset).numDays
     end
   end
-  calendarScan = { pending = pending, events = {}, index = 0, verbose = verbose }
+  calendarScan = { pending = pending, queue = pending, byKey = byKey, events = {}, index = 0, verbose = verbose }
   calendarFrame:RegisterEvent("CALENDAR_OPEN_EVENT")
-  if verbose then announce("reading " .. #pending .. " calendar event(s) in the next " .. CALENDAR_DAYS .. " days...") end
+  if verbose then announce("reading " .. #pending .. " calendar event(s) in the next " .. CALENDAR_DAYS .. " days (up to " .. CALENDAR_TIMEOUT .. " s each)...") end
   openNextCalendarEvent()
 end
 

@@ -129,5 +129,58 @@ local first = GuildToolsLootTestDB.calendar.events[1]
 check("ignores a different event opened meanwhile", first and first.invites == nil, first and tostring(first.note))
 C_Calendar.OpenEvent = realOpen
 
+
+-- ======= Slow answers, as on the first live run: late answers, a retry, two events with one title =======
+local timers = {}
+C_Timer.After = function(_, fn) timers[#timers + 1] = fn end
+local function runTimers()
+  local guard = 0
+  while #timers > 0 and guard < 500 do
+    guard = guard + 1
+    table.remove(timers, 1)()
+  end
+end
+local at = function(d, h) return { year = 2026, month = 9, monthDay = d, hour = h, minute = 30 } end
+calendar = {
+  [0] = {
+    [29] = { { title = "Z's Keys", calendarType = "GUILD_EVENT", startTime = at(29, 20), mode = "late", invites = { INV("Zakainu-Feathermoon", "Shaman", 3) } } },
+    [30] = { { title = "Raid", calendarType = "GUILD_EVENT", startTime = at(30, 19), mode = "retry", opens = 0, invites = { INV("Devkra", "Death Knight", 6), INV("Narima", "Death Knight", 6) } } },
+  },
+  [1] = {
+    [6] = { { title = "Z's Keys", calendarType = "GUILD_EVENT", startTime = { year = 2026, month = 10, monthDay = 6, hour = 20, minute = 30 }, mode = "now", invites = { INV("Nightestrike", "Rogue", 6) } } },
+  },
+}
+local lateAnswer = nil
+local function answer(e)
+  open = e
+  fire("CALENDAR_OPEN_EVENT")
+end
+C_Calendar.GetEventInfo = function() return open and { title = open.title, time = open.startTime } end
+C_Calendar.OpenEvent = function(offset, day, i)
+  -- The previous event's answer turns up only now, while we're waiting on this one.
+  if lateAnswer then local e = lateAnswer; lateAnswer = nil; answer(e) end
+  local e = calendar[offset][day][i]
+  if e.mode == "now" then answer(e)
+  elseif e.mode == "late" then lateAnswer = e
+  elseif e.mode == "retry" then
+    e.opens = e.opens + 1
+    if e.opens >= 2 then answer(e) end
+  end
+end
+
+printed = {}
+SlashCmdList["GUILDTOOLSLOOTTEST"]("calendar")
+runTimers()
+local evs = GuildToolsLootTestDB.calendar.events
+local function find(title, start)
+  for _, e in ipairs(evs) do if e.title == title and e.start == start then return e end end
+end
+local late, retry, later = find("Z's Keys", "2026-09-29T20:30"), find("Raid", "2026-09-30T19:30"), find("Z's Keys", "2026-10-06T20:30")
+check("each event is saved once", #evs == 3, tostring(#evs) .. " saved")
+check("a late answer still fills in its own event", late and late.invites and #late.invites == 1 and late.invites[1].name == "Zakainu-Feathermoon" and late.note == nil, late and tostring(late.note))
+check("an event that only answers on the retry gets its list", retry and retry.invites and #retry.invites == 2 and retry.note == nil, retry and tostring(retry.note))
+check("two events with the same title keep their own sign-ups", later and later.invites and later.invites[1].name == "Nightestrike")
+check("the retry opened the missed event a second time", calendar[0][30][1].opens == 2, tostring(calendar[0][30][1].opens))
+
 print(string.format("%d/%d checks passed", checks - failed, checks))
 os.exit(failed == 0 and 0 or 1)
