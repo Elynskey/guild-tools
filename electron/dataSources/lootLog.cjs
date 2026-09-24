@@ -215,6 +215,48 @@ function getLootRecords() {
   return { records: db.records ?? [], trades: db.trades ?? [], needLosses: db.needLosses ?? [], status: 'ok' };
 }
 
+// Invite statuses that mean "coming", as the addon saves them (see test-extras.lua's CALENDAR_STATUS).
+const CALENDAR_COMING = new Set(['available', 'confirmed', 'signedup', 'standby']);
+
+/**
+ * The addon's saved calendar (test addon only for now -- scripts/test-addon/test-extras.lua),
+ * tidied for the app: names without a realm suffix, a plain coming/maybe/not verdict per invitee.
+ * @param {object | null} db the addon's SavedVariables table
+ * @returns {{ scannedAt: number, events: Array<{ title: string, start: string, calendarType: string | null, note: string | null, invites: Array<{ name: string, fullName: string, className: string | null, status: string, answer: 'coming' | 'maybe' | 'no' }> | null }> } | null}
+ */
+function normalizeCalendar(db) {
+  const cal = db?.calendar;
+  if (!cal || !Array.isArray(cal.events)) return null;
+  return {
+    scannedAt: Number(cal.scannedAt) > 0 ? Number(cal.scannedAt) * 1000 : 0,
+    events: cal.events
+      .filter((e) => e && typeof e.title === 'string' && typeof e.start === 'string')
+      .map((e) => ({
+        title: e.title,
+        start: e.start,
+        calendarType: e.calendarType ?? null,
+        note: e.note ?? null,
+        invites: Array.isArray(e.invites)
+          ? e.invites
+              .filter((i) => i && typeof i.name === 'string')
+              .map((i) => ({
+                name: i.name.split('-')[0],
+                fullName: i.name,
+                className: i.className ?? null,
+                status: String(i.status),
+                answer: CALENDAR_COMING.has(i.status) ? 'coming' : i.status === 'tentative' ? 'maybe' : 'no',
+              }))
+          : null,
+      }))
+      .sort((a, b) => a.start.localeCompare(b.start)),
+  };
+}
+
+/** The calendar the addon on this PC last saved, or null if it never has. */
+function getAddonCalendar() {
+  return normalizeCalendar(readAddonDb());
+}
+
 /**
  * When this PC's addon SavedVariables file last changed (ms since the epoch), or null if there isn't one. A cheap stat, no
  * parse: the app's background tick uses it to notice a /reload or logout (the only moments the file is written) and sync
@@ -321,6 +363,8 @@ function getAddonVersionInfo(bundledTocOverride) {
 
 module.exports = {
   withAddonFlavor,
+  getAddonCalendar,
+  normalizeCalendar,
   getLootRecords,
   getAddonDataStamp,
   getAddonChatLogging,

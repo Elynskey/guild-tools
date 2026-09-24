@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { MythicPlusRun, Role } from '../../scoring/types';
-import { buildComps, findGuildGroups, isTimingGroup, keyRoles, pairRecords, roleRisk, filterGuildGroups, DEFAULT_GROUP_FILTERS, type CompMember } from './mplusComp';
+import { buildComps, findGuildGroups, isTimingGroup, keyRoles, pairRecords, roleRisk, filterGuildGroups, DEFAULT_GROUP_FILTERS, eventAvailability, type CompMember } from './mplusComp';
 
 function run(id: number, level: number, upgrades: number, day = 1): MythicPlusRun {
   return {
@@ -237,5 +237,27 @@ describe('filterGuildGroups', () => {
   it('narrows by raider and by how many keys a group shares', () => {
     expect(filterGuildGroups(roster, { ...all, raider: 'C' }).map((g) => g.members.join())).toEqual(['A,B,C,D']);
     expect(filterGuildGroups(roster, { ...all, minKeys: 2 }).map((g) => g.members.join())).toEqual(['A,B']);
+  });
+});
+
+describe('eventAvailability', () => {
+  const invites = [
+    { name: 'narima', answer: 'coming' as const },
+    { name: 'Odasa', answer: 'maybe' as const },
+    { name: 'Silverhorn', answer: 'no' as const },
+    { name: 'Altchar', answer: 'coming' as const },
+  ];
+  const list = ['Narima', 'Odasa', 'Silverhorn', 'Zakainu'];
+
+  it('marks everyone not coming as away, matching names without regard to case', () => {
+    const a = eventAvailability(list, invites, false);
+    expect([...a.away].sort()).toEqual(['Odasa', 'Silverhorn', 'Zakainu']);
+    expect(a.coming).toEqual(['Narima']);
+    expect(a.maybe).toEqual(['Odasa']);
+    expect(a.extra).toEqual(['Altchar']);
+  });
+
+  it('counts tentative when asked to', () => {
+    expect([...eventAvailability(list, invites, true).away].sort()).toEqual(['Silverhorn', 'Zakainu']);
   });
 });

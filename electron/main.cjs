@@ -32,7 +32,7 @@ const { listCraftRequests, addCraftRequest, fulfillCraftRequest, removeCraftRequ
 const { signIn: bnetSignIn } = require('./dataSources/bnetAuth.cjs');
 const { signIn: discordSignIn } = require('./dataSources/discordAuth.cjs');
 const { loadSession, saveSession, clearSession } = require('./dataSources/authSession.cjs');
-const { getWowPathConfig, setWowPath, installAddon, setCharacterName, getAddonVersionInfo, getLootRecords, withAddonFlavor } = require('./dataSources/lootLog.cjs');
+const { getWowPathConfig, setWowPath, installAddon, setCharacterName, getAddonVersionInfo, getLootRecords, withAddonFlavor, getAddonCalendar } = require('./dataSources/lootLog.cjs');
 const { getChatLogStatus } = require('./dataSources/lootChatTail.cjs');
 const { getCombatLogStatus, recentKills } = require('./dataSources/lootCombatLog.cjs');
 const pipelineLog = require('./dataSources/pipelineLog.cjs');
@@ -121,6 +121,13 @@ ipcMain.handle('analytics:list', async (_event, which) => {
 // The loot diary is also written to a file in test builds, so a whole play session can be read afterwards (or
 // from outside the app while you play): <userData>\pipeline-events.jsonl, one JSON event per line.
 if (isTestModeBuild) pipelineLog.enablePersistence(path.join(app.getPath('userData'), 'pipeline-events.jsonl'));
+
+// The in-game calendar the test addon saved (/gtloottest calendar, or automatically at login):
+// who's coming to which event, for M+ Comp's event picker. Test addon only, so test builds only.
+ipcMain.handle('testTools:calendar', async () => {
+  if (!isTestModeBuild) return null;
+  return getAddonCalendar();
+});
 
 // The unprocessed truth behind the pipeline: what WoW actually wrote (loot lines, boss pulls).
 ipcMain.handle('testTools:rawFeeds', async () => {

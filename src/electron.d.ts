@@ -299,6 +299,33 @@ export interface LootRawFeeds {
   pulls: { available: boolean; pulls: RawPull[] };
 }
 
+export interface CalendarInvite {
+  /** Without the realm, to match the roster. */
+  name: string;
+  fullName: string;
+  className: string | null;
+  /** The game's invite status: available, signedup, confirmed, tentative, declined, invited, ... */
+  status: string;
+  answer: 'coming' | 'maybe' | 'no';
+}
+
+export interface CalendarEvent {
+  title: string;
+  /** Realm time, "YYYY-MM-DDTHH:MM". */
+  start: string;
+  calendarType: string | null;
+  /** Why there's no invite list, when there isn't one. */
+  note: string | null;
+  invites: CalendarInvite[] | null;
+}
+
+/** electron/dataSources/lootLog.cjs's normalizeCalendar. */
+export interface AddonCalendar {
+  /** ms since the epoch. */
+  scannedAt: number;
+  events: CalendarEvent[];
+}
+
 /** Everything the test-only Loot Logger Monitor reads from this PC in one go (main.cjs's testTools:lootMonitor). Null outside a test build. */
 export interface LootMonitorSnapshot {
   now: number;
@@ -339,6 +366,8 @@ export interface ElectronAPI {
   getLiveLootStore: () => Promise<{ records: { time: number; source?: 'chat-tail' | 'live'; boss?: string | null; difficulty?: string | null; discordPostedAt?: string }[] } | null>;
   /** Test builds only: the loot lines WoW actually wrote to the chat log and the boss pulls (kills and wipes) in the combat log. */
   getLootRawFeeds: () => Promise<LootRawFeeds | null>;
+  /** The in-game calendar the test addon saved -- test builds only; null otherwise or before the addon has saved one. */
+  getAddonCalendar: () => Promise<AddonCalendar | null>;
   /** Test builds only: one synthetic win through app -> proxy -> test store -> test Discord channel, reporting each step; removes it after. */
   injectTestWin: () => Promise<{ ok: boolean; error?: string; winner?: string; stored?: boolean; posted?: boolean; steps?: string[] }>;
   /** Test builds only: empties the TEST loot store (never the real one). */

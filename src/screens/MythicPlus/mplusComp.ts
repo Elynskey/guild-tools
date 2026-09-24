@@ -333,3 +333,26 @@ export function filterGuildGroups(members: CompMember[], f: GroupFilters): Guild
     (g) => g.runs.length >= f.minKeys && (!f.raider || g.members.includes(f.raider)),
   );
 }
+
+/**
+ * Who on the M+ list is coming to a calendar event. Names match without regard to case (the
+ * calendar reports them without a realm). `maybe` answers (tentative) count only when asked.
+ * `extra` are people coming who aren't on the list -- alts, or no keys this season.
+ */
+export function eventAvailability(
+  memberNames: string[],
+  invites: Array<{ name: string; answer: 'coming' | 'maybe' | 'no' }>,
+  includeMaybe: boolean,
+): { away: Set<string>; coming: string[]; maybe: string[]; extra: string[] } {
+  const counts = (a: string) => a === 'coming' || (includeMaybe && a === 'maybe');
+  const answerOf = new Map(invites.map((i) => [i.name.toLowerCase(), i.answer]));
+  const onList = new Set(memberNames.map((n) => n.toLowerCase()));
+  const coming = memberNames.filter((n) => answerOf.get(n.toLowerCase()) === 'coming');
+  const maybe = memberNames.filter((n) => answerOf.get(n.toLowerCase()) === 'maybe');
+  return {
+    away: new Set(memberNames.filter((n) => !counts(answerOf.get(n.toLowerCase()) ?? 'no'))),
+    coming,
+    maybe,
+    extra: invites.filter((i) => counts(i.answer) && !onList.has(i.name.toLowerCase())).map((i) => i.name),
+  };
+}

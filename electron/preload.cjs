@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getLootMonitorSnapshot: (which) => ipcRenderer.invoke('testTools:lootMonitor', which === 'live' ? 'live' : 'test'),
   getLiveLootStore: () => ipcRenderer.invoke('testTools:liveLootStore'),
   getLootRawFeeds: () => ipcRenderer.invoke('testTools:rawFeeds'),
+  getAddonCalendar: () => ipcRenderer.invoke('testTools:calendar'),
   injectTestWin: () => ipcRenderer.invoke('testTools:injectWin'),
   clearTestLoot: () => ipcRenderer.invoke('testTools:clearTestLoot'),
   getRoster: () => ipcRenderer.invoke('roster:fetch'),

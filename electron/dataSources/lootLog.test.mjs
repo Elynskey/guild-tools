@@ -152,3 +152,34 @@ describe('getAddonVersionInfo', () => {
     expect(fresh.getAddonVersionInfo(writeToc(path.join(tempDir, 'bundled'), '1.5')).status).toBe('no_wow');
   });
 });
+
+describe('normalizeCalendar', () => {
+  it('turns the addon calendar into events with a coming/maybe/no answer per invitee, soonest first', async () => {
+    const { normalizeCalendar } = await import('./lootLog.cjs');
+    const { readLuaVariable } = await import('./luaTableReader.cjs');
+    const saved = `GuildToolsLootTestDB = {
+      ["calendar"] = {
+        ["scannedAt"] = 1790000000,
+        ["events"] = {
+          { ["title"] = "Raid", ["start"] = "2026-10-03T19:00", ["calendarType"] = "GUILD_EVENT", ["note"] = "the game didn't open this event in time" },
+          { ["title"] = "M+ Night", ["start"] = "2026-09-29T20:30", ["calendarType"] = "GUILD_EVENT", ["invites"] = {
+            { ["name"] = "Narima", ["className"] = "Death Knight", ["status"] = "available" },
+            { ["name"] = "Odasa-ArgentDawn", ["className"] = "Shaman", ["status"] = "tentative" },
+            { ["name"] = "Silverhorn", ["className"] = "Paladin", ["status"] = "declined" },
+          } },
+        },
+      },
+    }`;
+    const cal = normalizeCalendar(readLuaVariable(saved, 'GuildToolsLootTestDB'));
+    expect(cal.scannedAt).toBe(1790000000 * 1000);
+    expect(cal.events.map((e) => e.title)).toEqual(['M+ Night', 'Raid']);
+    expect(cal.events[0].invites.map((i) => [i.name, i.answer])).toEqual([['Narima', 'coming'], ['Odasa', 'maybe'], ['Silverhorn', 'no']]);
+    expect(cal.events[1].invites).toBeNull();
+  });
+
+  it('is null when the addon has never saved a calendar', async () => {
+    const { normalizeCalendar } = await import('./lootLog.cjs');
+    expect(normalizeCalendar({ records: [] })).toBeNull();
+    expect(normalizeCalendar(null)).toBeNull();
+  });
+});

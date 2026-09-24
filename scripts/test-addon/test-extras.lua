@@ -13,6 +13,7 @@
 --   /gtloottest sync                 reload the UI now so Guild Tools gets your loot (also the click-to-sync button)
 --   /gtloottest synctest             pretend another officer already synced (your sync button closes)
 --   /gtloottest flushtest            try ways to make WoW write WoWChatLog.txt now, without a reload
+--   /gtloottest calendar             read the next 14 days of calendar events and who's coming (saved for Guild Tools)
 --   /gtloottest help                 list every test command
 --
 -- This block runs after the whole copied addon, so it can use the file-level locals declared above
@@ -1004,6 +1005,141 @@ local function showDrops()
   announce("everything above is saved: reload, then read GuildToolsLootTestDB.dropProbe.")
 end
 
+-- Calendar: who's coming to what, so Guild Tools can build M+ groups from an event's sign-ups.
+-- The game only hands out an event's invite list once the event is opened (C_Calendar.OpenEvent),
+-- and answers later (CALENDAR_OPEN_EVENT), so upcoming events are opened one at a time, each with
+-- a timeout in case the game never answers. Saved to GuildToolsLootTestDB.calendar; the app reads
+-- it after a /reload or logout, like everything else here.
+local CALENDAR_DAYS = 14
+local CALENDAR_TIMEOUT = 3
+local CALENDAR_SKIP = { HOLIDAY = true, SYSTEM = true, RAID_LOCKOUT = true, RAID_RESET = true }
+-- Enum.CalendarStatus, by number, so the saved file reads plainly.
+local CALENDAR_STATUS = { [0] = "invited", [1] = "available", [2] = "declined", [3] = "confirmed", [4] = "out", [5] = "standby", [6] = "signedup", [7] = "not_signedup", [8] = "tentative" }
+local CALENDAR_COMING = { available = true, confirmed = true, signedup = true, tentative = true, standby = true }
+
+local calendarScan = nil
+local calendarFrame = CreateFrame("Frame")
+
+-- Realm time, as the calendar shows it: "YYYY-MM-DDTHH:MM".
+local function calendarStamp(t)
+  return string.format("%04d-%02d-%02dT%02d:%02d", t.year, t.month, t.monthDay, t.hour or 0, t.minute or 0)
+end
+
+local function readCalendarInvites()
+  local invites = {}
+  for i = 1, (C_Calendar.GetNumInvites and C_Calendar.GetNumInvites() or 0) do
+    local info = C_Calendar.EventGetInvite(i)
+    if info and info.name then
+      invites[#invites + 1] = { name = info.name, className = info.className, level = info.level, status = CALENDAR_STATUS[info.inviteStatus] or tostring(info.inviteStatus) }
+    end
+  end
+  return invites
+end
+
+local function finishCalendarScan()
+  local scan = calendarScan
+  calendarScan = nil
+  calendarFrame:UnregisterEvent("CALENDAR_OPEN_EVENT")
+  GuildToolsLootTestDB.calendar = { scannedAt = time(), days = CALENDAR_DAYS, events = scan.events }
+  if not scan.verbose then return end
+  announce("calendar: " .. #scan.events .. " event(s) in the next " .. CALENDAR_DAYS .. " days.")
+  for _, e in ipairs(scan.events) do
+    local coming = 0
+    for _, inv in ipairs(e.invites or {}) do
+      if CALENDAR_COMING[inv.status] then coming = coming + 1 end
+    end
+    announce("  " .. e.start .. "  " .. tostring(e.title) .. "  -- " .. (e.invites and (coming .. " coming of " .. #e.invites .. " invited") or (e.note or "no invite list")))
+  end
+  announce("saved. /reload (or /gtloottest sync) so Guild Tools sees it.")
+end
+
+local openNextCalendarEvent
+local startCalendarScan
+
+local function recordCalendarEvent(scan, pending, invites, note)
+  pending.event.invites = invites
+  pending.event.note = note
+  scan.events[#scan.events + 1] = pending.event
+  scan.waiting = nil
+  openNextCalendarEvent()
+end
+
+openNextCalendarEvent = function()
+  local scan = calendarScan
+  if not scan then return end
+  scan.index = scan.index + 1
+  local pending = scan.pending[scan.index]
+  if not pending then
+    finishCalendarScan()
+    return
+  end
+  scan.waiting = pending
+  C_Calendar.OpenEvent(pending.offset, pending.day, pending.i)
+  C_Timer.After(CALENDAR_TIMEOUT, function()
+    if calendarScan == scan and scan.waiting == pending then
+      recordCalendarEvent(scan, pending, nil, "the game didn't open this event in time")
+    end
+  end)
+end
+
+calendarFrame:SetScript("OnEvent", function(_, event)
+  if event == "PLAYER_LOGIN" then
+    if C_Calendar and C_Calendar.OpenCalendar then C_Calendar.OpenCalendar() end
+    -- The calendar fills in a few seconds after login; read it quietly then.
+    C_Timer.After(10, function() startCalendarScan(false) end)
+    return
+  end
+  local scan = calendarScan
+  local pending = scan and scan.waiting
+  if event ~= "CALENDAR_OPEN_EVENT" or not pending then return end
+  -- Ignore an event the player opened themselves in the calendar window meanwhile.
+  local info = C_Calendar.GetEventInfo and C_Calendar.GetEventInfo()
+  if info and info.title and pending.event.title and info.title ~= pending.event.title then return end
+  local invites = readCalendarInvites()
+  if C_Calendar.CloseEvent then C_Calendar.CloseEvent() end
+  recordCalendarEvent(scan, pending, invites, nil)
+end)
+calendarFrame:RegisterEvent("PLAYER_LOGIN")
+
+startCalendarScan = function(verbose)
+  if not (C_Calendar and C_Calendar.GetNumDayEvents and C_Calendar.OpenEvent and C_DateAndTime and C_DateAndTime.GetCurrentCalendarTime) then
+    if verbose then announce("this client has no calendar API the addon can use.") end
+    return
+  end
+  if calendarScan then
+    if verbose then announce("already reading the calendar -- give it a few seconds.") end
+    return
+  end
+  local now = C_DateAndTime.GetCurrentCalendarTime()
+  -- Day lookups are relative to the month the calendar is showing; make that this month.
+  if C_Calendar.SetAbsMonth then C_Calendar.SetAbsMonth(now.month, now.year) end
+  local pending = {}
+  local offset, day = 0, now.monthDay
+  local monthDays = C_Calendar.GetMonthInfo(0).numDays
+  for _ = 1, CALENDAR_DAYS do
+    for i = 1, C_Calendar.GetNumDayEvents(offset, day) do
+      local e = C_Calendar.GetDayEvent(offset, day, i)
+      if e and e.title and not CALENDAR_SKIP[e.calendarType] then
+        pending[#pending + 1] = { offset = offset, day = day, i = i, event = { title = e.title, calendarType = e.calendarType, start = calendarStamp(e.startTime) } }
+      end
+    end
+    day = day + 1
+    if day > monthDays then
+      offset, day = offset + 1, 1
+      monthDays = C_Calendar.GetMonthInfo(offset).numDays
+    end
+  end
+  calendarScan = { pending = pending, events = {}, index = 0, verbose = verbose }
+  calendarFrame:RegisterEvent("CALENDAR_OPEN_EVENT")
+  if verbose then announce("reading " .. #pending .. " calendar event(s) in the next " .. CALENDAR_DAYS .. " days...") end
+  openNextCalendarEvent()
+end
+
+local function calendarCommand()
+  if C_Calendar and C_Calendar.OpenCalendar then C_Calendar.OpenCalendar() end
+  C_Timer.After(1, function() startCalendarScan(true) end)
+end
+
 local function testHelp()
   announce("test commands (same names as the real /gtloot, plus more):")
   announce("  /gtloottest on | off | scan | chatlog   -- as the real addon")
@@ -1019,6 +1155,7 @@ local function testHelp()
   announce("  /gtloottest sync                        -- reload now so Guild Tools gets your loot (also the click-to-sync button that appears after loot)")
   announce("  /gtloottest synctest                    -- pretend another officer synced: your sync button should close")
   announce("  /gtloottest flushtest                   -- try ways to make WoW write WoWChatLog.txt without a reload (four steps, ~65 s)")
+  announce("  /gtloottest calendar                    -- read the next 14 days of calendar events and who's coming (saved for Guild Tools)")
   announce("  /gtloottest help                        -- this list")
   announce("This test addon keeps its own data (GuildToolsLootTestDB) and never reaches the Guild Tools app.")
 end
@@ -1054,6 +1191,8 @@ SlashCmdList["GUILDTOOLSLOOTTEST"] = function(msg)
     showLootLines(rest)
   elseif arg == "drops" then
     showDrops()
+  elseif arg == "calendar" then
+    calendarCommand()
   elseif arg == "help" then
     testHelp()
   else

@@ -1,12 +1,13 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { Crest } from '../../design-system/Crest';
 import { RefreshButton } from '../shared/RefreshButton';
 import { HelpTooltip } from '../../design-system/HelpTooltip';
 import { specIcon } from '../../scoring/specIcons';
 import type { Role } from '../../scoring/types';
+import type { AddonCalendar, CalendarEvent } from '../../electron';
 import { useMythicPlus } from './useMythicPlus';
-import { buildComps, DEFAULT_GROUP_FILTERS, filterGuildGroups, findGuildGroups, isTimingGroup, keyRoles, roleRisk, type Comp, type GroupFilters, type CompMember, type GuildGroup, type Placed, type RoleRisk } from './mplusComp';
+import { buildComps, DEFAULT_GROUP_FILTERS, eventAvailability, filterGuildGroups, findGuildGroups, isTimingGroup, keyRoles, roleRisk, type Comp, type GroupFilters, type CompMember, type GuildGroup, type Placed, type RoleRisk } from './mplusComp';
 
 const ROLE_LABEL: Record<Role, string> = { tank: 'Tank', healer: 'Healer', dps: 'DPS' };
 
@@ -317,6 +318,90 @@ function GroupFilterBar({ members, filters, onChange, shown }: { members: CompMe
   );
 }
 
+function eventKeyOf(e: CalendarEvent): string {
+  return `${e.start}|${e.title}`;
+}
+
+function eventLabel(e: CalendarEvent): string {
+  const [date, time] = e.start.split('T');
+  const day = new Date(`${date}T12:00:00`).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+  const coming = e.invites?.filter((i) => i.answer === 'coming').length;
+  return `${day} ${time} · ${e.title}${coming !== undefined ? ` (${coming} coming)` : ''}`;
+}
+
+function ageText(ms: number): string {
+  const mins = Math.round((Date.now() - ms) / 60000);
+  if (mins < 60) return `${mins} min ago`;
+  const hours = Math.round(mins / 60);
+  return hours < 48 ? `${hours}h ago` : `${Math.round(hours / 24)} days ago`;
+}
+
+function EventPicker({
+  calendar,
+  eventKey,
+  onPick,
+  includeMaybe,
+  onIncludeMaybe,
+  selected,
+  result,
+}: {
+  calendar: AddonCalendar | null;
+  eventKey: string;
+  onPick: (key: string) => void;
+  includeMaybe: boolean;
+  onIncludeMaybe: (v: boolean) => void;
+  selected: CalendarEvent | null;
+  result: ReturnType<typeof eventAvailability> | null;
+}) {
+  if (!calendar) {
+    return (
+      <div style={{ fontSize: 'var(--text-body-s)', color: 'var(--text-muted)', lineHeight: 1.6, maxWidth: 720 }}>
+        No calendar yet. In game, with the Guild Tools Loot TEST addon on, type <code>/gtloottest calendar</code>, then <code>/reload</code>. Until then, pick who's available by hand below.
+      </div>
+    );
+  }
+  const upcoming = calendar.events.filter((e) => e.start >= new Date(Date.now() - 6 * 3600 * 1000).toISOString().slice(0, 16));
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 14 }}>
+        <select style={{ ...selectStyle, minWidth: 320 }} value={eventKey} onChange={(e) => onPick(e.target.value)}>
+          <option value="">No event -- everyone</option>
+          {upcoming.map((e) => (
+            <option key={eventKeyOf(e)} value={eventKeyOf(e)}>
+              {eventLabel(e)}
+            </option>
+          ))}
+        </select>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 'var(--text-body-s)', color: 'var(--text-muted)', cursor: 'pointer' }}>
+          <input type="checkbox" checked={includeMaybe} onChange={(e) => onIncludeMaybe(e.target.checked)} />
+          Count tentative as coming
+        </label>
+        <span style={{ fontSize: 'var(--text-micro)', color: 'var(--text-faint)' }}>
+          Calendar read {ageText(calendar.scannedAt)} · {upcoming.length} upcoming event{upcoming.length === 1 ? '' : 's'}
+        </span>
+      </div>
+      {selected && !selected.invites && (
+        <div style={{ fontSize: 'var(--text-body-s)', color: 'var(--status-warning)' }}>No sign-up list for this event ({selected.note ?? 'none saved'}), so everyone is shown.</div>
+      )}
+      {result && (
+        <div style={{ fontSize: 'var(--text-body-s)', color: 'var(--text-muted)', lineHeight: 1.6 }}>
+          <span style={{ color: 'var(--text-strong)' }}>{result.coming.length}</span> on the M+ list coming
+          {result.maybe.length > 0 && (
+            <>
+              {' · '}
+              <span style={{ color: 'var(--status-warning)' }}>
+                tentative: {result.maybe.join(', ')}
+                {includeMaybe ? ' (counted)' : ' (not counted)'}
+              </span>
+            </>
+          )}
+          {result.extra.length > 0 && <> · also coming, but no M+ keys this season or not on the raid roster: {result.extra.join(', ')}</>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function GroupList({ groups, empty }: { groups: GuildGroup[]; empty: string }) {
   if (!groups.length) return <div style={{ padding: 24, border: '1px dashed var(--border-hairline)', borderRadius: 5, color: 'var(--text-muted)', fontSize: 'var(--text-body-s)' }}>{empty}</div>;
   return (
@@ -331,6 +416,13 @@ function GroupList({ groups, empty }: { groups: GuildGroup[]; empty: string }) {
 export function MythicPlusComp() {
   const mp = useMythicPlus();
   const [away, setAway] = useState<Set<string>>(new Set());
+  const [calendar, setCalendar] = useState<AddonCalendar | null>(null);
+  const [eventKey, setEventKey] = useState('');
+  const [includeMaybe, setIncludeMaybe] = useState(false);
+  useEffect(() => {
+    void window.electronAPI?.getAddonCalendar?.().then(setCalendar);
+  }, []);
+  const selectedEvent = calendar?.events.find((e) => eventKeyOf(e) === eventKey) ?? null;
 
   // Only raiders who've actually keyed this season -- a 0-score character isn't an M+ pick.
   const members: CompMember[] = useMemo(
@@ -354,6 +446,16 @@ export function MythicPlusComp() {
   const shownGroups = useMemo(() => filterGuildGroups(members, filters), [members, filters]);
   const timing = shownGroups.filter(isTimingGroup);
   const notTiming = shownGroups.filter((g) => !isTimingGroup(g));
+
+  const eventResult = useMemo(
+    () => (selectedEvent?.invites ? eventAvailability(members.map((m) => m.name), selectedEvent.invites, includeMaybe) : null),
+    [selectedEvent, members, includeMaybe],
+  );
+  // Picking an event (or changing whether tentative counts) resets who's available to its sign-ups;
+  // clicking people afterwards still adjusts from there.
+  useEffect(() => {
+    setAway(eventResult ? new Set(eventResult.away) : new Set());
+  }, [eventResult]);
 
   const toggle = (name: string) => {
     const next = new Set(away);
@@ -405,6 +507,17 @@ export function MythicPlusComp() {
           <div style={{ marginTop: 24, padding: 48, textAlign: 'center', border: '1px dashed var(--border-hairline)', borderRadius: 5, color: 'var(--text-muted)' }}>No one on the roster has a Mythic+ score this season.</div>
         ) : (
           <>
+            <SectionTitle help="Upcoming events from the in-game calendar, read by the Guild Tools Loot TEST addon (it reads the calendar when you log in, or when you type /gtloottest calendar, and Guild Tools sees it after a /reload or logout). Picking one marks everyone who hasn't accepted or signed up as unavailable.">Event</SectionTitle>
+            <EventPicker
+              calendar={calendar}
+              eventKey={eventKey}
+              onPick={setEventKey}
+              includeMaybe={includeMaybe}
+              onIncludeMaybe={setIncludeMaybe}
+              selected={selectedEvent}
+              result={eventResult}
+            />
+
             <SectionTitle help="Click a raider to leave them out, say for tonight. Groups rebuild straight away; nothing is saved. The roles shown are every role they've keyed as recently, most-played first.">Who's available</SectionTitle>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
               {members.map((m) => {
