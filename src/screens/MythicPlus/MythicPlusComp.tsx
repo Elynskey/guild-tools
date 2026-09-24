@@ -118,7 +118,7 @@ function RoleRiskPanel({ risk }: { risk: RoleRisk }) {
     });
   }
   if (flexHeld > 0) {
-    findings.push({ tone: 'warning', text: `${flexHeld} of the ${risk.groups} groups only exist because someone plays a role they don't usually key as. With main roles only: ${risk.mainRoleGroups}.` });
+    findings.push({ tone: 'warning', text: `${flexHeld} of the ${risk.groups} groups only ${flexHeld === 1 ? 'exists' : 'exist'} because someone plays a role they don't usually key as. With main roles only: ${risk.mainRoleGroups}.` });
   }
   if (risk.critical.length) {
     findings.push({ tone: 'warning', text: `Can't do without: ${names(risk.critical)} -- if any one of them is out, you lose a group.` });
