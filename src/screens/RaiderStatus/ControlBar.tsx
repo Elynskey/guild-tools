@@ -17,7 +17,13 @@ interface ControlBarProps {
 export function ControlBar({ roleTabs, roleValue, setRole, query, setQuery, sortWorst, setSortWorst, onOpenDpsCheckSettings }: ControlBarProps) {
   return (
     <div style={{ display: 'flex', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap', marginBottom: 24 }}>
-      <Tabs tabs={roleTabs} value={roleValue} onChange={setRole} />
+      {/* minWidth: 0 overrides the flex item's default min-width:auto, which otherwise
+          refuses to shrink below the tab row's full content width even though the
+          parent row wraps -- that's what pushed this off the right edge of the page
+          on a phone. overflowX lets it scroll internally instead of forcing that. */}
+      <div style={{ minWidth: 0, overflowX: 'auto' }}>
+        <Tabs tabs={roleTabs} value={roleValue} onChange={setRole} />
+      </div>
       <div style={{ flex: 1 }} />
       <Button variant="secondary" size="sm" iconLeft="sliders-horizontal" onClick={onOpenDpsCheckSettings}>
         DPS check settings
