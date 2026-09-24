@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { MythicPlusRun, Role } from '../../scoring/types';
-import { buildComps, findGuildGroups, isTimingGroup, keyRoles, pairRecords, roleRisk, type CompMember } from './mplusComp';
+import { buildComps, findGuildGroups, isTimingGroup, keyRoles, pairRecords, roleRisk, filterGuildGroups, DEFAULT_GROUP_FILTERS, type CompMember } from './mplusComp';
 
 function run(id: number, level: number, upgrades: number, day = 1): MythicPlusRun {
   return {
@@ -219,5 +219,23 @@ describe('roleRisk', () => {
   it('needs several DPS for another group when DPS is what is short', () => {
     const roster = [member('T1', 'tank', 1), member('T2', 'tank', 1), member('H1', 'healer', 1), member('H2', 'healer', 1), ...['a', 'b', 'c', 'd'].map(dps)];
     expect(roleRisk(roster).short).toEqual([{ role: 'dps', need: 2 }]);
+  });
+});
+
+describe('filterGuildGroups', () => {
+  const shared = [run(1, 12, 1, 20), run(2, 8, 0, 5), { ...run(3, 12, 0, 21), dungeon: 'Kings’ Rest' }];
+  const roster = [member('A', 'tank', 1, shared), member('B', 'dps', 1, shared), member('C', 'dps', 1, [shared[0]]), member('D', 'dps', 1, [shared[0]])];
+  const all = { ...DEFAULT_GROUP_FILTERS, minKeys: 1 };
+
+  it('counts only keys that match the period, level and dungeon', () => {
+    const recent = filterGuildGroups(roster, { ...all, since: '2026-09-15T00:00:00.000Z' });
+    expect(recent.map((g) => [g.members.join(','), g.runs.length])).toEqual(expect.arrayContaining([['A,B,C,D', 1], ['A,B', 1]]));
+    expect(filterGuildGroups(roster, { ...all, minLevel: 10 }).find((g) => g.members.join() === 'A,B')!.runs).toHaveLength(1);
+    expect(filterGuildGroups(roster, { ...all, dungeon: 'Murder Row' }).find((g) => g.members.join() === 'A,B')!.timed).toBe(0);
+  });
+
+  it('narrows by raider and by how many keys a group shares', () => {
+    expect(filterGuildGroups(roster, { ...all, raider: 'C' }).map((g) => g.members.join())).toEqual(['A,B,C,D']);
+    expect(filterGuildGroups(roster, { ...all, minKeys: 2 }).map((g) => g.members.join())).toEqual(['A,B']);
   });
 });

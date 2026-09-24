@@ -308,3 +308,28 @@ export function roleRisk(members: CompMember[]): RoleRisk {
   const critical = groups === 0 ? [] : members.filter((m) => maxGroups(members.filter((x) => x !== m)) < groups);
   return { coverage, groups, mainRoleGroups, short, critical };
 }
+
+export interface GroupFilters {
+  /** Only groups this raider was in. */
+  raider: string | null;
+  /** Only groups with at least this many keys together (after the key filters below). */
+  minKeys: number;
+  /** Only keys completed on or after this ISO time. */
+  since: string | null;
+  minLevel: number;
+  dungeon: string | null;
+}
+
+export const DEFAULT_GROUP_FILTERS: GroupFilters = { raider: null, minKeys: 2, since: null, minLevel: 0, dungeon: null };
+
+/**
+ * Guild groups as they look under these filters. Key filters (period, level, dungeon)
+ * drop keys before groups are formed, so each group's timed record counts only the
+ * matching keys; then groups are narrowed by raider and how many keys they share.
+ */
+export function filterGuildGroups(members: CompMember[], f: GroupFilters): GuildGroup[] {
+  const keep = (r: MythicPlusRun) => (!f.since || r.completedAt >= f.since) && r.level >= f.minLevel && (!f.dungeon || r.dungeon === f.dungeon);
+  return findGuildGroups(members.map((m) => ({ ...m, runs: m.runs.filter(keep) }))).filter(
+    (g) => g.runs.length >= f.minKeys && (!f.raider || g.members.includes(f.raider)),
+  );
+}

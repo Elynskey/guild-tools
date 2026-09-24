@@ -6,7 +6,7 @@ import { HelpTooltip } from '../../design-system/HelpTooltip';
 import { specIcon } from '../../scoring/specIcons';
 import type { Role } from '../../scoring/types';
 import { useMythicPlus } from './useMythicPlus';
-import { buildComps, findGuildGroups, isTimingGroup, keyRoles, roleRisk, type Comp, type CompMember, type GuildGroup, type Placed, type RoleRisk } from './mplusComp';
+import { buildComps, DEFAULT_GROUP_FILTERS, filterGuildGroups, findGuildGroups, isTimingGroup, keyRoles, roleRisk, type Comp, type GroupFilters, type CompMember, type GuildGroup, type Placed, type RoleRisk } from './mplusComp';
 
 const ROLE_LABEL: Record<Role, string> = { tank: 'Tank', healer: 'Healer', dps: 'DPS' };
 
@@ -203,6 +203,120 @@ function GroupRow({ g }: { g: GuildGroup }) {
   );
 }
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+const PERIODS: Array<{ label: string; days: number | null }> = [
+  { label: 'All season', days: null },
+  { label: 'Last 4 weeks', days: 28 },
+  { label: 'Last 2 weeks', days: 14 },
+];
+const MIN_KEYS = [1, 2, 3, 5];
+const MIN_LEVELS = [0, 5, 8, 10, 12];
+
+const selectStyle = {
+  padding: '7px 10px',
+  border: '1px solid var(--border-hairline)',
+  borderRadius: 'var(--radius-sm)',
+  background: 'var(--surface-raised)',
+  color: 'var(--text-body)',
+  fontFamily: 'var(--font-ui)',
+  fontSize: 'var(--text-body-s)',
+};
+
+function Field({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <span className="crd-eyebrow">{label}</span>
+      {children}
+    </label>
+  );
+}
+
+function GroupFilterBar({ members, filters, onChange, shown }: { members: CompMember[]; filters: GroupFilters; onChange: (f: GroupFilters) => void; shown: number }) {
+  const set = (patch: Partial<GroupFilters>) => onChange({ ...filters, ...patch });
+  const dungeons = useMemo(() => [...new Set(members.flatMap((m) => m.runs.map((r) => r.dungeon)))].sort(), [members]);
+  const raiders = useMemo(() => members.map((m) => m.name).sort((a, b) => a.localeCompare(b)), [members]);
+  // The period is stored as a date, so remember which option picked it.
+  const [periodDays, setPeriodDays] = useState<number | null>(null);
+  const isDefault = JSON.stringify(filters) === JSON.stringify(DEFAULT_GROUP_FILTERS);
+
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-end', gap: 14 }}>
+      <Field label="Raider">
+        <select style={selectStyle} value={filters.raider ?? ''} onChange={(e) => set({ raider: e.target.value || null })}>
+          <option value="">Anyone</option>
+          {raiders.map((n) => (
+            <option key={n} value={n}>
+              {n}
+            </option>
+          ))}
+        </select>
+      </Field>
+      <Field label="Keys together">
+        <select style={selectStyle} value={filters.minKeys} onChange={(e) => set({ minKeys: Number(e.target.value) })}>
+          {MIN_KEYS.map((n) => (
+            <option key={n} value={n}>
+              {n}+
+            </option>
+          ))}
+        </select>
+      </Field>
+      <Field label="Period">
+        <select
+          style={selectStyle}
+          value={periodDays ?? ''}
+          onChange={(e) => {
+            const days = e.target.value ? Number(e.target.value) : null;
+            setPeriodDays(days);
+            set({ since: days === null ? null : new Date(Date.now() - days * DAY_MS).toISOString() });
+          }}
+        >
+          {PERIODS.map((p) => (
+            <option key={p.label} value={p.days ?? ''}>
+              {p.label}
+            </option>
+          ))}
+        </select>
+      </Field>
+      <Field label="Key level">
+        <select style={selectStyle} value={filters.minLevel} onChange={(e) => set({ minLevel: Number(e.target.value) })}>
+          {MIN_LEVELS.map((l) => (
+            <option key={l} value={l}>
+              {l === 0 ? 'Any' : `+${l} and up`}
+            </option>
+          ))}
+        </select>
+      </Field>
+      <Field label="Dungeon">
+        <select style={selectStyle} value={filters.dungeon ?? ''} onChange={(e) => set({ dungeon: e.target.value || null })}>
+          <option value="">All dungeons</option>
+          {dungeons.map((d) => (
+            <option key={d} value={d}>
+              {d}
+            </option>
+          ))}
+        </select>
+      </Field>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, paddingBottom: 8, fontSize: 'var(--text-body-s)', color: 'var(--text-muted)' }}>
+        <span>
+          <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-strong)' }}>{shown}</span> group{shown === 1 ? '' : 's'}
+        </span>
+        {!isDefault && (
+          <button
+            type="button"
+            onClick={() => {
+              setPeriodDays(null);
+              onChange(DEFAULT_GROUP_FILTERS);
+            }}
+            style={{ background: 'none', border: 0, padding: 0, cursor: 'pointer', color: 'var(--text-gold)', font: 'inherit' }}
+          >
+            Reset
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function GroupList({ groups, empty }: { groups: GuildGroup[]; empty: string }) {
   if (!groups.length) return <div style={{ padding: 24, border: '1px dashed var(--border-hairline)', borderRadius: 5, color: 'var(--text-muted)', fontSize: 'var(--text-body-s)' }}>{empty}</div>;
   return (
@@ -236,8 +350,10 @@ export function MythicPlusComp() {
   const available = useMemo(() => members.filter((m) => !away.has(m.name)), [members, away]);
   const { comps, bench } = useMemo(() => buildComps(available, groups), [available, groups]);
   const risk = useMemo(() => roleRisk(available), [available]);
-  const timing = groups.filter(isTimingGroup);
-  const notTiming = groups.filter((g) => !isTimingGroup(g));
+  const [filters, setFilters] = useState<GroupFilters>(DEFAULT_GROUP_FILTERS);
+  const shownGroups = useMemo(() => filterGuildGroups(members, filters), [members, filters]);
+  const timing = shownGroups.filter(isTimingGroup);
+  const notTiming = shownGroups.filter((g) => !isTimingGroup(g));
 
   const toggle = (name: string) => {
     const next = new Set(away);
@@ -343,11 +459,14 @@ export function MythicPlusComp() {
               </div>
             )}
 
-            <SectionTitle help="Two or more raiders who were in the same key, grouped by exactly who was there. At least half their keys timed. Click a row for the keys.">Guild groups timing keys</SectionTitle>
-            <GroupList groups={timing} empty="No guild group has timed at least half its keys recently." />
+            <SectionTitle help="Narrows the two lists below. Period, key level and dungeon change which keys count, so each group's timed record is for the matching keys only. The suggested groups above always use the whole season.">Guild groups</SectionTitle>
+            <GroupFilterBar members={members} filters={filters} onChange={setFilters} shown={shownGroups.length} />
 
-            <SectionTitle help="Same as above, but fewer than half of these groups' keys were timed. Click a row for the keys.">Guild groups not timing keys</SectionTitle>
-            <GroupList groups={notTiming} empty="Every guild group is timing at least half its keys." />
+            <SectionTitle help="Two or more raiders who were in the same key, grouped by exactly who was there. At least half their keys timed. Click a row for the keys.">Timing keys ({timing.length})</SectionTitle>
+            <GroupList groups={timing} empty="No guild group matching these filters has timed at least half its keys." />
+
+            <SectionTitle help="Same as above, but fewer than half of these groups' keys were timed. Click a row for the keys.">Not timing keys ({notTiming.length})</SectionTitle>
+            <GroupList groups={notTiming} empty="Every guild group matching these filters is timing at least half its keys." />
           </>
         )}
       </div>
