@@ -400,7 +400,17 @@ local function recordNeedWin(winnerName, itemLink, bossOverride, encounterIDOver
       -- Two drops of the same item in one encounter have different lootListIDs: a different win, not a second sighting of
       -- the same one. Only when BOTH sides carry the ID; without it (the chat-text path has none) the old rule stands.
       local differentDrop = lootListID ~= nil and r.lootListId ~= nil and (r.lootListId ~= lootListID or r.encounterId ~= encounterId)
-      if not differentDrop then return end
+      if not differentDrop then
+        -- The chat message and the game's loot history report the same win, and the chat message usually lands first with no drop
+        -- ID (live LFR test 2026-09-23: 14 of 14 wins had none while all 74 lost rolls, which only come from the loot history, did).
+        -- When the loot history reports it second, attach its ID to the record instead of throwing it away.
+        if lootListID ~= nil and r.lootListId == nil then
+          r.lootListId = lootListID
+          r.encounterId = r.encounterId or encounterId
+          r.boss = r.boss or resolveBoss(bossOverride, encounterId)
+        end
+        return
+      end
     end
   end
 

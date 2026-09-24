@@ -132,6 +132,24 @@ check("with no C_LootHistory at all it says so instead of erroring", okNone and 
 C_LootHistory = savedLH
 Enum = savedEnum
 
+-- the chat message lands FIRST (no drop ID), then the game's loot history reports the same win: one record, now with the ID
+GuildToolsLootTestDB.seenEncounters = GuildToolsLootTestDB.seenEncounters or {}
+GuildToolsLootTestDB.seenEncounters["3490"] = "Order Boss"
+local RING = link(268300, "Some Ring")
+local beforeWins = #db.records
+frame.scripts.OnEvent(frame, "CHAT_MSG_LOOT", "|HlootHistory:3490|h[Loot]|h: Zed (Need - 80, Main-Spec) Won: " .. RING)
+local chatRec = db.records[#db.records]
+check("a win from chat text alone has no drop ID yet", #db.records == beforeWins + 1 and chatRec.winner == "Zed" and chatRec.lootListId == nil)
+drop(3490, 4, RING, "Zed", { "Yara" })
+check("...then the loot history reporting it attaches the drop ID to that record instead of skipping it", #db.records == beforeWins + 1 and chatRec.lootListId == 4 and chatRec.encounterId == 3490, tostring(chatRec.lootListId))
+check("...and does not add a second win", count(db.records, function(r) return r.winner == "Zed" and r.itemId == 268300 end) == 1)
+check("...while the lost roll is still recorded once, with its ID", count(db.needLosses, function(r) return r.name == "Yara" and r.lootListId == 4 end) == 1)
+drop(3490, 4, RING, "Zed", { "Yara" })
+check("...and a repeat of the same event changes nothing", #db.records == beforeWins + 1 and count(db.needLosses, function(r) return r.name == "Yara" end) == 1)
+-- two copies of one item won by the same person are two drops, each with its own ID
+drop(3490, 5, RING, "Zed", {})
+check("a second copy (another drop ID) of the same item by the same winner is its own record", count(db.records, function(r) return r.winner == "Zed" and r.itemId == 268300 end) == 2)
+
 -- the diagnostics hook names the first check a drop event fails
 local diagFrame
 for _, f in ipairs(frames) do if f ~= frame and f.events.LOOT_HISTORY_UPDATE_DROP then diagFrame = f end end
