@@ -17,6 +17,7 @@
     "proxy-config": "node scripts/inject-proxy-config.mjs",
     "dist:win": "npm run icons:build && npm run installer-art:build && npm run proxy-config && npm run build && electron-builder --win",
     "dist:win:test": "node scripts/dist-test.mjs",
+    "dist:win:test:publish": "node scripts/publish-test-build.mjs",
     "addon:test": "node scripts/make-test-addon.mjs",
     "addon:test:install": "node scripts/make-test-addon.mjs --install",
     "addon:test:check": "node scripts/make-test-addon.mjs && node scripts/run-lua.mjs scripts/test-addon/check-coexist.lua && node scripts/run-lua.mjs scripts/test-addon/check-tracking.lua && node scripts/run-lua.mjs scripts/test-addon/check-drops.lua",
