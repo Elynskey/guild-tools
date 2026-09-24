@@ -132,9 +132,13 @@ export async function crestTga(size = ICON_SIZE) {
 }
 
 async function build() {
-  const lua = await readFile(path.join(SRC_DIR, 'GuildToolsLoot.lua'), 'utf8');
-  const toc = await readFile(path.join(SRC_DIR, 'GuildToolsLoot.toc'), 'utf8');
-  const extras = await readFile(EXTRAS, 'utf8');
+  // A fresh checkout on Windows has CRLF line endings; the replacements below match LF, so normalise first.
+  const lf = (text) => text.replace(/
+/g, '
+');
+  const lua = lf(await readFile(path.join(SRC_DIR, 'GuildToolsLoot.lua'), 'utf8'));
+  const toc = lf(await readFile(path.join(SRC_DIR, 'GuildToolsLoot.toc'), 'utf8'));
+  const extras = lf(await readFile(EXTRAS, 'utf8'));
 
   const generated = `${transformLua(lua).trimEnd()}\n\n${extras}`;
   for (const leftover of ['GuildToolsLootDB', 'SlashCmdList["GUILDTOOLSLOOT"]', 'SLASH_GUILDTOOLSLOOT1']) {
