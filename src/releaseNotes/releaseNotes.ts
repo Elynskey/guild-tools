@@ -23,6 +23,22 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '1.1.7',
+    date: '2026-09-23',
+    title: 'Consumable trades are no longer tracked',
+    highlights: [
+      {
+        heading: 'Flasks, potions, runes and food are ignored in trades',
+        body: 'Trades of consumables no longer show up in Loot History, so the trade list is only gear and other loot changing hands. Trades of items nobody tracks were also cleaned out of the shared list.',
+      },
+      {
+        heading: 'Raider Status fits narrow windows',
+        body: 'On a narrow window, the Raider Status header wraps and the table scrolls sideways instead of running off the screen.',
+      },
+    ],
+    headsUp: 'On Loot History, press "Update addon now" and type /reload in game to get addon v1.8.',
+  },
+  {
     version: '1.1.6',
     date: '2026-09-23',
     title: 'Loot that is logged once, with its boss, and shows up faster',
