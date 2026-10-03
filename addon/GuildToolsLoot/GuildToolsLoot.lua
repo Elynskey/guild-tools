@@ -303,6 +303,13 @@ local DIFFICULTY_LABEL = { [14] = "Normal", [15] = "Heroic" }
 -- each new tier.
 local TRACKED_RAID_NAME = "The Venomous Abyss"
 
+-- Nymrissa Wavecaller's Lair (encounter 3379, see TRACKED_LAIR_ENCOUNTER_IDS below) now
+-- reports itself as a RAID instance with this name and a normal raid difficulty -- found
+-- live 2026-10-02: a Normal kill gave instanceType "raid", zone "The Tidebound Grotto",
+-- difficultyID 14, so both the name check and the "scenario"-only Lair exception missed
+-- it and the live addon recorded nothing (the Test addon's track-all mode caught it).
+local TRACKED_LAIR_ZONE_NAME = "The Tidebound Grotto"
+
 -- Only Normal/Heroic loot from THIS tier's designated raid counts -- Raid Finder,
 -- Mythic, any other raid, and anything that isn't a raid at all are excluded. Checked
 -- live at the moment of each win, not just at the PLAYER_ENTERING_WORLD popup below:
@@ -313,7 +320,7 @@ local function currentRaidDifficultyLabel()
   local inInstance, instanceType = IsInInstance()
   if not inInstance or instanceType ~= "raid" then return nil end
   local name, _, difficultyID = GetInstanceInfo()
-  if name ~= TRACKED_RAID_NAME then return nil end
+  if name ~= TRACKED_RAID_NAME and name ~= TRACKED_LAIR_ZONE_NAME then return nil end
   return DIFFICULTY_LABEL[difficultyID]
 end
 

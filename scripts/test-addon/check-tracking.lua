@@ -101,6 +101,28 @@ win(realFrame, "Alpha")
 check("REAL addon still records this tier's Heroic raid", #GuildToolsLootDB.records == 1 and GuildToolsLootDB.records[1].difficulty == "Heroic")
 check("...and its records have no test-only fields", GuildToolsLootDB.records[1].zone == nil and GuildToolsLootDB.records[1].contentType == nil)
 
+-- Nymrissa Wavecaller's Lair, as the game reported it live on 2026-10-02: a RAID instance named
+-- "The Tidebound Grotto", Normal (14), encounter 3379. The real addon recorded nothing that night.
+local realKept = GuildToolsLootDB.records
+GuildToolsLootDB.records = {}
+zone(true, "raid", "The Tidebound Grotto", 14)
+realFrame.scripts.OnEvent(realFrame, "ENCOUNTER_START", 3379, "Nymrissa Wavecaller")
+realFrame.scripts.OnEvent(realFrame, "CHAT_MSG_LOOT", "|HlootHistory:3379|h[Loot]|h: Sylvara (Need - 88, Main-Spec) Won: |cnIQ4:|Hitem:270167::::::::90:581::3:3:6652:13333:12833::::::|h[Wavecaller's Seastone]|h|r")
+local lair = GuildToolsLootDB.records[1]
+check("REAL addon records the Lair when the game calls it a Normal raid (The Tidebound Grotto)", lair ~= nil and lair.winner == "Sylvara" and lair.difficulty == "Normal" and lair.boss == "Nymrissa Wavecaller", lair and (tostring(lair.winner) .. " / " .. tostring(lair.difficulty) .. " / " .. tostring(lair.boss)) or "no record")
+zone(true, "raid", "The Tidebound Grotto", 17)
+win(realFrame, "Alpha")
+check("...but not the Lair on Raid Finder", #GuildToolsLootDB.records == 1, tostring(#GuildToolsLootDB.records))
+zone(true, "scenario", "The Tidebound Grotto", 208)
+realFrame.scripts.OnEvent(realFrame, "ENCOUNTER_START", 3379, "Nymrissa Wavecaller")
+realFrame.scripts.OnEvent(realFrame, "CHAT_MSG_LOOT", "|HlootHistory:3379|h[Loot]|h: Sylvara (Need - 88, Main-Spec) Won: " .. link(270168))
+check("...and still records it the old way (a scenario, encounter 3379)", #GuildToolsLootDB.records == 2, tostring(#GuildToolsLootDB.records))
+zone(true, "scenario", "A Delve", 208)
+realFrame.scripts.OnEvent(realFrame, "ENCOUNTER_START", 9999, "Delve Boss")
+win(realFrame, "Alpha")
+check("...while an ordinary Delve stays ignored", #GuildToolsLootDB.records == 2, tostring(#GuildToolsLootDB.records))
+GuildToolsLootDB.records = realKept
+
 -- the game now writes ", Main-Spec" inside the parens (WoW 12.1.0): both addons must still read it
 local function winMainSpec(frame, winner)
   n = n + 1
