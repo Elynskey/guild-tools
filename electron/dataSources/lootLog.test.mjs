@@ -137,6 +137,18 @@ describe('getAddonVersionInfo', () => {
     expect(lootLog.compareVersions('1.5', '1.5.0')).toBe(0);
   });
 
+  it('installing never puts an older bundled addon over a newer installed one', () => {
+    const bundledDir = path.join(tempDir, 'bundled');
+    writeToc(bundledDir, '1.8');
+    writeFileSync(path.join(bundledDir, 'GuildToolsLoot.lua'), '-- 1.8');
+    writeToc(installedDir(), '1.9');
+    expect(() => lootLog.installAddon(bundledDir)).toThrow(/v1\.9 is already installed/);
+    expect(lootLog.getAddonVersionInfo(path.join(bundledDir, 'GuildToolsLoot.toc')).installed).toBe('1.9');
+    writeToc(installedDir(), '1.7');
+    lootLog.installAddon(bundledDir);
+    expect(lootLog.getAddonVersionInfo(path.join(bundledDir, 'GuildToolsLoot.toc')).installed).toBe('1.8');
+  });
+
   it('reports not_installed when there is no addon folder', () => {
     const bundled = writeToc(path.join(tempDir, 'bundled'), '1.5');
     expect(lootLog.getAddonVersionInfo(bundled)).toEqual({ bundled: '1.5', installed: null, status: 'not_installed' });

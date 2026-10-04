@@ -309,12 +309,21 @@ function setWowPath(wowPath) {
 // into <wowPath>/Interface/AddOns/GuildToolsLoot -- read/write via fs directly (not
 // fs.copyFile) so this works transparently whether the source lives on a real disk
 // (dev mode) or inside the packaged app's read-only asar archive.
-function installAddon() {
+//
+// Never downgrades: the "Update addon" button is always on screen, and pressing it on 2026-10-03
+// put the app's bundled 1.8 over a newer 1.9 fix, so a Lair win went unrecorded a second night.
+function installAddon(srcDirOverride) {
   const wowPath = resolveWowPath();
   if (!isRealWowPath(wowPath)) throw new Error('WoW installation not found -- set the path first.');
 
-  const { name, srcDir } = addonIdentity();
+  const { name, srcDir: bundledDir } = addonIdentity();
+  const srcDir = srcDirOverride ?? bundledDir;
   const destDir = path.join(wowPath, 'Interface', 'AddOns', name);
+  const bundled = readTocVersion(path.join(srcDir, `${name}.toc`));
+  const installed = readTocVersion(path.join(destDir, `${name}.toc`));
+  if (bundled && installed && compareVersions(installed, bundled) > 0) {
+    throw new Error(`Addon v${installed} is already installed, newer than the v${bundled} this version of Guild Tools carries -- left it as it is.`);
+  }
   fs.mkdirSync(destDir, { recursive: true });
 
   for (const file of fs.readdirSync(srcDir)) {
