@@ -596,7 +596,6 @@ end
 -- Asks once per raid lockout, not on every loading screen within it (a raid with
 -- multiple wings fires PLAYER_ENTERING_WORLD more than once) -- tracked by instanceID,
 -- which is stable for one lockout.
-local lastPromptedInstanceID = nil
 
 StaticPopupDialogs["GUILDTOOLSLOOT_CONFIRM"] = {
   text = "Log Need-roll loot for this raid in Guild Tools?",
@@ -940,8 +939,7 @@ frame:SetScript("OnEvent", function(_, event, ...)
       -- Remembered in SavedVariables, not just in memory: a /reload wipes the local, and
       -- re-asking every reload in the same lockout is pure noise. instanceID is stable
       -- for the lockout, so a new lockout still prompts.
-      if instanceID and instanceID ~= lastPromptedInstanceID and instanceID ~= GuildToolsLootDB.lastPromptedInstanceID then
-        lastPromptedInstanceID = instanceID
+      if instanceID and instanceID ~= GuildToolsLootDB.lastPromptedInstanceID then
         GuildToolsLootDB.lastPromptedInstanceID = instanceID
         StaticPopup_Show("GUILDTOOLSLOOT_CONFIRM")
         remindChatLoggingIfOff()

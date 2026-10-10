@@ -99,7 +99,7 @@ async function syncChatTailCapture() {
   // Which boss just died (from the combat log, if this PC is running one) + the tier's
   // loot table lets a win be given its item, slot, boss and difficulty right now -- see
   // lootLiveEnrich.cjs. That's what lets auto-post announce it without a /reload. Never
-  // used to DROP a record: a win that can't be attributed (no combat log, an item not in
+  // used to DROP a record (bar recipes and pets, below): a win that can't be attributed (no combat log, an item not in
   // the table, no matching kill) stays in as an unverified chat-tail capture and waits
   // for the addon's authoritative sync, same as before.
   const kills = recentKills(Date.now());
