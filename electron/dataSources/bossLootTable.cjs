@@ -95,7 +95,7 @@ async function fetchItemDetails(ids, { get, concurrency = ITEM_CONCURRENCY, maxA
 
 /**
  * Fetches this tier's full boss -> loot table -> item detail mapping live from Blizzard.
- * @returns {Promise<{ bosses: Array<{id: number, name: string}>, lootByBoss: Record<string, number[]>, items: Record<number, {name: string, slot: string, armorWeight: string|null}>, instanceIds: number[], fetchedAt: string }>}
+ * @returns {Promise<{ bosses: Array<{id: number, name: string}>, lootByBoss: Record<string, number[]>, items: Record<number, {name: string, slot: string, armorWeight: string|null, itemClass?: string|null, itemSubclass?: string|null}>, instanceIds: number[], fetchedAt: string }>}
  */
 async function fetchBossLootTable(region = 'us') {
   const token = await getToken();
@@ -125,6 +125,9 @@ async function fetchBossLootTable(region = 'us') {
       name: detail.name,
       slot: normalizeSlot(detail.inventory_type?.name),
       armorWeight: detail.item_class?.name === 'Armor' ? (detail.item_subclass?.name ?? null) : null,
+      // Lets the live chat path recognise recipes and companion pets, which the addon never tracks.
+      itemClass: detail.item_class?.name ?? null,
+      itemSubclass: detail.item_subclass?.name ?? null,
     };
   }
 

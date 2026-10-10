@@ -63,6 +63,23 @@ describe('enrichWin', () => {
   const kill = (boss, difficultyId, agoSeconds) => ({ boss, difficultyId, endedAt: (NOW - agoSeconds) * 1000 });
   const win = (name, over = {}) => ({ itemId: null, itemLink: `[${name}]`, winner: 'Ranikina', boss: null, slot: null, difficulty: null, source: 'chat-tail', time: NOW, ...over });
 
+  it('recognises a companion pet or recipe from the table, and nothing else', () => {
+    const table = {
+      ...lootTable,
+      items: {
+        ...lootTable.items,
+        30: { name: 'Soulcoil Remnant', slot: 'Other', itemClass: 'Miscellaneous', itemSubclass: 'Companion Pets' },
+        31: { name: 'Some Plans', slot: 'Other', itemClass: 'Recipe', itemSubclass: 'Blacksmithing' },
+        32: { name: 'Tier Token', slot: 'Other', itemClass: 'Miscellaneous', itemSubclass: 'Junk' },
+      },
+    };
+    expect(enrich.isUntrackedItem(win('Soulcoil Remnant'), table)).toBe(true);
+    expect(enrich.isUntrackedItem(win('Some Plans'), table)).toBe(true);
+    expect(enrich.isUntrackedItem(win('Tier Token'), table)).toBe(false);
+    expect(enrich.isUntrackedItem(win('Known Ulatek Helm'), table)).toBe(false); // table from before itemClass existed
+    expect(enrich.isUntrackedItem(win('Soulcoil Remnant'), null)).toBe(false);
+  });
+
   it('a known item that drops from the boss just killed gets boss, slot, difficulty and becomes live', () => {
     const r = enrich.enrichWin(win("Wavecaller's Seastone"), { lootTable, kills: [kill('Nymrissa Wavecaller', 15, 60)] });
     expect(r).toMatchObject({ itemId: 10, boss: 'Nymrissa Wavecaller', slot: 'Trinket', difficulty: 'Heroic', source: 'live' });

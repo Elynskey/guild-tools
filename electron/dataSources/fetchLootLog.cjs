@@ -1,7 +1,7 @@
 const { getLootRecords, getAddonDataStamp } = require('./lootLog.cjs');
 const { pollChatLog } = require('./lootChatTail.cjs');
 const { pollCombatLog, recentKills } = require('./lootCombatLog.cjs');
-const { enrichWin } = require('./lootLiveEnrich.cjs');
+const { enrichWin, isUntrackedItem } = require('./lootLiveEnrich.cjs');
 const { fetchBossLootTable } = require('./fetchBossLootTable.cjs');
 const proxyClient = require('./proxyClient.cjs');
 const lootRecordsStore = require('./lootRecordsStore.cjs');
@@ -103,7 +103,9 @@ async function syncChatTailCapture() {
   // the table, no matching kill) stays in as an unverified chat-tail capture and waits
   // for the addon's authoritative sync, same as before.
   const kills = recentKills(Date.now());
-  const filtered = newRecords.map((r) => enrichWin(r, { lootTable, kills }));
+  // The one exception to "never drop": recipes and companion pets, which the addon never
+  // tracks, so its sync would never confirm or replace them (a Soulcoil Remnant got through).
+  const filtered = newRecords.filter((r) => !isUntrackedItem(r, lootTable)).map((r) => enrichWin(r, { lootTable, kills }));
   if (filtered.length === 0) return { status, added: 0 };
   for (const r of filtered) {
     const attributed = r.source === 'live' && r.boss != null;

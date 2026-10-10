@@ -52,6 +52,21 @@ function lookupsFor(lootTable) {
  * @param {{ lootTable: object | null, kills: Array<{ boss: string, difficultyId: number }> }} ctx  kills newest first
  * @returns the record with its item resolved and -- when a matching recent kill exists -- boss, slot and difficulty filled in and `source: 'live'`
  */
+/**
+ * True when the chat-tail win is an item the addon never tracks (a recipe or a companion pet),
+ * judged from the loot table's item class. Only items the table knows can be judged, and only
+ * once the table carries itemClass (older cached tables don't, so those pass through).
+ */
+function isUntrackedItem(record, lootTable) {
+  if (!lootTable) return false;
+  const name = itemNameOf(record.itemLink);
+  if (name == null) return false;
+  const { idByName } = lookupsFor(lootTable);
+  const item = lootTable.items?.[idByName.get(name)];
+  if (!item) return false;
+  return item.itemClass === 'Recipe' || (item.itemClass === 'Miscellaneous' && item.itemSubclass === 'Companion Pets');
+}
+
 function enrichWin(record, { lootTable, kills }) {
   if (!lootTable) return record;
   const { idByName, bossesByItemId, tierBosses } = lookupsFor(lootTable);
@@ -77,4 +92,4 @@ function enrichWin(record, { lootTable, kills }) {
   return { ...withItem, boss: kill.boss, slot: lootTable.items[itemId].slot ?? 'Other', difficulty: DIFFICULTY_LABEL[kill.difficultyId], source: 'live' };
 }
 
-module.exports = { enrichWin, DIFFICULTY_LABEL };
+module.exports = { enrichWin, isUntrackedItem, DIFFICULTY_LABEL };
