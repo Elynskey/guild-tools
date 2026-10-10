@@ -937,8 +937,12 @@ frame:SetScript("OnEvent", function(_, event, ...)
     -- that prompted this check in the first place.
     if isTrackedRaidDifficulty() then
       local _, _, _, _, _, _, _, instanceID = GetInstanceInfo()
-      if instanceID and instanceID ~= lastPromptedInstanceID then
+      -- Remembered in SavedVariables, not just in memory: a /reload wipes the local, and
+      -- re-asking every reload in the same lockout is pure noise. instanceID is stable
+      -- for the lockout, so a new lockout still prompts.
+      if instanceID and instanceID ~= lastPromptedInstanceID and instanceID ~= GuildToolsLootDB.lastPromptedInstanceID then
         lastPromptedInstanceID = instanceID
+        GuildToolsLootDB.lastPromptedInstanceID = instanceID
         StaticPopup_Show("GUILDTOOLSLOOT_CONFIRM")
         remindChatLoggingIfOff()
       end
