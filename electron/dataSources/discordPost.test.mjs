@@ -52,3 +52,36 @@ describe('mention safety: @everyone and @here never ping', () => {
     expect(body).toEqual({ content: 'x' });
   });
 });
+
+describe('rate limits', () => {
+  it('waits out a 429 and sends the same message again', async () => {
+    vi.useFakeTimers();
+    let n = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => (++n === 1 ? { ok: false, status: 429, statusText: 'Too Many Requests', headers: { get: () => null }, json: async () => ({ retry_after: 0.5 }) } : { ok: true, json: async () => ({ id: 'm1' }) })),
+    );
+    const posted = postMessage('123', { content: 'hi' });
+    await vi.advanceTimersByTimeAsync(600);
+    await expect(posted).resolves.toEqual({ id: 'm1' });
+    expect(n).toBe(2);
+    vi.useRealTimers();
+  });
+
+  it('gives up after repeated 429s and still throws', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 429, statusText: 'Too Many Requests', headers: { get: () => null }, json: async () => ({ retry_after: 0.1 }) })));
+    const posted = postMessage('123', { content: 'hi' });
+    const assertion = expect(posted).rejects.toThrow('429');
+    await vi.advanceTimersByTimeAsync(2000);
+    await assertion;
+    expect(fetch).toHaveBeenCalledTimes(4);
+    vi.useRealTimers();
+  });
+
+  it('does not retry other failures (a 5xx might have posted)', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 502, statusText: 'Bad Gateway', headers: { get: () => null }, json: async () => ({}) })));
+    await expect(postMessage('123', { content: 'hi' })).rejects.toThrow('502');
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+});

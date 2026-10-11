@@ -23,6 +23,10 @@ function withSafeMentions(body) {
   return { ...body, allowed_mentions: body.allowed_mentions ?? SAFE_ALLOWED_MENTIONS };
 }
 
+const MAX_RATE_LIMIT_ATTEMPTS = 4;
+const MAX_RATE_LIMIT_WAIT_MS = 10_000;
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 function assertConfigured() {
   if (!process.env.DISCORD_BOT_TOKEN) {
     throw new Error('Discord posting isn\'t configured (DISCORD_BOT_TOKEN missing).');
@@ -36,13 +40,23 @@ function assertConfigured() {
 async function postMessage(channelId, body) {
   assertConfigured();
   if (!channelId) throw new Error('No Discord channel configured for this post.');
-  const res = await fetch(`https://discord.com/api/v10/channels/${channelId}/messages`, {
-    method: 'POST',
-    headers: botHeaders(),
-    body: JSON.stringify(withSafeMentions(body)),
-  });
-  if (!res.ok) throw new Error(`Discord message post failed: ${res.status} ${res.statusText}`);
-  return res.json();
+  // A burst of wins after a kill can hit Discord's rate limit (429). Discord rejected the message
+  // without posting it, so waiting the time it asks for and sending again cannot double-post.
+  // Auto-post never retries a failed batch later, so without this a rate-limited win is lost.
+  for (let attempt = 1; ; attempt++) {
+    const res = await fetch(`https://discord.com/api/v10/channels/${channelId}/messages`, {
+      method: 'POST',
+      headers: botHeaders(),
+      body: JSON.stringify(withSafeMentions(body)),
+    });
+    if (res.ok) return res.json();
+    if (res.status === 429 && attempt < MAX_RATE_LIMIT_ATTEMPTS) {
+      const retryAfter = Number((await res.json().catch(() => ({}))).retry_after ?? res.headers.get('retry-after'));
+      await sleep(Math.min(Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : 1000, MAX_RATE_LIMIT_WAIT_MS));
+      continue;
+    }
+    throw new Error(`Discord message post failed: ${res.status} ${res.statusText}`);
+  }
 }
 
 /**
