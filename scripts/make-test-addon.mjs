@@ -69,6 +69,10 @@ export function transformLua(lua) {
     // chat lines in a different colour than the real addon's gold
     .replaceAll('|cffd4b358Guild Tools Loot TEST', '|cff4cc9f0Guild Tools Loot TEST');
 
+  // The real addon's red reload button and minimap button are off here: this addon has its own sync button (test-extras.lua).
+  out = replaceExactly(out, 'local ENABLE_RELOAD_BUTTON = true', 'local ENABLE_RELOAD_BUTTON = false');
+  out = replaceExactly(out, 'local ENABLE_MINIMAP_BUTTON = true', 'local ENABLE_MINIMAP_BUTTON = false');
+
   // --- loosen what is tracked ---
   out = replaceExactly(out, 'local currentDifficulty = nil', TRACK_ALL_HELPERS);
   out = replaceExactly(out, 'local function isTrackedEncounter(encounterID)\n  if isTrackedRaidDifficulty() then return true end', 'local function isTrackedEncounter(encounterID)\n  if testTrackAll() then return true end\n  if isTrackedRaidDifficulty() then return true end');

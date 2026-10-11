@@ -1065,6 +1065,238 @@ frame:SetScript("OnEvent", function(_, event, ...)
   end
 end)
 
+-- ---------------------------------------------------------------------------------------------
+-- One-click reload, and a minimap button.
+--
+-- WoW writes this addon's saved data (every win, lost roll and trade) to disk only at /reload or logout, and Guild Tools
+-- reads it from there. ReloadUI() needs a real click or key press, so it cannot be done on a timer: once new loot has
+-- been logged and things have been quiet for a moment, a big red button offers the reload. One click and Guild Tools has
+-- the loot within seconds. Never shown during an encounter or in combat. Right-click the minimap button to turn the
+-- red button off; drag the red button with the right mouse button to move it.
+-- (The generated Test addon has its own version of this and turns both of these off -- see scripts/make-test-addon.mjs.)
+-- ---------------------------------------------------------------------------------------------
+local ENABLE_RELOAD_BUTTON = true
+local ENABLE_MINIMAP_BUTTON = true
+
+do
+  local QUIET_SECONDS = 15
+  local base, seen, announcedFor = nil, nil, 0
+  local changedAt = 0
+  local button
+
+  local function counts()
+    local db = GuildToolsLootDB or {}
+    return { r = #(db.records or {}), l = #(db.needLosses or {}), t = #(db.trades or {}) }
+  end
+
+  -- What a reload would carry that is not on disk yet: everything logged since this session loaded.
+  local function pendingParts()
+    if not base then return 0, 0, 0 end
+    local c = counts()
+    return math.max(0, c.r - base.r), math.max(0, c.l - base.l), math.max(0, c.t - base.t)
+  end
+
+  local function pendingTotal()
+    local wins, losses, trades = pendingParts()
+    return wins + losses + trades
+  end
+
+  local function describe(wins, losses, trades)
+    local parts = {}
+    if wins > 0 then parts[#parts + 1] = wins .. " Need win(s)" end
+    if losses > 0 then parts[#parts + 1] = losses .. " lost roll(s)" end
+    if trades > 0 then parts[#parts + 1] = trades .. " trade(s)" end
+    if #parts == 0 then return "nothing new" end
+    return table.concat(parts, " and ")
+  end
+
+  local function reloadNow()
+    local wins, losses, trades = pendingParts()
+    -- Written BEFORE the reload: the reload is what saves this table to disk, and the message after it reads it.
+    GuildToolsLootDB.reloadNote = { wins = wins, losses = losses, trades = trades, at = time() }
+    announce("reloading the UI so Guild Tools gets your loot...")
+    if not ReloadUI then
+      GuildToolsLootDB.reloadNote = nil
+      announce("this client has no ReloadUI here -- type /reload yourself.")
+      return
+    end
+    local ok, err = pcall(ReloadUI)
+    if not ok then
+      GuildToolsLootDB.reloadNote = nil
+      announce("the game would not reload from here (" .. tostring(err) .. ") -- type /reload yourself.")
+    end
+  end
+
+  local function shouldShow()
+    if not ENABLE_RELOAD_BUTTON or GuildToolsLootDB.reloadPromptOff then return false end
+    if pendingTotal() <= 0 then return false end
+    if GetTime() - changedAt < QUIET_SECONDS then return false end
+    if IsEncounterInProgress and IsEncounterInProgress() then return false end
+    if InCombatLockdown and InCombatLockdown() then return false end
+    return true
+  end
+
+  local function buildButton()
+    local f = CreateFrame("Button", "GuildToolsLootReloadButton", UIParent, "UIPanelButtonTemplate")
+    f:SetSize(400, 48)
+    local pos = GuildToolsLootDB.reloadButtonPos
+    if pos then f:SetPoint(pos.point, UIParent, pos.relPoint, pos.x, pos.y) else f:SetPoint("TOP", UIParent, "TOP", 0, -140) end
+    f:SetFrameStrata("DIALOG")
+    f:SetMovable(true)
+    f:RegisterForDrag("RightButton")
+    f:RegisterForClicks("LeftButtonUp")
+    f:SetScript("OnDragStart", function(self) self:StartMoving() end)
+    f:SetScript("OnDragStop", function(self)
+      self:StopMovingOrSizing()
+      local point, _, relPoint, x, y = self:GetPoint()
+      GuildToolsLootDB.reloadButtonPos = { point = point, relPoint = relPoint, x = x, y = y }
+    end)
+    f:SetScript("OnClick", reloadNow)
+    -- Red, and big: this is the one thing on screen an officer must not miss.
+    local normal = f.GetNormalTexture and f:GetNormalTexture()
+    if normal and normal.SetVertexColor then normal:SetVertexColor(1, 0.15, 0.15) end
+    local text = f.GetFontString and f:GetFontString()
+    if text and text.SetFontObject then text:SetFontObject("GameFontHighlightLarge") end
+    f:SetScript("OnEnter", function(self)
+      if GameTooltip then
+        GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
+        GameTooltip:SetText("Send loot to Guild Tools")
+        GameTooltip:AddLine("Reloads the UI, which is what makes WoW save your loot so Guild Tools can read it. Left-click to reload. Drag with the right mouse button to move. Right-click the minimap button to turn this off.", 1, 1, 1, true)
+        GameTooltip:Show()
+      end
+    end)
+    f:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+    return f
+  end
+
+  local function update()
+    if not GuildToolsLootDB or not base then return end
+    local c = counts()
+    if not seen or c.r ~= seen.r or c.l ~= seen.l or c.t ~= seen.t then
+      seen = c
+      changedAt = GetTime()
+    end
+    local show = shouldShow()
+    if show then
+      local total = pendingTotal()
+      if announcedFor ~= total then
+        announcedFor = total
+        announce("Loot logged: " .. describe(pendingParts()) .. ". Click the red button (or type /reload) to send it to Guild Tools.")
+      end
+    elseif pendingTotal() == 0 then
+      announcedFor = 0
+    end
+    if not show and not button then return end
+    if not button then
+      local ok, result = pcall(buildButton)
+      if not ok then
+        announce("couldn't draw the reload button (" .. tostring(result) .. ") -- type /reload when you want to send your loot.")
+        GuildToolsLootDB.reloadPromptOff = true
+        return
+      end
+      button = result
+    end
+    if show then
+      button:SetText("LOOT CAPTURED - CLICK HERE TO RELOAD (" .. pendingTotal() .. ")")
+      button:Show()
+    else
+      button:Hide()
+    end
+  end
+
+  -- The confirmation after a reload: all the addon can honestly say is that the loot is logged and saved to disk.
+  local function announceNote()
+    local note = GuildToolsLootDB.reloadNote
+    GuildToolsLootDB.reloadNote = nil
+    if note and (time() - (note.at or 0)) < 300 then
+      announce("Loot logged and saved: " .. describe(note.wins or 0, note.losses or 0, note.trades or 0) .. ". Guild Tools picks it up within a few seconds if it is open.")
+    end
+  end
+
+  local function buildMinimapButton()
+    local b = CreateFrame("Button", "GuildToolsLootMinimapButton", Minimap)
+    b:SetSize(31, 31)
+    b:SetFrameStrata("MEDIUM")
+    b:SetFrameLevel(8)
+    b:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    b:RegisterForDrag("LeftButton")
+    local icon = b:CreateTexture(nil, "BACKGROUND")
+    icon:SetTexture("Interface\\AddOns\\GuildToolsLoot\\crd-logo")
+    icon:SetSize(20, 20)
+    icon:SetPoint("CENTER", 0, 0)
+    local border = b:CreateTexture(nil, "OVERLAY")
+    border:SetTexture("Interface\\Minimap\\MiniMap-TrackingBorder")
+    border:SetSize(53, 53)
+    border:SetPoint("TOPLEFT", 0, 0)
+    b:SetHighlightTexture("Interface\\Minimap\\UI-Minimap-ZoomButton-Highlight")
+
+    local function place()
+      local angle = math.rad(GuildToolsLootDB.minimapAngle or 215)
+      local radius = (Minimap:GetWidth() / 2) + 5
+      b:ClearAllPoints()
+      b:SetPoint("CENTER", Minimap, "CENTER", math.cos(angle) * radius, math.sin(angle) * radius)
+    end
+    place()
+
+    b:SetScript("OnClick", function(_, mouse)
+      ensureDB()
+      if mouse == "RightButton" then
+        GuildToolsLootDB.reloadPromptOff = not GuildToolsLootDB.reloadPromptOff
+        announce(GuildToolsLootDB.reloadPromptOff and "the red reload button is off (right-click the minimap button to turn it back on)." or "the red reload button is on.")
+        update()
+      else
+        togglePanel()
+      end
+    end)
+    b:SetScript("OnDragStart", function(self)
+      self:SetScript("OnUpdate", function()
+        local mx, my = Minimap:GetCenter()
+        local px, py = GetCursorPosition()
+        local scale = Minimap:GetEffectiveScale()
+        GuildToolsLootDB.minimapAngle = math.deg((math.atan2 or math.atan)(py / scale - my, px / scale - mx))
+        place()
+      end)
+    end)
+    b:SetScript("OnDragStop", function(self) self:SetScript("OnUpdate", nil) end)
+    b:SetScript("OnEnter", function(self)
+      if GameTooltip then
+        GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+        GameTooltip:SetText("Guild Tools Loot")
+        GameTooltip:AddLine("Left-click: open the window. Right-click: turn the red reload button on or off. Drag to move.", 1, 1, 1, true)
+        GameTooltip:Show()
+      end
+    end)
+    b:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+    return b
+  end
+
+  local starter = CreateFrame("Frame")
+  starter:RegisterEvent("PLAYER_LOGIN")
+  starter:SetScript("OnEvent", function()
+    ensureDB()
+    base = counts()
+    seen = base
+    changedAt = GetTime()
+    announcedFor = 0
+    announceNote()
+    if ENABLE_MINIMAP_BUTTON and Minimap then
+      local ok, err = pcall(buildMinimapButton)
+      if not ok then announce("couldn't draw the minimap button (" .. tostring(err) .. ") -- /gtloot still opens the window.") end
+    end
+  end)
+
+  -- Look for new loot every couple of seconds.
+  local elapsed = 0
+  local ticker = CreateFrame("Frame")
+  ticker:SetScript("OnUpdate", function(_, dt)
+    elapsed = elapsed + (dt or 0)
+    if elapsed >= 2 then
+      elapsed = 0
+      update()
+    end
+  end)
+end
+
 SLASH_GUILDTOOLSLOOT1 = "/gtloot"
 -- One command, no arguments: everything it used to do (on, off, scan, chatlog) is a button in the window.
 SlashCmdList["GUILDTOOLSLOOT"] = function()
