@@ -6,4 +6,5 @@
 ## SavedVariables: GuildToolsLootDB
 ## IconTexture: Interface\AddOns\GuildToolsLoot\crd-logo
 
+GuildToolsLootStatus.lua
 GuildToolsLoot.lua

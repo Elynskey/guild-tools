@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, shell, clipboard, dialog, session } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, clipboard, dialog, session, Notification } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
@@ -32,7 +32,8 @@ const { listCraftRequests, addCraftRequest, fulfillCraftRequest, removeCraftRequ
 const { signIn: bnetSignIn } = require('./dataSources/bnetAuth.cjs');
 const { signIn: discordSignIn } = require('./dataSources/discordAuth.cjs');
 const { loadSession, saveSession, clearSession } = require('./dataSources/authSession.cjs');
-const { getWowPathConfig, setWowPath, installAddon, setCharacterName, getAddonVersionInfo, getLootRecords, withAddonFlavor, getAddonCalendar } = require('./dataSources/lootLog.cjs');
+const { getWowPathConfig, setWowPath, installAddon, setCharacterName, getAddonVersionInfo, getLootRecords, withAddonFlavor, getAddonCalendar, writeAddonStatus } = require('./dataSources/lootLog.cjs');
+const { createWatcher: createDiscordPostWatcher } = require('./dataSources/discordPostWatch.cjs');
 const { getChatLogStatus } = require('./dataSources/lootChatTail.cjs');
 const { getCombatLogStatus, recentKills } = require('./dataSources/lootCombatLog.cjs');
 const pipelineLog = require('./dataSources/pipelineLog.cjs');
@@ -544,6 +545,24 @@ app.whenReady().then(() => {
   runChatTailPoll();
   const chatTailInterval = setInterval(runChatTailPoll, 10_000);
   app.on('will-quit', () => clearInterval(chatTailInterval));
+
+  // When auto-post puts loot on Discord (it runs on the proxy), say so: a desktop notification now, and a line the addon prints
+  // in the game chat at the next login or /reload (the game cannot hear from the app while it is running).
+  if (proxyClient.isAvailable()) {
+    const postWatcher = createDiscordPostWatcher({
+      getRecords: async () => (await proxyClient.getSharedLootRecords()).records,
+      notify: ({ title, body }) => {
+        if (Notification.isSupported()) new Notification({ title, body }).show();
+      },
+      writeStatus: (lua) => {
+        if (!isTestModeBuild) writeAddonStatus(lua);
+      },
+    });
+    const runPostWatch = () => postWatcher.poll().catch((err) => console.error('[discordPostWatch] poll failed:', err.message));
+    runPostWatch();
+    const postWatchInterval = setInterval(runPostWatch, 15_000);
+    app.on('will-quit', () => clearInterval(postWatchInterval));
+  }
 });
 
 app.on('window-all-closed', () => {

@@ -96,6 +96,7 @@ export function transformToc(toc) {
     .replace(/^## Notes:.*$/m, '## Notes: TEST copy of the Guild Tools loot addon for trying things on a real client. Its own data and /gtloottest commands; never reaches the Guild Tools app.')
     .replace(/^## Version:.*$/m, (m) => `${m}-test`)
     .replace(/^## SavedVariables:.*$/m, '## SavedVariables: GuildToolsLootTestDB')
+    .replace(/^GuildToolsLootStatus\.lua\r?\n/m, '')
     .replace('GuildToolsLoot.lua', 'GuildToolsLootTest.lua')
     .split('\n');
   const iconLine = '## IconTexture: Interface\\AddOns\\GuildToolsLootTest\\crd-logo';

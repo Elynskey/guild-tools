@@ -359,6 +359,16 @@ function compareVersions(a, b) {
  * whatever it loaded last, so an update still needs a /reload to take effect.
  * @returns {{ bundled: string | null, installed: string | null, status: 'current' | 'outdated' | 'not_installed' | 'no_wow' }}
  */
+/** Replaces the addon's status file (GuildToolsLootStatus.lua) with `lua`, if the addon is installed. The addon prints it the next time the game loads. Returns whether it was written. */
+function writeAddonStatus(lua) {
+  const wowPath = resolveWowPath();
+  if (!isRealWowPath(wowPath)) return false;
+  const dir = path.join(wowPath, 'Interface', 'AddOns', addonIdentity().name);
+  if (!fs.existsSync(dir)) return false;
+  fs.writeFileSync(path.join(dir, 'GuildToolsLootStatus.lua'), lua);
+  return true;
+}
+
 function getAddonVersionInfo(bundledTocOverride) {
   const identity = addonIdentity();
   const bundled = readTocVersion(bundledTocOverride ?? path.join(identity.srcDir, `${identity.name}.toc`));
@@ -372,6 +382,7 @@ function getAddonVersionInfo(bundledTocOverride) {
 
 module.exports = {
   withAddonFlavor,
+  writeAddonStatus,
   getAddonCalendar,
   normalizeCalendar,
   getLootRecords,

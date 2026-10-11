@@ -1279,6 +1279,14 @@ do
     changedAt = GetTime()
     announcedFor = 0
     announceNote()
+    -- The app writes GuildToolsLootStatus.lua after loot reaches Discord (the game can only read it when it loads, so this
+    -- shows on the next login or /reload). Said once per post, and only when it is recent.
+    local status = GuildToolsLootStatus
+    if type(status) == "table" and type(status.postedAt) == "number" and type(status.text) == "string"
+        and (GuildToolsLootDB.lastDiscordStatusAt or 0) < status.postedAt and time() - status.postedAt < 6 * 3600 then
+      GuildToolsLootDB.lastDiscordStatusAt = status.postedAt
+      announce("Discord: " .. status.text)
+    end
     if ENABLE_MINIMAP_BUTTON and Minimap then
       local ok, err = pcall(buildMinimapButton)
       if not ok then announce("couldn't draw the minimap button (" .. tostring(err) .. ") -- /gtloot still opens the window.") end

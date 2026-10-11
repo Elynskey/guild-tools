@@ -151,5 +151,23 @@ now = now + 60
 tick()
 check("a fresh session has nothing pending, so no button", not btn:IsShown())
 
+-- the app writes GuildToolsLootStatus.lua after loot reaches Discord; the addon says so at the next load, once
+GuildToolsLootStatus = { postedAt = os.time(), count = 2, text = "Posted 2 wins to Discord (Boss): A won X; B won Y" }
+printed = {}
+starter.scripts.OnEvent(starter, "PLAYER_LOGIN")
+check("a fresh Discord post is announced in the game chat at the next load", table.concat(printed, " "):find("Discord: Posted 2 wins to Discord") ~= nil)
+printed = {}
+starter.scripts.OnEvent(starter, "PLAYER_LOGIN")
+check("...but only once per post", table.concat(printed, " "):find("Discord: ") == nil)
+GuildToolsLootStatus = { postedAt = os.time() + 10 - 7 * 3600, count = 1, text = "old" }
+GuildToolsLootDB.lastDiscordStatusAt = 0
+printed = {}
+starter.scripts.OnEvent(starter, "PLAYER_LOGIN")
+check("an old post (over 6 hours) is not announced", table.concat(printed, " "):find("Discord: ") == nil)
+GuildToolsLootStatus = nil
+printed = {}
+starter.scripts.OnEvent(starter, "PLAYER_LOGIN")
+check("no status file content means no message and no error", table.concat(printed, " "):find("Discord: ") == nil)
+
 print(checks .. " checks, " .. failed .. " failed")
 if failed > 0 then os.exit(1) end
