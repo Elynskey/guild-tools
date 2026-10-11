@@ -23,6 +23,26 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '1.1.9',
+    date: '2026-10-10',
+    title: 'Discord loot posts keep trying until they go out',
+    highlights: [
+      {
+        heading: 'A win no longer gets just one chance to post',
+        body: 'If a loot post failed, or a win was missing its boss or difficulty at first, it was never posted. Now every win is retried every couple of minutes until it goes out, once.',
+      },
+      {
+        heading: 'Wins up to 12 hours old still post',
+        body: 'Wins that only arrive after your end-of-night /reload now still post to Discord (the limit was 6 hours).',
+      },
+      {
+        heading: 'Wins after a /reload keep their difficulty',
+        body: 'The addon now knows the difficulty even if you reloaded after the boss died, so those wins can post.',
+      },
+    ],
+    headsUp: 'On Loot History, press "Update addon now" and type /reload in game to get addon v1.11.',
+  },
+  {
     version: '1.1.8',
     date: '2026-10-10',
     title: 'Pets stay out of the loot log, fewer missed Discord posts',
