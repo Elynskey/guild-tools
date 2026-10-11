@@ -77,8 +77,8 @@ export function transformLua(lua) {
   // every record says where it came from, so the test data can tell dungeon from raid from delve
   out = replaceExactly(
     out,
-    '    difficulty = difficultyOverride or currentDifficulty,\n',
-    '    difficulty = difficultyOverride or currentDifficulty or (testTrackAll() and testDifficultyLabel() or nil),\n    zone = testContent(),\n    contentType = select(2, testContent()),\n    difficultyID = select(3, testContent()),\n',
+    '    difficulty = difficultyOverride or currentDifficulty or currentRaidDifficultyLabel(),\n',
+    '    difficulty = difficultyOverride or currentDifficulty or currentRaidDifficultyLabel() or (testTrackAll() and testDifficultyLabel() or nil),\n    zone = testContent(),\n    contentType = select(2, testContent()),\n    difficultyID = select(3, testContent()),\n',
     2,
   );
   // a new instance is a new context: don't carry the last boss (or last zone\'s difficulty) into loot from trash or a chest

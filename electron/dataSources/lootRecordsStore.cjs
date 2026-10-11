@@ -148,6 +148,7 @@ function sync(newRecords, newTrades, newNeedLosses, mode = 'prod') {
       // Discord-announce caller would re-announce a win that already went out live.
       if (isPlaceholder(match) && !isPlaceholder(r)) {
         upgradeRecord(match, r);
+        match.autoPostPending = true;
         verifiedRecords.push(match);
       }
       continue;
@@ -157,7 +158,12 @@ function sync(newRecords, newTrades, newNeedLosses, mode = 'prod') {
     addedRecords.push(withId);
     // 'live' counts as verified: boss and difficulty are known (from the combat log), which
     // is what lets auto-post announce a win with no /reload. Bare chat-tail captures don't.
-    if (withId.source !== 'chat-tail') verifiedRecords.push(withId);
+    if (withId.source !== 'chat-tail') {
+      // Remembered on the record so auto-post can retry it until it is posted (see lootAutoPost.cjs): the one-shot
+      // verifiedRecords list below is gone after this call, so a skipped or failed post used to be lost for good.
+      withId.autoPostPending = true;
+      verifiedRecords.push(withId);
+    }
   }
   for (const t of newTrades ?? []) {
     const k = tradeKey(t);

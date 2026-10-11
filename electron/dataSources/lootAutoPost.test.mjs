@@ -63,9 +63,9 @@ describe('announceVerified', () => {
     expect(post).not.toHaveBeenCalled();
   });
 
-  it('skips wins older than six hours (an officer\'s first sync offers the addon\'s whole history)', async () => {
+  it('skips wins older than twelve hours (an officer\'s first sync offers the addon\'s whole history)', async () => {
     const post = vi.fn().mockResolvedValue({});
-    await autoPost.announceVerified([rec({ time: NOW - 7 * 3600 })], { nowSeconds: NOW, settings: ON, post, mark: vi.fn() });
+    await autoPost.announceVerified([rec({ time: NOW - 13 * 3600 })], { nowSeconds: NOW, settings: ON, post, mark: vi.fn() });
     expect(post).not.toHaveBeenCalled();
   });
 
@@ -126,5 +126,47 @@ describe('end to end with the real store', () => {
     store.sync([{ itemId: null, itemLink: '[Curio]', winner: 'Elishaunt', boss: null, slot: null, difficulty: null, source: 'chat-tail', selfWin: true, time: NOW - 100 }], [], []);
     const all = store.load().records;
     expect(all).toHaveLength(2); // the addon's Silverhorn record has no `self` flag, so it does not pair
+  });
+});
+
+describe('retrying (the sweep)', () => {
+  it('a win whose post failed is posted on the next call, and only once', async () => {
+    const r = rec({ id: 'a', autoPostPending: true });
+    const post = vi.fn().mockRejectedValueOnce(new Error('boom')).mockResolvedValue({});
+    const mark = vi.fn();
+    const first = await autoPost.announceVerified([r], { nowSeconds: NOW, settings: ON, post, mark });
+    expect(first.posted).toBe(0);
+    const second = await autoPost.announceVerified([], { nowSeconds: NOW, settings: ON, post, mark, pending: [r] });
+    expect(second.posted).toBe(1);
+    expect(mark).toHaveBeenCalledWith(['a']);
+    const third = await autoPost.announceVerified([], { nowSeconds: NOW, settings: ON, post, mark, pending: [{ ...r, discordPostedAt: 'x' }] });
+    expect(third.posted).toBe(0);
+  });
+
+  it('a win that only gets its difficulty later is posted then', async () => {
+    const post = vi.fn().mockResolvedValue({});
+    const waiting = rec({ id: 'b', difficulty: null, autoPostPending: true });
+    expect((await autoPost.announceVerified([waiting], { nowSeconds: NOW, settings: ON, post, mark: vi.fn() })).posted).toBe(0);
+    expect((await autoPost.announceVerified([], { nowSeconds: NOW, settings: ON, post, mark: vi.fn(), pending: [{ ...waiting, difficulty: 'Normal' }] })).posted).toBe(1);
+  });
+
+  it('the store flags verified wins as pending, and a chat capture is not', async () => {
+    const synced = store.sync([{ itemId: 1, itemLink: '[A]', winner: 'W', boss: 'B', difficulty: 'Normal', time: NOW, source: 'live' }, { itemId: 2, itemLink: '[B]', winner: 'W', boss: null, time: NOW, source: 'chat-tail' }], [], []);
+    const flagged = store.load('prod').records.filter((x) => x.autoPostPending);
+    expect(flagged).toHaveLength(1);
+    expect(synced.verifiedRecords).toHaveLength(1);
+  });
+
+  it('two calls at once post a win once', async () => {
+    const r = rec({ id: 'c', autoPostPending: true });
+    const post = vi.fn(async () => {});
+    const posted = new Set();
+    const mark = (ids) => ids.forEach((i) => posted.add(i));
+    const pending = () => [r].filter((x) => !posted.has(x.id));
+    await Promise.all([
+      autoPost.announceVerified([], { nowSeconds: NOW, settings: ON, post, mark, pending }),
+      autoPost.announceVerified([], { nowSeconds: NOW, settings: ON, post, mark, pending }),
+    ]);
+    expect(post).toHaveBeenCalledTimes(1);
   });
 });

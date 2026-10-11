@@ -113,6 +113,12 @@ check("REAL addon records the Lair when the game calls it a Normal raid (The Tid
 zone(true, "raid", "The Tidebound Grotto", 17)
 win(realFrame, "Alpha")
 check("...but not the Lair on Raid Finder", #GuildToolsLootDB.records == 1, tostring(#GuildToolsLootDB.records))
+-- After a /reload no ENCOUNTER_START has fired yet, but the win still has to carry its difficulty (Discord auto-post needs it).
+zone(true, "raid", "The Venomous Abyss", 15)
+GuildToolsLootDB.records = {}
+local reloadedFrame = load("addon/GuildToolsLoot/GuildToolsLoot.lua")
+win(reloadedFrame, "Alpha")
+check("REAL addon: a win after a /reload still gets the instance's difficulty", #GuildToolsLootDB.records == 1 and GuildToolsLootDB.records[1].difficulty == "Heroic", GuildToolsLootDB.records[1] and tostring(GuildToolsLootDB.records[1].difficulty) or "no record")
 zone(true, "scenario", "The Tidebound Grotto", 208)
 realFrame.scripts.OnEvent(realFrame, "ENCOUNTER_START", 3379, "Nymrissa Wavecaller")
 realFrame.scripts.OnEvent(realFrame, "CHAT_MSG_LOOT", "|HlootHistory:3379|h[Loot]|h: Sylvara (Need - 88, Main-Spec) Won: " .. link(270168))

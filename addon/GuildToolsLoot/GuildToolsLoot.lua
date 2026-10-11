@@ -438,7 +438,9 @@ local function recordNeedWin(winnerName, itemLink, bossOverride, encounterIDOver
     boss = resolveBoss(bossOverride, encounterId),
     slot = slotLabel(itemLink),
     time = now,
-    difficulty = difficultyOverride or currentDifficulty,
+    -- currentDifficulty is only set by ENCOUNTER_START, so it is empty after a /reload; the instance we are standing in still knows.
+    -- Without this a win resolved after a reload had a boss but no difficulty, and Discord auto-post (which needs both) skipped it.
+    difficulty = difficultyOverride or currentDifficulty or currentRaidDifficultyLabel(),
     -- Which encounter this came from. Lets the store tell that two officers' records (or a late backfill scan's) are the
     -- SAME win however far apart their capture times are, instead of relying on a 60-second window.
     encounterId = encounterId,
@@ -492,7 +494,7 @@ local function recordNeedLoss(loserName, itemLink, bossOverride, encounterIDOver
     boss = resolveBoss(bossOverride, encounterId),
     slot = slotLabel(itemLink),
     time = now,
-    difficulty = difficultyOverride or currentDifficulty,
+    difficulty = difficultyOverride or currentDifficulty or currentRaidDifficultyLabel(),
     encounterId = encounterId,
     lootListId = lootListID,
   })

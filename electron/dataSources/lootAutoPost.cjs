@@ -16,15 +16,20 @@ const lootRecordsStore = require('./lootRecordsStore.cjs');
 //     attributed from the combat log + the tier's loot table (lootLiveEnrich.cjs), which
 //     only ever matches this tier's bosses at Normal/Heroic -- so a capture from some
 //     other run can never post. 'live' is what lets this fire with no /reload.
-//   - only fresh wins (last 6 hours) -- an officer's very first sync offers the addon's
+//   - only fresh wins (last 12 hours) -- an officer's very first sync offers the addon's
 //     whole history back, and none of that should suddenly hit the channel.
 //   - at most once per record (discordPostedAt), even across repeated syncs.
-//   - only records that BECAME verified in this sync (lootRecordsStore.sync's
-//     verifiedRecords), not everything in the store.
+//   - only records that BECAME verified (lootRecordsStore.sync's verifiedRecords), not everything in the
+//     store. Those are flagged autoPostPending on the record, and every call (each sync, plus a timer) also
+//     retries the flagged ones that are still unposted -- a failed post, or a win whose boss/difficulty only
+//     arrived later, used to be lost for good because verifiedRecords exists for one call only.
 // One message per boss+difficulty per sync, formatted like Loot History's manual "Post
 // to Discord" (src/raid/lootLogic.ts's formatNightForDiscord) so both read the same.
 
-const RECENT_WINDOW_SECONDS = 6 * 60 * 60;
+// Long enough for a whole raid night plus the end-of-night /reload that finally delivers the addon's records; an
+// officer's very first sync still can't post history from earlier nights (raids are on different days).
+const RECENT_WINDOW_SECONDS = 12 * 60 * 60;
+const SWEEP_INTERVAL_MS = 2 * 60 * 1000;
 const DISCORD_MESSAGE_LIMIT = 1900; // 2000 is Discord's cap; headroom for the heading
 
 function itemName(itemLink) {
@@ -75,6 +80,23 @@ function formatBatches(records) {
  * @returns {Promise<{ posted: number, skipped?: string }>}
  */
 async function announceVerified(verifiedRecords, deps = {}) {
+  // Two overlapping sweeps (a sync and the timer) would both see a win as unposted and post it twice.
+  const run = inFlight.then(() => announceOnce(verifiedRecords, deps));
+  inFlight = run.catch(() => {});
+  if (!deps.post && (!deps.mode || deps.mode === 'prod')) startSweepTimer();
+  return run;
+}
+
+let inFlight = Promise.resolve();
+let sweepTimer = null;
+
+function startSweepTimer() {
+  if (sweepTimer) return;
+  sweepTimer = setInterval(() => announceVerified([]).catch((err) => console.error('[lootAutoPost] sweep failed:', err.message)), SWEEP_INTERVAL_MS);
+  sweepTimer.unref?.();
+}
+
+async function announceOnce(verifiedRecords, deps) {
   const { nowSeconds = Math.floor(Date.now() / 1000), settings = settingsStore.load(), post = discordPost.postMessage, mode = 'prod' } = deps;
   // A test-mode app's wins post to the TEST loot channel (settings.testLootLogChannelId, e.g. CRD-TEST) and
   // are stamped in the TEST store -- never the real channel, never the real records.
@@ -83,7 +105,10 @@ async function announceVerified(verifiedRecords, deps = {}) {
   if (!settings.autoPostLoot) return { posted: 0, skipped: 'off' };
   if (!channelId) return { posted: 0, skipped: 'no loot channel configured' };
 
-  const postable = (verifiedRecords ?? []).filter((r) => isPostable(r, nowSeconds));
+  const pending = typeof deps.pending === 'function' ? deps.pending() : (deps.pending ?? lootRecordsStore.load(mode).records.filter((r) => r.autoPostPending));
+  const seen = new Set();
+  const candidates = [...(verifiedRecords ?? []), ...pending].filter((r) => !seen.has(r.id) && seen.add(r.id));
+  const postable = candidates.filter((r) => isPostable(r, nowSeconds));
   let posted = 0;
   for (const batch of formatBatches(postable)) {
     try {
@@ -91,9 +116,7 @@ async function announceVerified(verifiedRecords, deps = {}) {
       mark(batch.ids);
       posted += 1;
     } catch (err) {
-      // Not marked posted, and not retried automatically (a record only shows up in
-      // verifiedRecords the one time it becomes verified) -- Loot History's manual "Post
-      // to Discord" is the catch-up path. Logged so a misconfigured channel is visible.
+      // Not marked posted, so the next sweep retries it. Logged so a misconfigured channel is visible.
       console.error('[lootAutoPost] Discord post failed:', err.message);
     }
   }
