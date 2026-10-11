@@ -23,6 +23,30 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '1.1.8',
+    date: '2026-10-10',
+    title: 'Pets stay out of the loot log, fewer missed Discord posts',
+    highlights: [
+      {
+        heading: 'Pets and recipes no longer show up as wins',
+        body: 'A companion pet (like Soulcoil Remnant) or a recipe that someone Need-rolled used to appear in Loot History and get posted to Discord. They are now left out, like the addon already did.',
+      },
+      {
+        heading: 'Fewer missed Discord posts',
+        body: 'When Discord asks the app to slow down after a burst of wins, the post now waits and goes out instead of being dropped.',
+      },
+      {
+        heading: 'No more "Log Need-roll loot?" after every /reload',
+        body: 'The question now comes once per raid, not again each time you reload your UI inside the same raid.',
+      },
+      {
+        heading: 'Lair wins are recorded, and Update addon is safe',
+        body: 'The Nymrissa Wavecaller Lair fight is recorded even though the game now calls it a raid, and "Update addon" will no longer replace a newer addon with an older one.',
+      },
+    ],
+    headsUp: 'On Loot History, press "Update addon now" and type /reload in game to get addon v1.10.',
+  },
+  {
     version: '1.1.7',
     date: '2026-09-23',
     title: 'Consumable trades are no longer tracked',
