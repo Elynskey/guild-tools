@@ -1,7 +1,7 @@
 {
   "name": "raider-status",
   "private": true,
-  "version": "1.1.9",
+  "version": "1.1.10",
   "type": "module",
   "main": "electron/main.cjs",
   "scripts": {
@@ -20,7 +20,7 @@
     "dist:win:test:publish": "node scripts/publish-test-build.mjs",
     "addon:test": "node scripts/make-test-addon.mjs",
     "addon:test:install": "node scripts/make-test-addon.mjs --install",
-    "addon:test:check": "node scripts/make-test-addon.mjs && node scripts/run-lua.mjs scripts/test-addon/check-coexist.lua && node scripts/run-lua.mjs scripts/test-addon/check-tracking.lua && node scripts/run-lua.mjs scripts/test-addon/check-drops.lua && node scripts/run-lua.mjs scripts/test-addon/check-calendar.lua && node scripts/run-lua.mjs scripts/test-addon/check-panel.lua",
+    "addon:test:check": "node scripts/make-test-addon.mjs && node scripts/run-lua.mjs scripts/test-addon/check-coexist.lua && node scripts/run-lua.mjs scripts/test-addon/check-tracking.lua && node scripts/run-lua.mjs scripts/test-addon/check-drops.lua && node scripts/run-lua.mjs scripts/test-addon/check-calendar.lua && node scripts/run-lua.mjs scripts/test-addon/check-panel.lua && node scripts/run-lua.mjs scripts/test-addon/check-reload.lua",
     "web:dev": "vite --config web/vite.config.ts",
     "web:build": "tsc -p web/tsconfig.json && vite build --config web/vite.config.ts",
     "web:typecheck": "tsc -p web/tsconfig.json"
