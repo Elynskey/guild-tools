@@ -23,6 +23,22 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '1.1.11',
+    date: '2026-10-10',
+    title: 'You are told when loot reaches Discord',
+    highlights: [
+      {
+        heading: 'A notification when wins are posted to Discord',
+        body: 'When auto-post puts wins on Discord, Guild Tools shows a desktop notification with who won what, a few seconds after your reload.',
+      },
+      {
+        heading: 'The game tells you too',
+        body: 'The next time the game loads (login or /reload), the addon prints a "Discord: Posted ..." line in your chat so you know the post went out.',
+      },
+    ],
+    headsUp: 'On Loot History, press "Update addon now" and type /reload in game to get addon v1.13.',
+  },
+  {
     version: '1.1.9',
     date: '2026-10-10',
     title: 'Discord loot posts keep trying until they go out',
