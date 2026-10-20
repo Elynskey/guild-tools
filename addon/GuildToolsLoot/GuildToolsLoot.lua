@@ -602,7 +602,9 @@ local function scanLootHistory()
   end)
 
   if not ok then
-    announce("Scan error (send this to Ethan): " .. tostring(err))
+    -- Also kept in the saved variables so the text can be read from disk after logout, not only copied from chat.
+    GuildToolsLootDB.lastScanError = { time = time(), build = select(2, GetBuildInfo()), text = tostring(err) }
+    announce("Scan error (send this to Elishan): " .. tostring(err))
   end
 
   return #GuildToolsLootDB.records - found
