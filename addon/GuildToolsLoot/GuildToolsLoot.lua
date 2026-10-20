@@ -308,7 +308,13 @@ local TRACKED_RAID_NAME = "The Venomous Abyss"
 -- live 2026-10-02: a Normal kill gave instanceType "raid", zone "The Tidebound Grotto",
 -- difficultyID 14, so both the name check and the "scenario"-only Lair exception missed
 -- it and the live addon recorded nothing (the Test addon's track-all mode caught it).
-local TRACKED_LAIR_ZONE_NAME = "The Tidebound Grotto"
+local TRACKED_LAIR_ZONE_NAMES = {
+  ["The Tidebound Grotto"] = true,
+  -- The Unbinding of Kith'ix opened 2026-10-13 (one boss, like the Grotto). The name is Blizzard's own Journal name; the
+  -- live in-game name/instance type is NOT yet confirmed -- the Grotto reported something different from what was expected.
+  -- If it turns out to be a scenario, its ENCOUNTER_START id (from a real log) must be added to TRACKED_LAIR_ENCOUNTER_IDS.
+  ["The Unbinding of Kith'ix"] = true,
+}
 
 -- Only Normal/Heroic loot from THIS tier's designated raid counts -- Raid Finder,
 -- Mythic, any other raid, and anything that isn't a raid at all are excluded. Checked
@@ -320,7 +326,7 @@ local function currentRaidDifficultyLabel()
   local inInstance, instanceType = IsInInstance()
   if not inInstance or instanceType ~= "raid" then return nil end
   local name, _, difficultyID = GetInstanceInfo()
-  if name ~= TRACKED_RAID_NAME and name ~= TRACKED_LAIR_ZONE_NAME then return nil end
+  if name ~= TRACKED_RAID_NAME and not TRACKED_LAIR_ZONE_NAMES[name] then return nil end
   return DIFFICULTY_LABEL[difficultyID]
 end
 

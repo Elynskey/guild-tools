@@ -113,6 +113,16 @@ check("REAL addon records the Lair when the game calls it a Normal raid (The Tid
 zone(true, "raid", "The Tidebound Grotto", 17)
 win(realFrame, "Alpha")
 check("...but not the Lair on Raid Finder", #GuildToolsLootDB.records == 1, tostring(#GuildToolsLootDB.records))
+-- The Unbinding of Kith'ix (opened 2026-10-13): tracked by its Journal name as a raid, Normal/Heroic only. The live in-game name is
+-- not confirmed yet, so this only proves the name we ship is recognised -- see the comment above TRACKED_LAIR_ZONE_NAMES.
+GuildToolsLootDB.records = {}
+zone(true, "raid", "The Unbinding of Kith'ix", 15)
+realFrame.scripts.OnEvent(realFrame, "ENCOUNTER_START", 4000, "Kith'ix")
+realFrame.scripts.OnEvent(realFrame, "CHAT_MSG_LOOT", "|HlootHistory:4000|h[Loot]|h: Sylvara (Need - 88, Main-Spec) Won: " .. link(281029))
+check("REAL addon records The Unbinding of Kith'ix on Heroic", #GuildToolsLootDB.records == 1 and GuildToolsLootDB.records[1].difficulty == "Heroic", tostring(#GuildToolsLootDB.records))
+zone(true, "raid", "The Unbinding of Kith'ix", 17)
+realFrame.scripts.OnEvent(realFrame, "CHAT_MSG_LOOT", "|HlootHistory:4000|h[Loot]|h: Sylvara (Need - 88, Main-Spec) Won: " .. link(281235))
+check("...but not on Raid Finder", #GuildToolsLootDB.records == 1, tostring(#GuildToolsLootDB.records))
 -- After a /reload no ENCOUNTER_START has fired yet, but the win still has to carry its difficulty (Discord auto-post needs it).
 zone(true, "raid", "The Venomous Abyss", 15)
 GuildToolsLootDB.records = {}
