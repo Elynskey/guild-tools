@@ -71,6 +71,11 @@ local function ensureDB()
   -- picked up the most recent boss). Persisted, not just in-memory, so it survives a
   -- /reload mid-raid.
   GuildToolsLootDB.seenEncounters = GuildToolsLootDB.seenEncounters or {}
+  -- encounterID (string key) -> { difficulty = "Normal"/"Heroic", time = <when the pull started> }, written at ENCOUNTER_START only when the
+  -- pull was in a tracked raid at a tracked difficulty. A scan run later from another zone (after leaving the raid, e.g. after a /reload
+  -- in town) can then still tell a tracked kill from an old-raid or Raid Finder one, and knows its difficulty. Without it such a scan
+  -- skipped every win (confirmed live 2026-10-23: the Kith'ix wins were not recovered from the Abyss).
+  GuildToolsLootDB.encounterContext = GuildToolsLootDB.encounterContext or {}
   -- Need rolls that did NOT win -- see recordNeedLoss. Deliberately separate from
   -- `records` (which stays wins-only, unchanged) rather than folding losses in with a
   -- flag, so the well-tested win-tracking path can't regress from this addition.
@@ -360,9 +365,22 @@ end
 -- display name as a string. Deliberately narrow: ordinary Delves (any other scenario)
 -- stay excluded entirely, on purpose -- only this specific Lair counts.
 
+-- How long a remembered pull still vouches for its encounter: the same raid night, with room for a late scan.
+local ENCOUNTER_CONTEXT_SECONDS = 12 * 60 * 60
+
+local function rememberedDifficulty(encounterID)
+  if not encounterID or not GuildToolsLootDB or not GuildToolsLootDB.encounterContext then return nil end
+  local ctx = GuildToolsLootDB.encounterContext[tostring(encounterID)]
+  if ctx and ctx.difficulty and ctx.time and math.abs(time() - ctx.time) <= ENCOUNTER_CONTEXT_SECONDS then return ctx.difficulty end
+  return nil
+end
+
 local function isTrackedEncounter(encounterID)
   if isTrackedRaidDifficulty() then return true end
+  -- A remembered pull only speaks for a win resolved AFTER leaving the raid. Standing inside some other raid that the gate above
+  -- rejected (Raid Finder, an old raid) it must not override that.
   local inInstance, instanceType = IsInInstance()
+  if not (inInstance and instanceType == "raid") and rememberedDifficulty(encounterID) then return true end
   return inInstance and instanceType == "scenario" and TRACKED_LAIR_ENCOUNTER_IDS[encounterID] == true
 end
 
@@ -462,7 +480,7 @@ local function recordNeedWin(winnerName, itemLink, bossOverride, encounterIDOver
     time = now,
     -- currentDifficulty is only set by ENCOUNTER_START, so it is empty after a /reload; the instance we are standing in still knows.
     -- Without this a win resolved after a reload had a boss but no difficulty, and Discord auto-post (which needs both) skipped it.
-    difficulty = difficultyOverride or currentDifficulty or currentRaidDifficultyLabel(),
+    difficulty = difficultyOverride or rememberedDifficulty(encounterId) or currentDifficulty or currentRaidDifficultyLabel(),
     -- Which encounter this came from. Lets the store tell that two officers' records (or a late backfill scan's) are the
     -- SAME win however far apart their capture times are, instead of relying on a 60-second window.
     encounterId = encounterId,
@@ -516,7 +534,7 @@ local function recordNeedLoss(loserName, itemLink, bossOverride, encounterIDOver
     boss = resolveBoss(bossOverride, encounterId),
     slot = slotLabel(itemLink),
     time = now,
-    difficulty = difficultyOverride or currentDifficulty or currentRaidDifficultyLabel(),
+    difficulty = difficultyOverride or rememberedDifficulty(encounterId) or currentDifficulty or currentRaidDifficultyLabel(),
     encounterId = encounterId,
     lootListId = lootListID,
   })
@@ -987,6 +1005,9 @@ frame:SetScript("OnEvent", function(_, event, ...)
     encounterGeneration = encounterGeneration + 1
     if encounterID then
       GuildToolsLootDB.seenEncounters[tostring(encounterID)] = encounterName
+      -- Remember a tracked pull's difficulty; a pull that is NOT tracked (Raid Finder, an old raid with the same boss) must wipe any
+      -- earlier entry so it cannot vouch for this encounter.
+      GuildToolsLootDB.encounterContext[tostring(encounterID)] = currentDifficulty and { difficulty = currentDifficulty, time = time() } or nil
     end
 
   elseif event == "ENCOUNTER_END" then

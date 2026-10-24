@@ -23,6 +23,22 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '1.1.15',
+    date: '2026-10-23',
+    title: 'Scan picks up wins after you leave the raid',
+    highlights: [
+      {
+        heading: 'Late scans still record the kill',
+        body: 'If you left the raid before the addon logged a win, a /reload and scan from town now still records it, with the right difficulty. Before, the scan only worked while you were standing inside the raid.',
+      },
+      {
+        heading: 'Raid Finder stays out',
+        body: 'A Raid Finder pull of the same boss does not count, and the addon only remembers a kill for the same raid night.',
+      },
+    ],
+    headsUp: 'On Loot History, press "Update addon now", then restart WoW once.',
+  },
+  {
     version: '1.1.14',
     date: '2026-10-23',
     title: 'Loot logging works again after the game patch',

@@ -152,6 +152,31 @@ zone(true, "scenario", "A Delve", 208)
 realFrame.scripts.OnEvent(realFrame, "ENCOUNTER_START", 9999, "Delve Boss")
 win(realFrame, "Alpha")
 check("...while an ordinary Delve stays ignored", #GuildToolsLootDB.records == 2, tostring(#GuildToolsLootDB.records))
+-- Live 2026-10-23: the Kith'ix wins were not recovered by a /reload + scan done AFTER leaving the raid, because the zone gate only passes
+-- inside a tracked raid. A pull in a tracked raid is now remembered (with its difficulty) so a later scan from town still records it.
+GuildToolsLootDB.records = {}
+zone(true, "raid", "The Unbinding of Kith'ix", 15)
+realFrame.scripts.OnEvent(realFrame, "ENCOUNTER_START", 3513, "Kith'ix")
+zone(false, "none", "Eversong Woods", 0)
+realFrame.scripts.OnEvent(realFrame, "CHAT_MSG_LOOT", "|HlootHistory:3513|h[Loot]|h: Sylvara (Need - 88, Main-Spec) Won: " .. link(281029))
+check("REAL addon records a tracked kill's win after leaving the raid, with the pull's difficulty", #GuildToolsLootDB.records == 1 and GuildToolsLootDB.records[1].difficulty == "Heroic" and GuildToolsLootDB.records[1].boss == "Kith'ix", GuildToolsLootDB.records[1] and (tostring(GuildToolsLootDB.records[1].difficulty) .. " / " .. tostring(GuildToolsLootDB.records[1].boss)) or "no record")
+-- ...but a Raid Finder pull of the same boss wipes that memory, so its wins stay out.
+GuildToolsLootDB.records = {}
+zone(true, "raid", "The Unbinding of Kith'ix", 17)
+realFrame.scripts.OnEvent(realFrame, "ENCOUNTER_START", 3513, "Kith'ix")
+zone(false, "none", "Eversong Woods", 0)
+realFrame.scripts.OnEvent(realFrame, "CHAT_MSG_LOOT", "|HlootHistory:3513|h[Loot]|h: Sylvara (Need - 88, Main-Spec) Won: " .. link(281235))
+check("...but not after a Raid Finder pull of the same boss", #GuildToolsLootDB.records == 0, tostring(#GuildToolsLootDB.records))
+-- ...and an old pull stops vouching after the window (12 hours).
+GuildToolsLootDB.records = {}
+zone(true, "raid", "The Unbinding of Kith'ix", 15)
+realFrame.scripts.OnEvent(realFrame, "ENCOUNTER_START", 3513, "Kith'ix")
+GuildToolsLootDB.encounterContext["3513"].time = os.time() - 13 * 3600
+zone(false, "none", "Eversong Woods", 0)
+realFrame.scripts.OnEvent(realFrame, "CHAT_MSG_LOOT", "|HlootHistory:3513|h[Loot]|h: Sylvara (Need - 88, Main-Spec) Won: " .. link(281029))
+check("...and not a day later (the memory expires)", #GuildToolsLootDB.records == 0, tostring(#GuildToolsLootDB.records))
+zone(true, "raid", "The Venomous Abyss", 15)
+
 -- Live 2026-10-23 (game build 70575): the item lookups are gone as globals and live in C_Item; the old code called the nil global and
 -- the /gtloot scan died with "attempt to call a nil value". A capture must work with only C_Item, and with neither (no error, just no slot).
 local savedII, savedI, savedCItem = GetItemInfoInstant, GetItemInfo, C_Item
