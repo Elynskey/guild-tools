@@ -23,6 +23,22 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '1.1.13',
+    date: '2026-10-23',
+    title: "Kith'ix is everywhere in the app",
+    highlights: [
+      {
+        heading: "Kith'ix loot is matched to the boss",
+        body: "The app's loot list now includes The Unbinding of Kith'ix, so wins from that fight show the right boss and slot instead of going unmatched.",
+      },
+      {
+        heading: "Kith'ix has its portrait",
+        body: "Kith'ix now has his picture wherever bosses are shown, including the Settings list of bosses to leave out of DPS checks.",
+      },
+    ],
+    headsUp: 'Nothing to do if you already updated the addon for 1.1.12.',
+  },
+  {
     version: '1.1.12',
     date: '2026-10-23',
     title: "Kith'ix loot is logged again",
