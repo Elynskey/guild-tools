@@ -322,11 +322,16 @@ local TRACKED_LAIR_ZONE_NAMES = {
 -- GuildToolsLootDB.enabled can already be true from an earlier tracked raid this
 -- session, and would otherwise keep capturing into an untracked run walked into
 -- afterward with no fresh prompt to decline.
+-- Encounter ids that count even when the instance name is not one we know: the Lair (3379) and Kith'ix (3513). Kith'ix's
+-- encounter was seen live 2026-10-23 but its loot was not logged (addon 1.13 only knew the Grotto's zone name), and its real
+-- in-game zone name/instance type is still unconfirmed -- so it is matched by encounter id, which is what the game fires.
+local TRACKED_LAIR_ENCOUNTER_IDS = { [3379] = true, [3513] = true }
+
 local function currentRaidDifficultyLabel()
   local inInstance, instanceType = IsInInstance()
   if not inInstance or instanceType ~= "raid" then return nil end
   local name, _, difficultyID = GetInstanceInfo()
-  if name ~= TRACKED_RAID_NAME and not TRACKED_LAIR_ZONE_NAMES[name] then return nil end
+  if name ~= TRACKED_RAID_NAME and not TRACKED_LAIR_ZONE_NAMES[name] and not TRACKED_LAIR_ENCOUNTER_IDS[currentEncounterID] then return nil end
   return DIFFICULTY_LABEL[difficultyID]
 end
 
@@ -342,7 +347,6 @@ end
 -- and this addon's own ENCOUNTER_START event key off, more robust than matching the
 -- display name as a string. Deliberately narrow: ordinary Delves (any other scenario)
 -- stay excluded entirely, on purpose -- only this specific Lair counts.
-local TRACKED_LAIR_ENCOUNTER_IDS = { [3379] = true }
 
 local function isTrackedEncounter(encounterID)
   if isTrackedRaidDifficulty() then return true end

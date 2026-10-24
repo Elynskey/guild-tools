@@ -123,6 +123,21 @@ check("REAL addon records The Unbinding of Kith'ix on Heroic", #GuildToolsLootDB
 zone(true, "raid", "The Unbinding of Kith'ix", 17)
 realFrame.scripts.OnEvent(realFrame, "CHAT_MSG_LOOT", "|HlootHistory:4000|h[Loot]|h: Sylvara (Need - 88, Main-Spec) Won: " .. link(281235))
 check("...but not on Raid Finder", #GuildToolsLootDB.records == 1, tostring(#GuildToolsLootDB.records))
+-- Live 2026-10-23: Kith'ix (encounter 3513) fired ENCOUNTER_START but nothing was logged, so the zone name the game reports is not the
+-- Journal name. Matching by encounter id must work whatever the name is -- raid or scenario -- and still skip Raid Finder.
+GuildToolsLootDB.records = {}
+zone(true, "raid", "Some Other Zone Name", 15)
+realFrame.scripts.OnEvent(realFrame, "ENCOUNTER_START", 3513, "Kith'ix")
+realFrame.scripts.OnEvent(realFrame, "CHAT_MSG_LOOT", "|HlootHistory:3513|h[Loot]|h: Sylvara (Need - 88, Main-Spec) Won: " .. link(281029))
+check("REAL addon records Kith'ix by encounter id under an unrecognised zone name", #GuildToolsLootDB.records == 1 and GuildToolsLootDB.records[1].difficulty == "Heroic", tostring(#GuildToolsLootDB.records))
+zone(true, "scenario", "Some Other Zone Name", 208)
+realFrame.scripts.OnEvent(realFrame, "ENCOUNTER_START", 3513, "Kith'ix")
+realFrame.scripts.OnEvent(realFrame, "CHAT_MSG_LOOT", "|HlootHistory:3513|h[Loot]|h: Sylvara (Need - 88, Main-Spec) Won: " .. link(281235))
+check("...and when the game calls it a scenario", #GuildToolsLootDB.records == 2, tostring(#GuildToolsLootDB.records))
+zone(true, "raid", "Some Other Zone Name", 17)
+realFrame.scripts.OnEvent(realFrame, "ENCOUNTER_START", 3513, "Kith'ix")
+realFrame.scripts.OnEvent(realFrame, "CHAT_MSG_LOOT", "|HlootHistory:3513|h[Loot]|h: Sylvara (Need - 88, Main-Spec) Won: " .. link(281236))
+check("...but not on Raid Finder", #GuildToolsLootDB.records == 2, tostring(#GuildToolsLootDB.records))
 -- After a /reload no ENCOUNTER_START has fired yet, but the win still has to carry its difficulty (Discord auto-post needs it).
 zone(true, "raid", "The Venomous Abyss", 15)
 GuildToolsLootDB.records = {}

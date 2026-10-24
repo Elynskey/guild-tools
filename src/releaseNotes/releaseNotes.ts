@@ -23,6 +23,26 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '1.1.12',
+    date: '2026-10-23',
+    title: "Kith'ix loot is logged again",
+    highlights: [
+      {
+        heading: "Kith'ix wins are recorded",
+        body: "The loot addon did not recognise The Unbinding of Kith'ix, so Need wins there were not logged. It now recognises the Kith'ix fight itself, whatever the game calls the zone. Raid Finder is still left out.",
+      },
+      {
+        heading: 'Works with patch 12.1.5',
+        body: 'The addon is marked as made for the current game version, so WoW stops flagging it as out of date.',
+      },
+      {
+        heading: 'Clearer scan errors',
+        body: 'If the /gtloot scan hits an error, the message now says to send it to Elishan, and the error text is also saved so it can be read later.',
+      },
+    ],
+    headsUp: 'On Loot History, press "Update addon now", then restart WoW once so the new version loads.',
+  },
+  {
     version: '1.1.11',
     date: '2026-10-10',
     title: 'You are told when loot reaches Discord',
