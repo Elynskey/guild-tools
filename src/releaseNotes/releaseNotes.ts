@@ -23,6 +23,22 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '1.1.14',
+    date: '2026-10-23',
+    title: 'Loot logging works again after the game patch',
+    highlights: [
+      {
+        heading: 'Loot wins are captured again',
+        body: 'The latest game patch removed an item lookup the addon relied on, which made the /gtloot scan fail and could stop wins from being recorded. The addon now uses the new lookup.',
+      },
+      {
+        heading: "Includes the Kith'ix fixes",
+        body: 'Everything from 1.1.12 and 1.1.13 is in this release too.',
+      },
+    ],
+    headsUp: 'On Loot History, press "Update addon now", then restart WoW once. Afterwards /reload and press scan in /gtloot to pick up any wins you missed.',
+  },
+  {
     version: '1.1.13',
     date: '2026-10-23',
     title: "Kith'ix is everywhere in the app",

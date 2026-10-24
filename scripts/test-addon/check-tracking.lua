@@ -152,6 +152,22 @@ zone(true, "scenario", "A Delve", 208)
 realFrame.scripts.OnEvent(realFrame, "ENCOUNTER_START", 9999, "Delve Boss")
 win(realFrame, "Alpha")
 check("...while an ordinary Delve stays ignored", #GuildToolsLootDB.records == 2, tostring(#GuildToolsLootDB.records))
+-- Live 2026-10-23 (game build 70575): the item lookups are gone as globals and live in C_Item; the old code called the nil global and
+-- the /gtloot scan died with "attempt to call a nil value". A capture must work with only C_Item, and with neither (no error, just no slot).
+local savedII, savedI, savedCItem = GetItemInfoInstant, GetItemInfo, C_Item
+local scanErrors = {}
+GetItemInfoInstant, GetItemInfo = nil, nil
+C_Item = { GetItemInfoInstant = savedII, GetItemInfo = savedI }
+zone(true, "raid", "The Venomous Abyss", 15)
+GuildToolsLootDB.records = {}
+realFrame.scripts.OnEvent(realFrame, "ENCOUNTER_START", 3362, "Mycomight")
+local okC_Item = pcall(win, realFrame, "Alpha")
+check("REAL addon captures a win with the item lookups only in C_Item (no globals)", okC_Item and #GuildToolsLootDB.records == 1 and GuildToolsLootDB.records[1].slot ~= nil, tostring(#GuildToolsLootDB.records))
+C_Item = nil
+GuildToolsLootDB.records = {}
+local okNone = pcall(win, realFrame, "Alpha")
+check("...and with neither available it still records without erroring", okNone and #GuildToolsLootDB.records == 1, tostring(#GuildToolsLootDB.records))
+GetItemInfoInstant, GetItemInfo, C_Item = savedII, savedI, savedCItem
 GuildToolsLootDB.records = realKept
 
 -- the game now writes ", Main-Spec" inside the parens (WoW 12.1.0): both addons must still read it

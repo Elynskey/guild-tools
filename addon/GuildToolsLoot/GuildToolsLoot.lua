@@ -245,6 +245,18 @@ local function itemIdFromLink(link)
   return tonumber(link:match("item:(%d+)"))
 end
 
+-- The item lookups moved from globals into C_Item and the old globals are gone on current game builds (confirmed live 2026-10-23,
+-- build 70575: "attempt to call a nil value" at GetItemInfoInstant, which broke the /gtloot scan). Resolved once here, preferring
+-- C_Item and falling back to the global for older clients; a client with neither just returns nothing instead of erroring.
+local function getItemInfoInstant(item)
+  local fn = (C_Item and C_Item.GetItemInfoInstant) or GetItemInfoInstant
+  if fn then return fn(item) end
+end
+local function getItemInfo(item)
+  local fn = (C_Item and C_Item.GetItemInfo) or GetItemInfo
+  if fn then return fn(item) end
+end
+
 -- Blizzard's itemClassID for Recipe, and itemClassID/itemSubClassID for Companion Pets
 -- -- stable across expansions, the same values every other addon that reads them
 -- hardcodes (there's no client-exposed global that names them). Confirmed against
@@ -261,7 +273,7 @@ local ITEM_SUBCLASS_COMPANION_PET = 2
 -- back if it is, nil otherwise).
 local function isExcludedFromNeedTracking(itemId)
   if not itemId then return false end
-  local _, _, _, _, _, itemClassID, itemSubClassID = GetItemInfoInstant(itemId)
+  local _, _, _, _, _, itemClassID, itemSubClassID = getItemInfoInstant(itemId)
   if itemClassID == ITEM_CLASS_RECIPE then return true end
   if itemClassID == ITEM_CLASS_MISCELLANEOUS and itemSubClassID == ITEM_SUBCLASS_COMPANION_PET then return true end
   if C_ToyBox and C_ToyBox.GetToyInfo and C_ToyBox.GetToyInfo(itemId) then return true end
@@ -272,7 +284,7 @@ end
 -- (the officers' decision, 2026-09-23: two Vantus Rune / Flask trades were showing up in Loot History).
 local function isConsumable(itemId)
   if not itemId then return false end
-  local _, _, _, _, _, itemClassID = GetItemInfoInstant(itemId)
+  local _, _, _, _, _, itemClassID = getItemInfoInstant(itemId)
   return itemClassID == ITEM_CLASS_CONSUMABLE
 end
 
@@ -310,9 +322,9 @@ local TRACKED_RAID_NAME = "The Venomous Abyss"
 -- it and the live addon recorded nothing (the Test addon's track-all mode caught it).
 local TRACKED_LAIR_ZONE_NAMES = {
   ["The Tidebound Grotto"] = true,
-  -- The Unbinding of Kith'ix opened 2026-10-13 (one boss, like the Grotto). The name is Blizzard's own Journal name; the
-  -- live in-game name/instance type is NOT yet confirmed -- the Grotto reported something different from what was expected.
-  -- If it turns out to be a scenario, its ENCOUNTER_START id (from a real log) must be added to TRACKED_LAIR_ENCOUNTER_IDS.
+  -- The Unbinding of Kith'ix opened 2026-10-13 (one boss, like the Grotto). Confirmed from the game's own combat log
+  -- 2026-10-23: ZONE_CHANGE 3095 "The Unbinding of Kith'ix", Normal (14), encounter 3513. (It still wasn't logged that night:
+  -- the installed addon was 1.13, which predated this entry. The encounter-id match below is the belt-and-braces backup.)
   ["The Unbinding of Kith'ix"] = true,
 }
 
@@ -323,8 +335,8 @@ local TRACKED_LAIR_ZONE_NAMES = {
 -- session, and would otherwise keep capturing into an untracked run walked into
 -- afterward with no fresh prompt to decline.
 -- Encounter ids that count even when the instance name is not one we know: the Lair (3379) and Kith'ix (3513). Kith'ix's
--- encounter was seen live 2026-10-23 but its loot was not logged (addon 1.13 only knew the Grotto's zone name), and its real
--- in-game zone name/instance type is still unconfirmed -- so it is matched by encounter id, which is what the game fires.
+-- encounter was seen live 2026-10-23 but its loot was not logged (addon 1.13 only knew the Grotto's zone name), so it is also
+-- matched by encounter id, which is what the game fires whatever the zone is called.
 local TRACKED_LAIR_ENCOUNTER_IDS = { [3379] = true, [3513] = true }
 
 local function currentRaidDifficultyLabel()
@@ -361,7 +373,7 @@ end
 -- client has almost always already cached it (its tooltip had to render), but this falls
 -- back rather than blocking if it hasn't.
 local function slotLabel(itemLink)
-  local _, _, _, _, _, _, _, _, itemEquipLoc = GetItemInfo(itemLink)
+  local _, _, _, _, _, _, _, _, itemEquipLoc = getItemInfo(itemLink)
   if not itemEquipLoc or itemEquipLoc == "" or itemEquipLoc == "INVTYPE_NON_EQUIP" then return "Other" end
   -- Lua's `or` only falls through on nil/false -- an empty string from _G[itemEquipLoc]
   -- (confirmed live 2026-08-28: happened for a real item) is truthy and would otherwise
