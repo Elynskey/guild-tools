@@ -22,8 +22,9 @@ const { getClientCredentialsToken } = require('./oauth.cjs');
 
 const TOKEN_URL = 'https://oauth.battle.net/token';
 
-// This tier's two raids (Midnight Season 2) -- update when the tier rotates.
-const INSTANCE_IDS = [1317, 1320];
+// This tier's raids (Midnight Season 2, patch 12.1.x) -- update when the tier rotates. 1324 = The Unbinding of Kith'ix
+// (one boss, opened 2026-10-13; found in Blizzard's Journal index that day, name has an apostrophe).
+const INSTANCE_IDS = [1317, 1320, 1324];
 
 async function getToken() {
   return getClientCredentialsToken(TOKEN_URL, process.env.BNET_CLIENT_ID, process.env.BNET_CLIENT_SECRET);

@@ -91,6 +91,11 @@ describe('missing-detail handling in the loot table cache', () => {
     expect(isStale(incomplete, [1317, 1320])).toBe(true);
   });
 
+  it('a loot table cached before a new raid opened is stale the moment that raid is added (Kith\'ix, 2026-10-13)', () => {
+    const complete = table({ items: { 10: {}, 20: {}, 30: {} } }); // cached with [1317, 1320], fresh by age
+    expect(isStale(complete, [1317, 1320, 1324])).toBe(true);
+  });
+
   it('a rotated-out tier is still stale regardless', () => {
     expect(isStale(table({ items: { 10: {}, 20: {}, 30: {} } }), [9999])).toBe(true);
   });

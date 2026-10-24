@@ -21,6 +21,8 @@ const BOSS_CREATURE_DISPLAY_ID: Record<string, number> = {
   'The Coiled Altar': 142472,
   "Ula'tek": 140369,
   'Nymrissa Wavecaller': 137687,
+  // The Unbinding of Kith'ix (opened 2026-10-13): Journal encounter 2896, creatures[0] display 145178; its "zoom" render exists on Blizzard's media API.
+  "Kith'ix": 145178,
 };
 
 /** This tier's boss names, in the fixed order above -- reused wherever the app needs the full roster of bosses rather than just an icon (e.g. Settings' DPS-exclusion checklist). */
