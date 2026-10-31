@@ -150,6 +150,17 @@ check("...and a repeat of the same event changes nothing", #db.records == before
 drop(3490, 5, RING, "Zed", {})
 check("a second copy (another drop ID) of the same item by the same winner is its own record", count(db.records, function(r) return r.winner == "Zed" and r.itemId == 268300 end) == 2)
 
+-- a Hearthstone item (Miscellaneous / Junk, not a toy: seen live 2026-10-30, Shadeweaver's Hearthstone from Kith'ix) is not gear; a token with the same item class still is
+local realGII = GetItemInfoInstant
+GetItemInfoInstant = function(id) return tonumber(id), "Miscellaneous", "Junk", "", 0, 15, 0 end
+local winsBeforeHearth, lossesBeforeHearth = #db.records, #db.needLosses
+drop(3490, 6, link(281615, "Shadeweaver's Hearthstone"), "Zed", { "Yara" })
+check("a Hearthstone win is not recorded", #db.records == winsBeforeHearth, tostring(#db.records - winsBeforeHearth))
+check("...and neither is the lost roll for it", #db.needLosses == lossesBeforeHearth, tostring(#db.needLosses - lossesBeforeHearth))
+drop(3490, 7, link(270927, "Venomcured Icon"), "Zed", {})
+check("a tier token (same item class) is still recorded", #db.records == winsBeforeHearth + 1, tostring(#db.records - winsBeforeHearth))
+GetItemInfoInstant = realGII
+
 -- trades: consumables (flasks, potions, runes, food) are not tracked, gear still is
 local realGetItemInfoInstant = GetItemInfoInstant
 GetItemInfoInstant = function(id)

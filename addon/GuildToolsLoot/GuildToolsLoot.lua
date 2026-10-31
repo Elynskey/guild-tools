@@ -276,11 +276,20 @@ local ITEM_SUBCLASS_COMPANION_PET = 2
 -- real companion pet, Soulcoil Remnant, got captured before this check existed).
 -- C_ToyBox.GetToyInfo is the documented way to ask "is this a toy" (returns the itemID
 -- back if it is, nil otherwise).
-local function isExcludedFromNeedTracking(itemId)
+-- A Hearthstone item (confirmed live 2026-10-30: Shadeweaver's Hearthstone from Kith'ix) is a plain Miscellaneous / Junk item, not a
+-- toy, so none of the checks below see it; tier tokens have that same class and must keep recording. It is told apart by its name,
+-- read from the link itself (always there, unlike the item cache).
+local function isHearthstone(itemLink)
+  local name = itemLink and itemLink:match("|h%[(.-)%]|h")
+  return name ~= nil and name:find("Hearthstone$") ~= nil
+end
+
+local function isExcludedFromNeedTracking(itemId, itemLink)
   if not itemId then return false end
   local _, _, _, _, _, itemClassID, itemSubClassID = getItemInfoInstant(itemId)
   if itemClassID == ITEM_CLASS_RECIPE then return true end
   if itemClassID == ITEM_CLASS_MISCELLANEOUS and itemSubClassID == ITEM_SUBCLASS_COMPANION_PET then return true end
+  if itemClassID == ITEM_CLASS_MISCELLANEOUS and isHearthstone(itemLink) then return true end
   if C_ToyBox and C_ToyBox.GetToyInfo and C_ToyBox.GetToyInfo(itemId) then return true end
   return false
 end
@@ -436,7 +445,7 @@ local function recordNeedWin(winnerName, itemLink, bossOverride, encounterIDOver
   if not GuildToolsLootDB.enabled or not winnerName or not itemLink then return end
   if not isTrackedEncounter(encounterIDOverride or currentEncounterID) then return end
   local itemId = itemIdFromLink(itemLink)
-  if isExcludedFromNeedTracking(itemId) then return end
+  if isExcludedFromNeedTracking(itemId, itemLink) then return end
 
   -- Local dedup: the chat-text parser, C_LootHistory's live event, AND
   -- scanLootHistory()'s backfill can all independently (re-)discover the same real win
@@ -510,7 +519,7 @@ local function recordNeedLoss(loserName, itemLink, bossOverride, encounterIDOver
   if not GuildToolsLootDB.enabled or not loserName or not itemLink then return end
   if not isTrackedEncounter(encounterIDOverride or currentEncounterID) then return end
   local itemId = itemIdFromLink(itemLink)
-  if isExcludedFromNeedTracking(itemId) then return end
+  if isExcludedFromNeedTracking(itemId, itemLink) then return end
 
   -- Same dedup rationale as recordNeedWin -- a rescan re-surfacing an older loss must
   -- not re-insert it. 6-hour window matches recordNeedWin and this app's own
