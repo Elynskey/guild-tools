@@ -23,6 +23,18 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '1.1.16',
+    date: '2026-10-30',
+    title: 'Hearthstones no longer show up as Need wins',
+    highlights: [
+      {
+        heading: 'Hearthstones are left out',
+        body: "A Hearthstone item that drops from a boss (like Shadeweaver's Hearthstone from Kith'ix) is no longer logged as a Need win or a lost roll, so it can't count toward anyone's 2-win limit. Gear and tier tokens are logged as before.",
+      },
+    ],
+    headsUp: 'On Loot History, press "Update addon now", then restart WoW once. Hearthstones already logged stay in Loot History until they are removed there.',
+  },
+  {
     version: '1.1.15',
     date: '2026-10-23',
     title: 'Scan picks up wins after you leave the raid',
